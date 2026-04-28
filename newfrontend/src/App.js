@@ -214,7 +214,7 @@ function App() {
       rights: newUser.rights
     };
     try {
-      const res = await axios.post("http://localhost:5000/users", payload);
+      const res = await axios.post(`${API_BASE_URL}/users`, payload);
       const savedUser = {
         ...res.data.user,
         rights: res.data.user.rights ? JSON.parse(res.data.user.rights) : []
@@ -259,7 +259,7 @@ function App() {
       rights: manageUserForm.rights
     };
     try {
-      const res = await axios.put(`http://localhost:5000/users/${manageUserForm.id}`, updatePayload);
+      const res = await axios.put(`${API_BASE_URL}/users/${manageUserForm.id}`, updatePayload);
       const updatedUser = {
         ...res.data.user,
         rights: res.data.user.rights ? JSON.parse(res.data.user.rights) : []
@@ -276,7 +276,7 @@ function App() {
   const handleDeleteUser = async (id) => {
     if (!window.confirm("Delete this user permanently?")) return;
     try {
-      await axios.delete(`http://localhost:5000/users/${id}`);
+      await axios.delete(`${API_BASE_URL}/users/${id}`);
       setUsers(prev => prev.filter(user => user.id !== id));
       if (editingUser?.id === id) {
         setEditingUser(null);
@@ -297,7 +297,7 @@ function App() {
     const kit = books.find(item => item.id === id);
     if (!kit) return;
     if (!kit.books || kit.books.length === 0) {
-      const res = await axios.get(`http://localhost:5000/kits/${id}`);
+      const res = await axios.get(`${API_BASE_URL}/kits/${id}`);
       setSelectedBooks(res.data.books || []);
       setActiveBook(res.data);
     } else {
@@ -352,7 +352,7 @@ function App() {
           statusInfo: createForm.status || "Pending",
           books: []
         };
-        const res = await axios.post("http://localhost:5000/kits", newBook);
+        const res = await axios.post(`${API_BASE_URL}/kits`, newBook);
         createdKits.push(res.data.kit);
       }
       setBooks(prev => [...prev, ...createdKits]);
@@ -431,7 +431,7 @@ function App() {
       };
 
       try {
-        const response = await axios.post("http://localhost:5000/kits", newKit);
+        const response = await axios.post(`${API_BASE_URL}/kits`, newKit);
         createdKits.push(response.data.kit);
       } catch (error) {
         const fallbackKit = { ...newKit, id: books.length + createdKits.length + 1 };
@@ -498,7 +498,7 @@ function App() {
       };
 
       try {
-        const response = await axios.post("http://localhost:5000/books", { ...bookItem, kit_id: activeBook.id });
+        const response = await axios.post(`${API_BASE_URL}/books`, { ...bookItem, kit_id: activeBook.id });
         addedBooks.push(response.data.book || bookItem);
       } catch (error) {
         addedBooks.push(bookItem);
@@ -521,7 +521,7 @@ function App() {
     }
     if (item.id) {
       try {
-        await axios.delete(`http://localhost:5000/books/${item.id}`);
+        await axios.delete(`${API_BASE_URL}/books/${item.id}`);
       } catch (err) {
         console.error("Delete failed", err?.response?.data || err.message);
       }
@@ -603,10 +603,10 @@ function App() {
     let savedBookItem = bookItem;
     try {
       if (bookItem.id) {
-        const response = await axios.put(`http://localhost:5000/books/${bookItem.id}`, bookItem);
+        const response = await axios.put(`${API_BASE_URL}/books/${bookItem.id}`, bookItem);
         if (response.data?.book) savedBookItem = response.data.book;
       } else {
-        const response = await axios.post("http://localhost:5000/books", { ...bookItem, kit_id: activeBook.id });
+        const response = await axios.post(`${API_BASE_URL}/books`, { ...bookItem, kit_id: activeBook.id });
         if (response.data?.book) savedBookItem = response.data.book;
       }
     } catch (error) {
