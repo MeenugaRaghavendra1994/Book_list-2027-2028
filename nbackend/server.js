@@ -1,5 +1,5 @@
-const dns = require('node:dns');
-dns.setDefaultResultOrder('ipv4first'); // Fixes ENOTFOUND on Node.js v17+
+const dns = require('dns');
+if (dns.setDefaultResultOrder) dns.setDefaultResultOrder('ipv4first'); 
 
 const express = require("express");
 const cors = require("cors");
@@ -76,7 +76,8 @@ testConnection();
 /* ============================
    FILE UPLOAD CONFIG
 ============================ */
-const upload = multer({ dest: "uploads/" });
+// Vercel functions only have write access to /tmp
+const upload = multer({ dest: "/tmp" });
 
 /* ============================
    📚 GET BOOKS
