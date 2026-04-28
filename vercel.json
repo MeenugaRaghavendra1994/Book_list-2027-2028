@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "nbackend/server.js", "use": "@vercel/node" },
+    { "src": "newfrontend/package.json", "use": "@vercel/static-build", "config": { "distDir": "build" } }
+  ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "nbackend/server.js" },
+    { "source": "/(.*)", "destination": "newfrontend/$1" },
+    { "source": "/(.*)", "destination": "newfrontend/index.html" }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
