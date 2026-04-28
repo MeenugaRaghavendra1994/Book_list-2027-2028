@@ -19,6 +19,16 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 // Test Supabase SDK Connection immediately on startup
 async function testConnection() {
   try {
+    if (!process.env.SUPABASE_URL) {
+      console.error('❌ Supabase URL environment variable is not set.');
+      return;
+    }
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('❌ Supabase Service Role Key environment variable is not set.');
+      return;
+    }
+    console.log('✅ Supabase environment variables appear to be set.');
+
     const { data, error, count } = await supabase.from('individual_books').select('id', { count: 'exact', head: true });
     if (error) {
       console.error('❌ Supabase Client Failed:', error.message);
@@ -71,7 +81,7 @@ app.get("/books", async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    console.error("GET BOOKS ERROR:", err);
+    console.error("GET BOOKS ERROR:", err.message, err.details, err.hint);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -90,7 +100,7 @@ app.get("/books/:id", async (req, res) => {
     if (!data) {
       return res.status(404).json({ success: false, message: "Book not found" });
     }
-    res.json(data);
+    res.json(data); // Consider logging data length for debugging
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -109,7 +119,7 @@ app.get("/kits", async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    console.error("GET KITS ERROR:", err);
+    console.error("GET KITS ERROR:", err.message, err.details, err.hint);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -138,7 +148,7 @@ app.get("/kits/:id", async (req, res) => {
     kit.books = books || [];
     res.json(kit);
   } catch (err) {
-    console.log("❌ KIT FETCH ERROR:", err);
+    console.error("❌ KIT FETCH ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -201,7 +211,7 @@ app.post("/books", async (req, res) => {
     res.json({ success: true, book: data });
 
   } catch (err) {
-    console.log("❌ INSERT ERROR:", err);
+    console.error("❌ INSERT ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -234,7 +244,7 @@ app.post("/kits", async (req, res) => {
     res.json({ success: true, kit: data });
 
   } catch (err) {
-    console.log("❌ KIT INSERT ERROR:", err);
+    console.error("❌ KIT INSERT ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -252,7 +262,7 @@ app.get("/branches", async (req, res) => {
     if (error) throw error;
     res.json(data || []);
   } catch (err) {
-    console.log("❌ BRANCHES FETCH ERROR:", err);
+    console.error("❌ BRANCHES FETCH ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -266,7 +276,7 @@ app.get("/zones", async (req, res) => {
     const uniqueZones = data ? [...new Set(data.map(item => item.zone))] : [];
     res.json(uniqueZones);
   } catch (err) {
-    console.log("❌ ZONES FETCH ERROR:", err);
+    console.error("❌ ZONES FETCH ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -278,7 +288,7 @@ app.get("/grades", async (req, res) => {
 
     res.json(data ? data.map(row => row.name) : []);
   } catch (err) {
-    console.log("❌ GRADES FETCH ERROR:", err);
+    console.error("❌ GRADES FETCH ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -328,7 +338,7 @@ app.put("/books/:id", async (req, res) => {
     res.json({ success: true, book: data });
 
   } catch (err) {
-    console.log("❌ UPDATE ERROR:", err);
+    console.error("❌ UPDATE ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -397,7 +407,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     res.json({ success: true, count: rowsToInsert.length });
 
   } catch (err) {
-    console.log("❌ UPLOAD ERROR:", err);
+    console.error("❌ UPLOAD ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -424,7 +434,7 @@ app.post("/users", async (req, res) => {
     res.json({ success: true, user: data });
 
   } catch (err) {
-    console.log("❌ USER INSERT ERROR:", err);
+    console.error("❌ USER INSERT ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -439,7 +449,7 @@ app.get("/users", async (req, res) => {
       rights: row.rights ? JSON.parse(row.rights) : []
     })));
   } catch (err) {
-    console.log("❌ USERS FETCH ERROR:", err);
+    console.error("❌ USERS FETCH ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -465,7 +475,7 @@ app.put("/users/:id", async (req, res) => {
 
     res.json({ success: true, user: data });
   } catch (err) {
-    console.log("❌ USER UPDATE ERROR:", err);
+    console.error("❌ USER UPDATE ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
@@ -479,7 +489,7 @@ app.delete("/users/:id", async (req, res) => {
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
-    console.log("❌ USER DELETE ERROR:", err);
+    console.error("❌ USER DELETE ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
