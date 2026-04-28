@@ -18,6 +18,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 
 // Test Supabase SDK Connection immediately on startup
 async function testConnection() {
+  console.log('Vercel Backend: Initiating Supabase connection test...'); // Added for early debugging
   try {
     if (!process.env.SUPABASE_URL) {
       console.error('❌ Supabase URL environment variable is not set.');
