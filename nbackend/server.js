@@ -29,7 +29,13 @@ if (!supabaseUrl || !supabaseKey) {
   console.error("❌ CRITICAL: Supabase environment variables are missing. Check Vercel settings.");
 }
 
-const supabase = createClient(supabaseUrl || '', supabaseKey || '');
+let supabase;
+try {
+  // Only attempt to create the client if we have a URL, otherwise it crashes top-level
+  supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder');
+} catch (err) {
+  console.error("❌ SUPABASE INIT ERROR:", err.message);
+}
 
 // Test Supabase SDK Connection immediately on startup
 async function testConnection() {
@@ -43,6 +49,11 @@ async function testConnection() {
       return;
     }
     console.log('Vercel Backend: Initiating Supabase connection test...');
+
+    if (!supabase) {
+      console.error('❌ Supabase client was not initialized.');
+      return;
+    }
 
     const { data, error, count } = await supabase.from('individual_books').select('id', { count: 'exact', head: true });
     if (error) {
@@ -84,6 +95,26 @@ testConnection();
 ============================ */
 // Vercel functions only have write access to /tmp
 const upload = multer({ dest: "/tmp" });
+
+/* ============================
+   🔍 CONNECTION DIAGNOSTICS
+============================ */
+app.get("/debug-db", async (req, res) => {
+  try {
+    const hasUrl = !!process.env.SUPABASE_URL;
+    const hasKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    const { data, error } = await supabase.from('book_list_users').select('count', { count: 'exact', head: true });
+    
+    res.json({
+      env: { hasUrl, hasKey, urlStart: process.env.SUPABASE_URL?.substring(0, 15) },
+      connection: error ? "Failed" : "Success",
+      error: error || null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /* ============================
    📚 GET BOOKS
