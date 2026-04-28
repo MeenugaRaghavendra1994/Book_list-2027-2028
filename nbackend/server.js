@@ -353,46 +353,22 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet);
 
-    console.log("📊 Total Rows:", data.length);
+    console.log(`📊 Processing ${data.length} rows...`);
 
-    let inserted = 0;
-    let skipped = 0;
-
-    for (let i = 0; i < data.length; i++) {
-      const d = data[i];
-
-      try {
-        const zone = String(d["Zone"] || "").trim();
-        const grade = String(d["Grade"] || "").trim();
-        const sku = String(d["Material Code"] || "").trim();
-
-        console.log(`➡ Row ${i + 1}`, { zone, grade, sku });
-
-        // 🔍 DUPLICATE CHECK
-        const { data: checkData } = await supabase
-          .from('individual_books')
-          .select('id')
-          .ilike('zone', zone)
-          .ilike('grade', grade)
-          .eq('material_code', sku);
-
-        if (checkData && checkData.length > 0) {
-          console.log("⛔ Duplicate skipped:", sku);
-          skipped++;
-          continue;
-        }
-
-        // 💰 TOTAL CALCULATION
-        const qty = parseFloat(d["Quantity"]) || 0;
-        const rate = parseFloat(d["Per Unit Rate"]) || 0;
-        const total = Number(d["Total Amount"] || d["total_amount"] || qty * rate) || qty * rate;
-
-        await supabase.from('individual_books').insert([{
-          zone, grade, material_code: sku,
+    // Prepare all rows for bulk insertion
+    const rowsToInsert = data.map(d => {
+      const qty = parseFloat(d["Quantity"]) || 0;
+      const rate = parseFloat(d["Per Unit Rate"]) || 0;
+      const total = Number(d["Total Amount"] || d["total_amount"] || qty * rate) || qty * rate;
+      
+      return {
+          zone: String(d["Zone"] || "").trim(),
+          grade: String(d["Grade"] || "").trim(),
+          material_code: String(d["Material Code"] || "").trim(),
           subject: String(d["Subject"] || ""),
           material_name: String(d["Material Name"] || ""),
           tax_rate: parseFloat(d["Tax Rate"]) || 0,
-          mandatory_optional: String(d["Mandatory/Optional"] || ""),
+          mandatory_optional: String(d["Mandatory/Optional"] || d["mandatory_optional"] || ""),
           category: String(d["Category"] || ""),
           volume: String(d["Volume"] || ""),
           year: String(d["Year"] || ""),
@@ -405,24 +381,20 @@ app.post("/upload", upload.single("file"), async (req, res) => {
           cost_price: parseFloat(d["Cost Price"] || 0),
           composite_code: String(d["Composite Code"] || ""),
           composite_name: String(d["Composite Name"] || "")
-        }]);
+      };
+    });
 
-        console.log("✅ Inserted:", sku);
-        inserted++;
+    // Optimized Bulk Upsert:
+    // Requires a unique constraint on (zone, grade, material_code) in your database
+    const { data: insertedData, error } = await supabase
+      .from('individual_books')
+      .upsert(rowsToInsert, { onConflict: 'zone,grade,material_code', ignoreDuplicates: true });
 
-      } catch (rowErr) {
-        console.log("❌ Row Error:", rowErr.message);
-        skipped++;
-      }
-    }
+    if (error) throw error;
 
     fs.unlinkSync(req.file.path);
 
-    console.log("🎯 FINAL RESULT");
-    console.log("Inserted:", inserted);
-    console.log("Skipped:", skipped);
-
-    res.json({ success: true, inserted, skipped });
+    res.json({ success: true, count: rowsToInsert.length });
 
   } catch (err) {
     console.log("❌ UPLOAD ERROR:", err);

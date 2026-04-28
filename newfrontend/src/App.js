@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import './App.css';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const initialFilters = {
   zone: "",
   branch: "",
@@ -71,7 +73,7 @@ function App() {
   };
 
   useEffect(() => {
-    axios.get("http://localhost:5000/kits")
+    axios.get(`${API_BASE_URL}/kits`)
       .then(res => {
         const normalized = res.data.map(kit => ({
           ...kit,
@@ -89,7 +91,7 @@ function App() {
         setFilteredBooks([]);
       });
 
-    axios.get("http://localhost:5000/users")
+    axios.get(`${API_BASE_URL}/users`)
       .then(res => {
         // Only update if users are returned, otherwise keep the default admin
         if (res.data && res.data.length > 0) {
@@ -106,18 +108,18 @@ function App() {
         }]);
       });
 
-    axios.get("http://localhost:5000/branches")
+    axios.get(`${API_BASE_URL}/branches`)
       .then(res => setBranchList(Array.isArray(res.data) ? res.data : []))
       .catch((err) => {
         console.error("Failed to fetch branches:", err);
         setBranchList([]);
       });
 
-    axios.get("http://localhost:5000/zones")
+    axios.get(`${API_BASE_URL}/zones`)
       .then(res => setZonesList(res.data || []))
       .catch(() => setZonesList([]));
 
-    axios.get("http://localhost:5000/grades")
+    axios.get(`${API_BASE_URL}/grades`)
       .then(res => setGradeList(res.data || []))
       .catch(() => setGradeList([]));
   }, []);
