@@ -28,16 +28,25 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 let supabase;
 if (!supabaseUrl || !supabaseKey) {
   console.error("❌ CRITICAL: Supabase environment variables are missing. Check Vercel settings.");
-  // In a serverless environment, if critical environment variables are missing,
-  // the function might not even fully initialize. Logging this early is crucial.
 } else {
   try {
     supabase = createClient(supabaseUrl, supabaseKey);
-    console.log("✅ Supabase client initialized.");
+    console.log("✅ Supabase client initialized with URL:", supabaseUrl.substring(0, 15) + "...");
   } catch (err) {
     console.error("❌ SUPABASE INIT ERROR:", err.message);
   }
 }
+
+// Middleware to prevent crashes if Supabase is not initialized
+app.use((req, res, next) => {
+  if (!supabase && req.url !== '/debug-db') {
+    return res.status(503).json({ 
+      success: false, 
+      error: "Backend misconfigured: Supabase client not initialized. Check Environment Variables." 
+    });
+  }
+  next();
+});
 
 // Test Supabase SDK Connection immediately on startup
 async function testConnection() {
