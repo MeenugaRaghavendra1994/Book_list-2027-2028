@@ -25,31 +25,23 @@ app.use((req, res, next) => {
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+let supabase;
 if (!supabaseUrl || !supabaseKey) {
   console.error("❌ CRITICAL: Supabase environment variables are missing. Check Vercel settings.");
-}
-
-let supabase;
-try {
-  // Only attempt to create the client if we have a URL, otherwise it crashes top-level
-  supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder');
-} catch (err) {
-  console.error("❌ SUPABASE INIT ERROR:", err.message);
+  // In a serverless environment, if critical environment variables are missing,
+  // the function might not even fully initialize. Logging this early is crucial.
+} else {
+  try {
+    supabase = createClient(supabaseUrl, supabaseKey);
+    console.log("✅ Supabase client initialized.");
+  } catch (err) {
+    console.error("❌ SUPABASE INIT ERROR:", err.message);
+  }
 }
 
 // Test Supabase SDK Connection immediately on startup
 async function testConnection() {
   try {
-    if (!process.env.SUPABASE_URL) {
-      console.error('❌ Supabase URL environment variable is not set.');
-      return;
-    }
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('❌ Supabase Service Role Key environment variable is not set.');
-      return;
-    }
-    console.log('Vercel Backend: Initiating Supabase connection test...');
-
     if (!supabase) {
       console.error('❌ Supabase client was not initialized.');
       return;
@@ -88,7 +80,10 @@ async function testConnection() {
     console.error('❌ Startup Error:', err.message);
   }
 }
-testConnection();
+// Only call testConnection if supabase was successfully initialized
+if (supabase) {
+  testConnection();
+}
 
 /* ============================
    FILE UPLOAD CONFIG
