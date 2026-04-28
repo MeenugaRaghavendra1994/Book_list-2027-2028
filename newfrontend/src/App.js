@@ -141,7 +141,7 @@ function App() {
   const grades = useMemo(() => ["", ...gradeList.filter(Boolean)], [gradeList]);
   const statusOptions = ["", "Pending", "Approved", "Completed"];
   const mandatoryOptions = ["", "Mandatory", "Optional"];
-  const volumeOptions = ["", "Volume 1", "Volume 2", "Volume 3", "Volume 4"];
+  const volumeOptions = ["", "Volume 1", "Volume 2", "Volume 3", "Volume 4","Term 1","Term 2"];
   const yearOptions = ["", "2023-2024", "2024-2025", "2025-2026", "2026-2027", "2027-2028"];
 
   useEffect(() => {
