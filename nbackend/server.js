@@ -22,11 +22,17 @@ app.use((req, res, next) => {
 });
 
 // Initialize Supabase Client (Uses Port 443 - rarely blocked)
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("❌ CRITICAL: Supabase environment variables are missing. Check Vercel settings.");
+}
+
+const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
 // Test Supabase SDK Connection immediately on startup
 async function testConnection() {
-  console.log('Vercel Backend: Initiating Supabase connection test...'); // Added for early debugging
   try {
     if (!process.env.SUPABASE_URL) {
       console.error('❌ Supabase URL environment variable is not set.');
@@ -36,7 +42,7 @@ async function testConnection() {
       console.error('❌ Supabase Service Role Key environment variable is not set.');
       return;
     }
-    console.log('✅ Supabase environment variables appear to be set.');
+    console.log('Vercel Backend: Initiating Supabase connection test...');
 
     const { data, error, count } = await supabase.from('individual_books').select('id', { count: 'exact', head: true });
     if (error) {
@@ -456,13 +462,27 @@ app.get("/users", async (req, res) => {
     const { data, error } = await supabase.from('book_list_users').select('*').order('id', { ascending: false });
     if (error) throw error;
 
-    res.json((data || []).map(row => ({
-      ...row,
-      rights: row.rights ? JSON.parse(row.rights) : []
-    })));
+    const formattedUsers = (data || []).map(row => {
+      let parsedRights = [];
+      if (row.rights) {
+        // Handle both stringified JSON and already-parsed JSONB types
+        if (typeof row.rights === 'string') {
+          try {
+            parsedRights = JSON.parse(row.rights);
+          } catch (e) {
+            parsedRights = [];
+          }
+        } else if (Array.isArray(row.rights)) {
+          parsedRights = row.rights;
+        }
+      }
+      return { ...row, rights: parsedRights };
+    });
+
+    res.json(formattedUsers);
   } catch (err) {
-    console.error("❌ USERS FETCH ERROR:", err.message, err.details, err.hint);
-    res.status(500).send(err.message);
+    console.error("❌ USERS FETCH ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
