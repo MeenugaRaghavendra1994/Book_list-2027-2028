@@ -13,6 +13,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Middleware to strip /api prefix from Vercel requests so they match our routes
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api')) {
+    req.url = req.url.replace(/^\/api/, '');
+  }
+  next();
+});
+
 // Initialize Supabase Client (Uses Port 443 - rarely blocked)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -42,17 +50,19 @@ async function testConnection() {
       .from('book_list_users')
       .select('id')
       .eq('username', 'Raghavendra')
-      .maybeSingle(); // returns null if not found instead of erroring
+      .maybeSingle();
 
     if (userError) {
       console.error('❌ Error checking admin user:', userError.message);
     } else if (!user) {
-      await supabase.from('book_list_users').insert([{
+      console.log('👤 Admin user not found. Attempting to seed...');
+      const { error: seedError } = await supabase.from('book_list_users').insert([{
         username: 'Raghavendra',
         password: '8142037547',
         role: 'Admin',
         rights: JSON.stringify(['View', 'Edit/Delete'])
       }]);
+      if (seedError) console.error('❌ Seeding failed:', seedError.message);
       console.log('👤 Default admin user seeded in database.');
     } else {
       console.log('👤 Admin user already exists.');
