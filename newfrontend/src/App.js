@@ -625,12 +625,12 @@ function App() {
     const updatedTime = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, '');
     if (editingBookIndex !== null) {
       setSelectedBooks(prev => prev.map((item, idx) => idx === editingBookIndex ? savedBookItem : item));
-      setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: (book.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) } : book));
+      setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) } : book));
       setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: (book.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) } : book));
       setActiveBook(prev => ({ ...prev, createdAt: updatedTime, created_at: updatedTime, books: (prev.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) }));
     } else {
       setSelectedBooks(prev => [...prev, savedBookItem]);
-      setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: [...(book.books || []), savedBookItem] } : book));
+      setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: [...(book.books || []), savedBookItem] } : book));
       setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: [...(book.books || []), savedBookItem] } : book));
       setActiveBook(prev => ({ ...prev, createdAt: updatedTime, created_at: updatedTime, books: [...(prev.books || []), savedBookItem] }));
     }
@@ -704,7 +704,7 @@ function App() {
           bookItem?.composite_name ?? "",
           bookItem?.zone ?? kit.zone ?? "",
           bookItem?.grade ?? kit.grade ?? "",
-          bookItem?.branch ?? kit.branch ?? ""
+          bookItem?.branch_name ?? bookItem?.branch ?? kit.branch ?? ""
         ]);
       });
     });
@@ -1296,7 +1296,7 @@ function App() {
                           <td>{item.quantity}</td>
                           <td>{item.zone || activeBook.zone}</td>
                           <td>{item.grade || activeBook.grade}</td>
-                          <td>{item.branch || activeBook.branch}</td>
+                          <td>{item.branch_name || item.branch || activeBook.branch}</td>
                           <td>
                             <div className="d-flex gap-2">
                               {userHasRight("Edit/Delete") && (
