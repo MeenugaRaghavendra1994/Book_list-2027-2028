@@ -215,6 +215,7 @@ app.post("/books", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
+    const branch = String(d.branch || "").trim();
     const sku = String(d.material_code || "").trim();
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
@@ -233,24 +234,10 @@ app.post("/books", async (req, res) => {
     const compositeCode = String(d.composite_code || "").trim();
     const compositeName = String(d.composite_name || "").trim();
 
-    const { data: checkData } = await supabase
-      .from('individual_books')
-      .select('id')
-      .ilike('zone', zone)
-      .ilike('grade', grade)
-      .eq('material_code', sku);
-
-    if (checkData && checkData.length > 0) {
-      return res.json({
-        success: false,
-        message: "Duplicate entry (Zone + Grade + SKU)",
-      });
-    }
-
     const { data, error } = await supabase
       .from('individual_books')
       .insert([{
-        zone, grade, subject, material_name: materialName, material_code: sku,
+        zone, grade, branch, subject, material_name: materialName, material_code: sku,
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
         author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
         mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, kit_id: d.kit_id
@@ -355,6 +342,7 @@ app.put("/books/:id", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
+    const branch = String(d.branch || "").trim();
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
     const materialCode = String(d.material_code || "").trim();
@@ -376,7 +364,7 @@ app.put("/books/:id", async (req, res) => {
     const { data, error } = await supabase
       .from('individual_books')
       .update({
-        zone, grade, subject, material_name: materialName, material_code: materialCode,
+        zone, grade, branch, subject, material_name: materialName, material_code: materialCode,
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
         author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
         mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, kit_id: d.kit_id
@@ -427,6 +415,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       return {
           zone: String(d["Zone"] || "").trim(),
           grade: String(d["Grade"] || "").trim(),
+          branch: String(d["Branch"] || "").trim(),
           material_code: String(d["Material Code"] || "").trim(),
           subject: String(d["Subject"] || ""),
           material_name: String(d["Material Name"] || ""),
@@ -447,11 +436,9 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       };
     });
 
-    // Optimized Bulk Upsert:
-    // Requires a unique constraint on (zone, grade, material_code) in your database
     const { data: insertedData, error } = await supabase
       .from('individual_books')
-      .upsert(rowsToInsert, { onConflict: 'zone,grade,material_code', ignoreDuplicates: true });
+      .insert(rowsToInsert);
 
     if (error) throw error;
 
