@@ -778,7 +778,7 @@ function App() {
           </div>
           <button className="btn btn-danger w-100" onClick={handleLogin}>Login</button>
           <div className="mt-3 text-muted small">
-            Use admin credentials: <strong>Raghavendra</strong> / <strong>8142037547</strong>
+            Use admin credentials: <strong>Raghavendra</strong> / <strong>********</strong>
           </div>
         </div>
       </div>
