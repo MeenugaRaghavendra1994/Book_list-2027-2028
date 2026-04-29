@@ -364,7 +364,8 @@ function App() {
       }
       setBooks(prev => [...prev, ...createdKits]);
       setFilteredBooks(prev => [...prev, ...createdKits]);
-    } catch (error) {
+    } catch (err) {
+      console.error("Failed to create kits:", err);
       const fallbackKits = branchValues.map(branch => ({
         id: books.length ? Math.max(...books.map(b => b.id)) + 1 : 1,
         ...createForm,
@@ -456,7 +457,7 @@ function App() {
       try {
         const response = await axios.post(`${API_BASE_URL}/kits`, newKit);
         createdKits.push(response.data.kit);
-      } catch (error) {
+      } catch {
         const fallbackKit = { ...newKit, id: books.length + createdKits.length + 1 };
         createdKits.push(fallbackKit);
       }
@@ -529,7 +530,7 @@ function App() {
           // Fallback if backend didn't return the object with ID
           addedBooks.push({ ...bookItem, id: Date.now() + Math.random() });
         }
-      } catch (error) {
+      } catch {
         console.error("Failed to save row to DB:", bookItem.material_code, error.response?.data || error.message);
         // We do NOT push to addedBooks here, so the UI stays in sync with the DB
       }
