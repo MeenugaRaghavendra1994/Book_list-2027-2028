@@ -50,7 +50,8 @@ function App() {
     composite_name: "",
     quantity: 1,
     zone: "",
-    grade: ""
+    grade: "",
+    branch: ""
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
@@ -130,6 +131,11 @@ function App() {
     const filtered = filters.zone ? branchList.filter(branch => branch.zone === filters.zone) : branchList;
     return ["", ...Array.from(new Set(filtered.map(branch => branch.name)))];
   }, [branchList, filters.zone]);
+  const bookBranchOptions = useMemo(() => {
+    const currentZone = newBookItem.zone || activeBook?.zone;
+    const filtered = currentZone ? branchList.filter(b => b.zone === currentZone) : branchList;
+    return ["", ...Array.from(new Set(filtered.map(b => b.name)))];
+  }, [branchList, newBookItem.zone, activeBook]);
   const createBranchOptions = useMemo(() => {
     const filtered = createForm.zone ? branchList.filter(branch => branch.zone === createForm.zone) : branchList;
     return ["", ...Array.from(new Set(filtered.map(branch => branch.name)))];
@@ -566,7 +572,8 @@ function App() {
       composite_name: "",
       quantity: 1,
       zone: activeBook?.zone || "",
-      grade: activeBook?.grade || ""
+      grade: activeBook?.grade || "",
+      branch: activeBook?.branch || ""
     });
   };
 
@@ -584,7 +591,8 @@ function App() {
       cost_price: item.cost_price || "",
       quantity: item.quantity || 1,
       zone: item.zone || activeBook?.zone || "",
-      grade: item.grade || activeBook?.grade || ""
+      grade: item.grade || activeBook?.grade || "",
+      branch: item.branch || activeBook?.branch || ""
     });
   };
 
@@ -648,7 +656,8 @@ function App() {
       composite_name: "",
       quantity: 1,
       zone: activeBook?.zone || "",
-      grade: activeBook?.grade || ""
+      grade: activeBook?.grade || "",
+      branch: activeBook?.branch || ""
     });
   };
 
@@ -657,7 +666,7 @@ function App() {
       "S.No", "Kit ID", "Book List Name", "Zone", "Branch", "Grade", "Created By", "Created At", "Status", "Status Info",
       "Component Index", "Category", "Subject", "Material Name", "Material Code", "Tax Rate", "Mandatory/Optional",
       "Volume", "Year", "Author", "Publisher", "Per Unit Rate", "Quantity", "Total Amount", "MRP", "Cost Price",
-      "Composite Code", "Composite Name", "Component Zone", "Component Grade"
+      "Composite Code", "Composite Name", "Component Zone", "Component Grade", "Component Branch"
     ];
 
     const rows = [];
@@ -694,7 +703,8 @@ function App() {
           bookItem?.composite_code ?? "",
           bookItem?.composite_name ?? "",
           bookItem?.zone ?? kit.zone ?? "",
-          bookItem?.grade ?? kit.grade ?? ""
+          bookItem?.grade ?? kit.grade ?? "",
+          bookItem?.branch ?? kit.branch ?? ""
         ]);
       });
     });
@@ -1215,6 +1225,12 @@ function App() {
                         <label className="form-label">Grade</label>
                         <input className="form-control" value={newBookItem.grade} onChange={e => setNewBookItem(prev => ({ ...prev, grade: e.target.value }))} />
                       </div>
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">Branch</label>
+                        <select className="form-select" value={newBookItem.branch} onChange={e => setNewBookItem(prev => ({ ...prev, branch: e.target.value }))}>
+                          {bookBranchOptions.map(opt => <option key={opt} value={opt}>{opt || "Select Branch"}</option>)}
+                        </select>
+                      </div>
                       <div className="col-12 col-md-3">
                         <label className="form-label">Quantity</label>
                         <input type="number" className="form-control" min="1" value={newBookItem.quantity} onChange={e => {
@@ -1254,6 +1270,7 @@ function App() {
                         <th>Quantity</th>
                         <th>Zone</th>
                         <th>Grade</th>
+                        <th>Branch</th>
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -1279,6 +1296,7 @@ function App() {
                           <td>{item.quantity}</td>
                           <td>{item.zone || activeBook.zone}</td>
                           <td>{item.grade || activeBook.grade}</td>
+                          <td>{item.branch || activeBook.branch}</td>
                           <td>
                             <div className="d-flex gap-2">
                               {userHasRight("Edit/Delete") && (
