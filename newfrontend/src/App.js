@@ -382,6 +382,22 @@ function App() {
     setCreateForm({ name: "", zone: "", branch: [], grade: "", status: "Pending" });
   };
 
+  const handleDeleteKit = async (id) => {
+    if (!userHasRight("Edit/Delete")) {
+      alert("You do not have permission to delete kits.");
+      return;
+    }
+    if (!window.confirm("Are you sure you want to delete this kit and all its books?")) return;
+
+    try {
+      await axios.delete(`${API_BASE_URL}/kits/${id}`);
+      setBooks(prev => prev.filter(kit => kit.id !== id));
+      setFilteredBooks(prev => prev.filter(kit => kit.id !== id));
+    } catch (err) {
+      alert("Failed to delete kit: " + (err.response?.data || err.message));
+    }
+  };
+
   const parseCsv = (text) => {
     const lines = text.split(/\r?\n/).filter(line => line.trim());
     if (!lines.length) return [];
@@ -507,7 +523,12 @@ function App() {
 
       try {
         const response = await axios.post(`${API_BASE_URL}/books`, { ...bookItem, kit_id: activeBook.id });
-        addedBooks.push(response.data.book || bookItem);
+        if (response.data?.book) {
+          addedBooks.push(response.data.book);
+        } else {
+          // Fallback if backend didn't return the object with ID
+          addedBooks.push({ ...bookItem, id: Date.now() + Math.random() });
+        }
       } catch (error) {
         console.error("Failed to save row to DB:", bookItem.material_code, error.response?.data || error.message);
         // We do NOT push to addedBooks here, so the UI stays in sync with the DB
@@ -523,11 +544,12 @@ function App() {
     setBulkBookError("");
   };
 
-  const handleDeleteBook = async (item, index) => {
+  const handleDeleteBook = async (item) => {
     if (!userHasRight("Edit/Delete")) {
       alert("You do not have permission to delete book items.");
       return;
     }
+    if (!window.confirm("Delete this book item?")) return;
 
     if (item.id) {
       try {
@@ -536,19 +558,18 @@ function App() {
           throw new Error(response.data.error || "Failed to delete from database.");
         }
 
-        // Update local state only on success
-        setSelectedBooks(prev => prev.filter((_, idx) => idx !== index));
-        setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter((_, idx) => idx !== index) } : book));
-        setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter((_, idx) => idx !== index) } : book));
-        setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter((_, idx) => idx !== index) }));
+        // Filter by item.id instead of index for reliability
+        setSelectedBooks(prev => prev.filter(b => b.id !== item.id));
+        setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id !== item.id) } : book));
+        setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id !== item.id) } : book));
+        setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => b.id !== item.id) }));
 
       } catch (err) {
         console.error("Delete failed:", err?.response?.data || err.message);
         alert("Could not delete book: " + (err?.response?.data?.error || err.message));
       }
     } else {
-      // If for some reason the item has no ID, just remove it locally
-      setSelectedBooks(prev => prev.filter((_, idx) => idx !== index));
+      setSelectedBooks(prev => prev.filter(b => b !== item));
     }
   };
 
@@ -1097,6 +1118,9 @@ function App() {
                     {userHasRight("Edit/Delete") && (
                       <button className="btn btn-outline-warning btn-sm" onClick={() => handleEdit(book.id)}>Edit</button>
                     )}
+                    {userHasRight("Edit/Delete") && (
+                      <button className="btn btn-outline-danger btn-sm" onClick={() => handleDeleteKit(book.id)}>Delete</button>
+                    )}
                     <button className="btn btn-outline-secondary btn-sm" onClick={() => handleExportKit(book)}>Excel</button>
                   </div>
                 </td>
@@ -1316,7 +1340,7 @@ function App() {
                               {userHasRight("Edit/Delete") && (
                                 <>
                                   <button className="btn btn-outline-warning btn-sm" onClick={() => handleEditBook(item, idx)}>Edit</button>
-                                  <button className="btn btn-outline-danger btn-sm" onClick={() => handleDeleteBook(item, idx)}>Delete</button>
+                                  <button className="btn btn-outline-danger btn-sm" onClick={() => handleDeleteBook(item)}>Delete</button>
                                 </>
                               )}
                             </div>
