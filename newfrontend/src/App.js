@@ -528,19 +528,30 @@ function App() {
       alert("You do not have permission to delete book items.");
       return;
     }
+
     if (item.id) {
       try {
-        await axios.delete(`${API_BASE_URL}/books/${item.id}`);
-      } catch (err) {
-        console.error("Delete failed", err?.response?.data || err.message);
-      }
-    }
+        const response = await axios.delete(`${API_BASE_URL}/books/${item.id}`);
+        if (!response.data.success) {
+          throw new Error(response.data.error || "Failed to delete from database.");
+        }
 
-    setSelectedBooks(prev => prev.filter((_, idx) => idx !== index));
-    setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter((_, idx) => idx !== index) } : book));
-    setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter((_, idx) => idx !== index) } : book));
-    setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter((_, idx) => idx !== index) }));
+        // Update local state only on success
+        setSelectedBooks(prev => prev.filter((_, idx) => idx !== index));
+        setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter((_, idx) => idx !== index) } : book));
+        setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter((_, idx) => idx !== index) } : book));
+        setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter((_, idx) => idx !== index) }));
+
+      } catch (err) {
+        console.error("Delete failed:", err?.response?.data || err.message);
+        alert("Could not delete book: " + (err?.response?.data?.error || err.message));
+      }
+    } else {
+      // If for some reason the item has no ID, just remove it locally
+      setSelectedBooks(prev => prev.filter((_, idx) => idx !== index));
+    }
   };
+
   const handleSave = () => {
     setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, ...editForm } : book));
     setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, ...editForm } : book));
