@@ -530,8 +530,8 @@ function App() {
           // Fallback if backend didn't return the object with ID
           addedBooks.push({ ...bookItem, id: Date.now() + Math.random() });
         }
-      } catch {
-        console.error("Failed to save row to DB:", bookItem.material_code, error.response?.data || error.message);
+      } catch (error) {
+        console.error("Failed to save row to DB:", bookItem.material_code, error?.response?.data || error?.message);
         // We do NOT push to addedBooks here, so the UI stays in sync with the DB
       }
     }
