@@ -253,7 +253,7 @@ app.post("/books", async (req, res) => {
 
     if (error) throw error;
 
-    console.log("✅ INSERT:", sku);
+    console.log("✅ INSERT SUCCESS. ID generated:", data?.id, "for SKU:", sku);
     res.json({ success: true, book: data });
 
   } catch (err) {
