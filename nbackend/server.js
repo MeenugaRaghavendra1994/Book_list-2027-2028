@@ -425,14 +425,26 @@ app.delete("/books/:id", async (req, res) => {
 ============================ */
 app.delete("/kits/:id", async (req, res) => {
   try {
-    // Delete associated books first to maintain integrity
-    await supabase.from('individual_books').delete().eq('kit_id', req.params.id);
+    const kitId = req.params.id;
+
+    // 1. Delete associated books first and capture the result
+    const { error: booksError, count: booksDeleted } = await supabase
+      .from('individual_books')
+      .delete({ count: 'exact' })
+      .eq('kit_id', kitId);
     
-    const { error } = await supabase.from('grade_wise_kits').delete().eq('id', req.params.id);
+    if (booksError) {
+      console.error(`❌ Error deleting books for Kit ${kitId}:`, booksError.message);
+      throw new Error(`Failed to delete associated books: ${booksError.message}`);
+    }
+    console.log(`🧹 Associated books removed: ${booksDeleted} for Kit ID ${kitId}`);
+
+    // 2. Delete the kit itself
+    const { error } = await supabase.from('grade_wise_kits').delete().eq('id', kitId);
     if (error) throw error;
 
-    console.log("🗑️ KIT DELETED:", req.params.id);
-    res.json({ success: true });
+    console.log("🗑️ KIT DELETED:", kitId);
+    res.json({ success: true, books_affected: booksDeleted });
   } catch (err) {
     console.error("❌ KIT DELETE ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
