@@ -550,9 +550,12 @@ function App() {
       alert("You do not have permission to delete book items.");
       return;
     }
-    if (!window.confirm("Delete this book item?")) return;
 
-    if (item.id) {
+    // Check if the ID looks like a database integer or a temporary float/string
+    const isRealId = item.id && !String(item.id).includes('.');
+
+    if (isRealId) {
+      if (!window.confirm("Delete this book item from the database?")) return;
       try {
         const response = await axios.delete(`${API_BASE_URL}/books/${item.id}`);
         if (!response.data.success) {
@@ -570,7 +573,8 @@ function App() {
         alert("Could not delete book: " + (err?.response?.data?.error || err.message));
       }
     } else {
-      // If the item has no ID (local only), remove it from all state sources to keep UI consistent
+      if (!window.confirm("This item is not yet saved to the database. Remove from local list?")) return;
+      // Remove from all state sources to keep UI consistent
       setSelectedBooks(prev => prev.filter(b => b !== item));
       setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b !== item) } : book));
       setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b !== item) } : book));
