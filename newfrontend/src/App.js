@@ -554,8 +554,8 @@ function App() {
     // Check if the ID looks like a database integer or a temporary float/string
     const isRealId = item.id && !String(item.id).includes('.');
 
-    if (isRealId) {
-      if (!window.confirm("Delete this book item from the database?")) return;
+    if (item.id && isRealId) {
+      if (!window.confirm(`Delete book item (ID: ${item.id}) from the database?`)) return;
       try {
         const response = await axios.delete(`${API_BASE_URL}/books/${item.id}`);
         if (!response.data.success) {
@@ -577,7 +577,8 @@ function App() {
         }
       }
     } else {
-      if (!window.confirm("This item is not yet saved to the database. Remove from local list?")) return;
+      const reason = !item.id ? "ID is missing/null" : "ID is a temporary local ID";
+      if (!window.confirm(`Cannot delete from database because ${reason}. Remove from local list?`)) return;
       // Remove from all state sources to keep UI consistent
       setSelectedBooks(prev => prev.filter(b => b !== item));
       setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b !== item) } : book));
@@ -1302,6 +1303,7 @@ function App() {
                   <table className="table table-bordered table-hover mb-0">
                     <thead className="table-dark text-nowrap">
                       <tr>
+                        <th>ID</th>
                         <th>Category</th>
                         <th>Material Name</th>
                         <th>Material Code</th>
@@ -1328,6 +1330,7 @@ function App() {
                     <tbody className="text-nowrap">
                       {selectedBooks.length > 0 ? selectedBooks.map((item, idx) => (
                         <tr key={idx}>
+                          <td className="text-muted small">{item.id || <span className="text-danger">NULL</span>}</td>
                           <td>{item.category}</td>
                           <td>{item.material_name}</td>
                           <td>{item.material_code}</td>
