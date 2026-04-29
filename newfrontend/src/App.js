@@ -559,11 +559,11 @@ function App() {
           throw new Error(response.data.error || "Failed to delete from database.");
         }
 
-        // Use loose inequality (!=) to handle potential string/number ID mismatches from the API
-        setSelectedBooks(prev => prev.filter(b => b.id != item.id));
-        setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id != item.id) } : book));
-        setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id != item.id) } : book));
-        setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => b.id != item.id) }));
+        // Use String conversion to handle potential string/number ID mismatches safely with strict inequality
+        setSelectedBooks(prev => prev.filter(b => String(b.id) !== String(item.id)));
+        setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => String(b.id) !== String(item.id)) } : book));
+        setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => String(b.id) !== String(item.id)) } : book));
+        setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => String(b.id) !== String(item.id)) }));
 
       } catch (err) {
         console.error("Delete failed:", err?.response?.data || err.message);
