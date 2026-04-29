@@ -558,18 +558,22 @@ function App() {
           throw new Error(response.data.error || "Failed to delete from database.");
         }
 
-        // Filter by item.id instead of index for reliability
-        setSelectedBooks(prev => prev.filter(b => b.id !== item.id));
-        setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id !== item.id) } : book));
-        setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id !== item.id) } : book));
-        setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => b.id !== item.id) }));
+        // Use loose inequality (!=) to handle potential string/number ID mismatches from the API
+        setSelectedBooks(prev => prev.filter(b => b.id != item.id));
+        setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id != item.id) } : book));
+        setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b.id != item.id) } : book));
+        setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => b.id != item.id) }));
 
       } catch (err) {
         console.error("Delete failed:", err?.response?.data || err.message);
         alert("Could not delete book: " + (err?.response?.data?.error || err.message));
       }
     } else {
+      // If the item has no ID (local only), remove it from all state sources to keep UI consistent
       setSelectedBooks(prev => prev.filter(b => b !== item));
+      setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b !== item) } : book));
+      setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b !== item) } : book));
+      setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => b !== item) }));
     }
   };
 
