@@ -237,7 +237,7 @@ app.post("/books", async (req, res) => {
     const { data, error } = await supabase
       .from('individual_books')
       .insert([{
-        zone, grade, branch, subject, material_name: materialName, material_code: sku,
+        zone, grade, branch_name: branchName, subject, material_name: materialName, material_code: sku,
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
         author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
         mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, kit_id: d.kit_id
@@ -364,7 +364,7 @@ app.put("/books/:id", async (req, res) => {
     const { data, error } = await supabase
       .from('individual_books')
       .update({
-        zone, grade, branch, subject, material_name: materialName, material_code: materialCode,
+        zone, grade, branch_name: branchName, subject, material_name: materialName, material_code: materialCode,
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
         author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
         mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, kit_id: d.kit_id
