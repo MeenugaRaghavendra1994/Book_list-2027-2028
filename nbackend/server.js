@@ -388,9 +388,16 @@ app.put("/books/:id", async (req, res) => {
    ❌ DELETE
 ============================ */
 app.delete("/books/:id", async (req, res) => {
-  await supabase.from('individual_books').delete().eq('id', req.params.id);
-  console.log("🗑️ DELETED:", req.params.id);
-  res.json({ success: true });
+  try {
+    const { error } = await supabase.from('individual_books').delete().eq('id', req.params.id);
+    if (error) throw error;
+    
+    console.log("🗑️ DELETED:", req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ DELETE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /* ============================
