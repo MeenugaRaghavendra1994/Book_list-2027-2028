@@ -569,8 +569,12 @@ function App() {
         setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => String(b.id) !== String(item.id)) }));
 
       } catch (err) {
-        console.error("Delete failed:", err?.response?.data || err.message);
-        alert("Could not delete book: " + (err?.response?.data?.error || err.message));
+        console.error("Delete failed:", err.response?.data || err.message);
+        if (err.response && err.response.status === 404) {
+          alert("Book not found in the database. It might have been deleted already or the ID is incorrect.");
+        } else {
+          alert("Could not delete book: " + (err.response?.data?.error || err.message || "Unknown error"));
+        }
       }
     } else {
       if (!window.confirm("This item is not yet saved to the database. Remove from local list?")) return;
