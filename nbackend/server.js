@@ -21,6 +21,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Prevent API caching
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  next();
+});
+
 // Initialize Supabase Client (Uses Port 443 - rarely blocked)
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -389,13 +395,36 @@ app.put("/books/:id", async (req, res) => {
 ============================ */
 app.delete("/books/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from('individual_books').delete().eq('id', req.params.id);
+    const { error, count } = await supabase
+      .from('individual_books')
+      .delete({ count: 'exact' })
+      .eq('id', req.params.id);
+      
     if (error) throw error;
     
     console.log("🗑️ DELETED:", req.params.id);
-    res.json({ success: true });
+    res.json({ success: true, affected: count });
   } catch (err) {
     console.error("❌ DELETE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   ❌ DELETE KIT
+============================ */
+app.delete("/kits/:id", async (req, res) => {
+  try {
+    // Delete associated books first to maintain integrity
+    await supabase.from('individual_books').delete().eq('kit_id', req.params.id);
+    
+    const { error } = await supabase.from('grade_wise_kits').delete().eq('id', req.params.id);
+    if (error) throw error;
+
+    console.log("🗑️ KIT DELETED:", req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ KIT DELETE ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
