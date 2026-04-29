@@ -509,7 +509,8 @@ function App() {
         const response = await axios.post(`${API_BASE_URL}/books`, { ...bookItem, kit_id: activeBook.id });
         addedBooks.push(response.data.book || bookItem);
       } catch (error) {
-        addedBooks.push(bookItem);
+        console.error("Failed to save row to DB:", bookItem.material_code, error.response?.data || error.message);
+        // We do NOT push to addedBooks here, so the UI stays in sync with the DB
       }
     }
 
@@ -618,25 +619,26 @@ function App() {
       } else {
         const response = await axios.post(`${API_BASE_URL}/books`, { ...bookItem, kit_id: activeBook.id });
         if (response.data?.book) savedBookItem = response.data.book;
+        
+        const updatedTime = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, '');
+        if (editingBookIndex !== null) {
+          setSelectedBooks(prev => prev.map((item, idx) => idx === editingBookIndex ? savedBookItem : item));
+          setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) } : book));
+          setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: (book.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) } : book));
+          setActiveBook(prev => ({ ...prev, createdAt: updatedTime, created_at: updatedTime, books: (prev.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) }));
+        } else {
+          setSelectedBooks(prev => [...prev, savedBookItem]);
+          setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: [...(book.books || []), savedBookItem] } : book));
+          setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: [...(book.books || []), savedBookItem] } : book));
+          setActiveBook(prev => ({ ...prev, createdAt: updatedTime, created_at: updatedTime, books: [...(prev.books || []), savedBookItem] }));
+        }
+        setShowAddBook(false);
       }
     } catch (error) {
       console.error("Book save failed:", error?.response?.data || error.message);
+      alert("Database Error: Could not save the book. " + (error.response?.data || "Check console for details."));
+      return; // Stop execution if DB save failed
     }
-
-    const updatedTime = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, '');
-    if (editingBookIndex !== null) {
-      setSelectedBooks(prev => prev.map((item, idx) => idx === editingBookIndex ? savedBookItem : item));
-      setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) } : book));
-      setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: (book.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) } : book));
-      setActiveBook(prev => ({ ...prev, createdAt: updatedTime, created_at: updatedTime, books: (prev.books || []).map((item, idx) => idx === editingBookIndex ? savedBookItem : item) }));
-    } else {
-      setSelectedBooks(prev => [...prev, savedBookItem]);
-      setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: [...(book.books || []), savedBookItem] } : book));
-      setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, createdAt: updatedTime, created_at: updatedTime, books: [...(book.books || []), savedBookItem] } : book));
-      setActiveBook(prev => ({ ...prev, createdAt: updatedTime, created_at: updatedTime, books: [...(prev.books || []), savedBookItem] }));
-    }
-
-    setShowAddBook(false);
     setEditingBookIndex(null);
     setNewBookItem({
       category: "",
