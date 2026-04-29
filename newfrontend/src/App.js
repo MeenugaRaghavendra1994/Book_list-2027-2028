@@ -501,7 +501,8 @@ function App() {
         composite_code: row.composite_code || row['Composite Code'] || "",
         composite_name: row.composite_name || row['Composite Name'] || "",
         zone: activeBook.zone,
-        grade: activeBook.grade
+        grade: activeBook.grade,
+        branch: row.branch || row['Branch'] || activeBook.branch || ""
       };
 
       try {
