@@ -234,11 +234,23 @@ app.post("/books", async (req, res) => {
     const publisher = String(d.publisher || "").trim();
     const qty = Number(d.quantity) || 0;
     const rate = Number(d.per_unit_rate) || 0;
-    const total = Number(d.total_amount) || qty * rate;
-    const mrp = Number(d.mrp) || 0;
-    const costPrice = Number(d.cost_price) || 0;
+    let mrp = Number(d.mrp) || 0;
+    let costPrice = Number(d.cost_price) || 0;
     const compositeCode = String(d.composite_code || "").trim();
     const compositeName = String(d.composite_name || "").trim();
+
+    // Pricing Lookup from master pricing table
+    const { data: pricingData } = await supabase
+      .from('pricing')
+      .select('mrp, cost_price')
+      .eq('material_code', sku)
+      .maybeSingle();
+
+    if (pricingData) {
+      mrp = pricingData.mrp ?? mrp;
+      costPrice = pricingData.cost_price ?? costPrice;
+    }
+    const total = Number(d.total_amount) || qty * rate;
 
     const { data, error } = await supabase
       .from('individual_books')
@@ -361,11 +373,23 @@ app.put("/books/:id", async (req, res) => {
     const publisher = String(d.publisher || "").trim();
     const qty = Number(d.quantity) || 0;
     const rate = Number(d.per_unit_rate) || 0;
-    const total = Number(d.total_amount) || qty * rate;
-    const mrp = Number(d.mrp) || 0;
-    const costPrice = Number(d.cost_price) || 0;
+    let mrp = Number(d.mrp) || 0;
+    let costPrice = Number(d.cost_price) || 0;
     const compositeCode = String(d.composite_code || "").trim();
     const compositeName = String(d.composite_name || "").trim();
+
+    // Pricing Lookup from master pricing table
+    const { data: pricingData } = await supabase
+      .from('pricing')
+      .select('mrp, cost_price')
+      .eq('material_code', materialCode)
+      .maybeSingle();
+
+    if (pricingData) {
+      mrp = pricingData.mrp ?? mrp;
+      costPrice = pricingData.cost_price ?? costPrice;
+    }
+    const total = Number(d.total_amount) || qty * rate;
 
     const { data, error } = await supabase
       .from('individual_books')
