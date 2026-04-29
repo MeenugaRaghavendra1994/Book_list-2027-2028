@@ -395,14 +395,24 @@ app.put("/books/:id", async (req, res) => {
 ============================ */
 app.delete("/books/:id", async (req, res) => {
   try {
+    const bookId = req.params.id;
+    if (!bookId || bookId === 'undefined' || bookId === 'null') {
+      return res.status(400).json({ success: false, error: "A valid Book ID is required for deletion." });
+    }
+
     const { error, count } = await supabase
       .from('individual_books')
       .delete({ count: 'exact' })
-      .eq('id', req.params.id);
+      .eq('id', bookId);
       
     if (error) throw error;
     
-    console.log("🗑️ DELETED:", req.params.id);
+    console.log(`🗑️ DELETE REQUEST: ID ${bookId}, Rows Deleted: ${count}`);
+
+    if (count === 0) {
+      return res.status(404).json({ success: false, error: "Book record not found in database. No deletion occurred." });
+    }
+
     res.json({ success: true, affected: count });
   } catch (err) {
     console.error("❌ DELETE ERROR:", err.message);
