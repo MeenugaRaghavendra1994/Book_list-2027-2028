@@ -215,7 +215,7 @@ app.post("/books", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
-    const branch = String(d.branch || "").trim();
+    const branchName = String(d.branch || "").trim();
     const sku = String(d.material_code || "").trim();
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
@@ -342,7 +342,7 @@ app.put("/books/:id", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
-    const branch = String(d.branch || "").trim();
+    const branchName = String(d.branch || "").trim();
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
     const materialCode = String(d.material_code || "").trim();
@@ -415,7 +415,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       return {
           zone: String(d["Zone"] || "").trim(),
           grade: String(d["Grade"] || "").trim(),
-          branch: String(d["Branch"] || "").trim(),
+          branch_name: String(d["Branch"] || "").trim(),
           material_code: String(d["Material Code"] || "").trim(),
           subject: String(d["Subject"] || ""),
           material_name: String(d["Material Name"] || ""),
@@ -435,6 +435,24 @@ app.post("/upload", upload.single("file"), async (req, res) => {
           composite_name: String(d["Composite Name"] || "")
       };
     });
+
+    // Bulk Pricing Lookup
+    const codes = rowsToInsert.map(r => r.material_code);
+    const { data: pricingList } = await supabase
+      .from('pricing')
+      .select('material_code, mrp, cost_price')
+      .in('material_code', codes);
+
+    if (pricingList && pricingList.length > 0) {
+      const priceMap = new Map(pricingList.map(p => [p.material_code, p]));
+      rowsToInsert.forEach(row => {
+        const p = priceMap.get(row.material_code);
+        if (p) {
+          row.mrp = p.mrp || row.mrp;
+          row.cost_price = p.cost_price || row.cost_price;
+        }
+      });
+    }
 
     const { data: insertedData, error } = await supabase
       .from('individual_books')
