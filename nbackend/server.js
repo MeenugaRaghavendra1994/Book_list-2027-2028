@@ -421,6 +421,7 @@ app.put("/books/:id", async (req, res) => {
   }
 });
 
+// PUT /pricing/:id - Update a pricing record
 app.put("/pricing/:id", async (req, res) => {
   const { id } = req.params;
   const { material_code, mrp, cost_price } = req.body; // Assuming these are the fields to update
@@ -444,6 +445,7 @@ app.put("/pricing/:id", async (req, res) => {
   }
 });
 
+// PUT /grades/:id - Update a grade record
 app.put("/grades/:id", async (req, res) => {
   const { id } = req.params;
   const { name } = req.body; // Assuming 'name' is the field to update
@@ -467,6 +469,7 @@ app.put("/grades/:id", async (req, res) => {
   }
 });
 
+// PUT /branches/:id - Update a branch record
 app.put("/branches/:id", async (req, res) => {
   const { id } = req.params;
   const { name, zone } = req.body;
@@ -480,6 +483,7 @@ app.put("/branches/:id", async (req, res) => {
   }
 });
 
+// DELETE /books/:id - Delete an individual book record
 /* ============================
    ❌ DELETE
 ============================ */
@@ -510,6 +514,7 @@ app.delete("/books/:id", async (req, res) => {
   }
 });
 
+// DELETE /kits/:id - Delete a kit and its associated books
 /* ============================
    ❌ DELETE KIT
 ============================ */
@@ -700,6 +705,7 @@ app.put("/users/:id", async (req, res) => {
   }
 });
 
+// DELETE /pricing/:id - Delete a pricing record
 app.delete("/pricing/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -719,6 +725,7 @@ app.delete("/pricing/:id", async (req, res) => {
   }
 });
 
+// DELETE /grades/:id - Delete a grade record
 app.delete("/grades/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -738,6 +745,7 @@ app.delete("/grades/:id", async (req, res) => {
   }
 });
 
+// GET /tables - Get list of allowed tables for explorer
 /* ============================
    🗄️ DATABASE EXPLORER
 ============================ */
@@ -754,6 +762,7 @@ app.get("/tables", async (req, res) => {
   res.json(tables);
 });
 
+// GET /data/:table - Get data for a specific table with optional filters
 app.get("/data/:table", async (req, res) => {
   const { table } = req.params;
   const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "book_list_users"];
@@ -762,11 +771,31 @@ app.get("/data/:table", async (req, res) => {
     return res.status(403).json({ success: false, error: "Access denied to requested table." });
   }
 
+  // Apply filters based on table
+  let query = supabase.from(table).select("*");
+  if (table === 'pricing') {
+    const materialCode = req.query.material_code;
+    if (materialCode) {
+      query = query.ilike('material_code', `%${materialCode}%`); // Case-insensitive partial match
+    }
+  } else if (table === 'branches') {
+    const nameFilter = req.query.name;
+    const zoneFilter = req.query.zone;
+    if (nameFilter) query = query.ilike('name', `%${nameFilter}%`);
+    if (zoneFilter) query = query.ilike('zone', `%${zoneFilter}%`);
+  } else if (table === 'grades') {
+    const nameFilter = req.query.name;
+    if (nameFilter) query = query.ilike('name', `%${nameFilter}%`);
+  } else if (table === 'book_list_users') {
+    // For book_list_users, ensure only admin can view/filter
+    // In a real app, this would be handled by authentication middleware
+    // For now, we'll just allow filtering if the frontend sends it
+    const usernameFilter = req.query.username;
+    if (usernameFilter) query = query.ilike('username', `%${usernameFilter}%`);
+  }
+
   try {
-    const { data, error } = await supabase
-      .from(table)
-      .select("*")
-      .limit(100);
+    const { data, error } = await query.limit(100); // Limit to 100 for explorer view
 
     if (error) throw error;
     res.json(data);
@@ -776,6 +805,7 @@ app.get("/data/:table", async (req, res) => {
   }
 });
 
+// GET /export-table/:table - Export data from a specific table as XLSX
 app.get("/export-table/:table", async (req, res) => {
   const { table } = req.params;
   const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "book_list_users"];
@@ -814,6 +844,7 @@ app.get("/export-table/:table", async (req, res) => {
   }
 });
 
+// DELETE /users/:id - Delete a user record (Admin only)
 app.delete("/users/:id", async (req, res) => {
   try {
     const { error } = await supabase
