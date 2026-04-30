@@ -441,30 +441,37 @@ function App() {
     }
 
     const createdKits = [];
+    let failureCount = 0;
+
     for (const row of bulkUploadRows) {
+      // Normalize keys to handle variations in CSV headers
       const newKit = {
-        name: row.name || row['Book List Name'] || row.book_list_name || "",
-        zone: row.zone || row['Zone'] || "",
-        branch: row.branch || row['Branch'] || "",
-        grade: row.grade || row['Grade'] || "",
-        status: row.status || row['Status'] || "Pending",
-        createdBy: row.createdBy || row.created_by || row['Created By'] || "Bulk Upload",
-        createdAt: row.createdAt || row.created_at || row['Created At'] || new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, ''),
-        statusInfo: row.statusInfo || row.status_info || row['Status Info'] || row.status || row['Status'] || "Pending",
+        name: (row.name || row['Book List Name'] || row.book_list_name || "").trim(),
+        zone: (row.zone || row['Zone'] || "").trim(),
+        branch: (row.branch || row['Branch'] || row['Branch Name'] || "").trim(),
+        grade: (row.grade || row['Grade'] || "").trim(),
+        status: (row.status || row['Status'] || "Pending").trim(),
+        createdBy: (row.createdBy || row.created_by || row['Created By'] || "Bulk Upload").trim(),
+        createdAt: (row.createdAt || row.created_at || row['Created At'] || new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, '')).trim(),
+        statusInfo: (row.statusInfo || row.status_info || row['Status Info'] || row.status || "Pending").trim(),
         books: []
       };
 
       try {
         const response = await axios.post(`${API_BASE_URL}/kits`, newKit);
         createdKits.push(response.data.kit);
-      } catch {
-        const fallbackKit = { ...newKit, id: books.length + createdKits.length + 1 };
-        createdKits.push(fallbackKit);
+      } catch (err) {
+        console.error("Database Save Failed for kit:", newKit.name, err.message);
+        failureCount++;
+        // We push a temporary ID for local view, but warn the user later
+        createdKits.push({ ...newKit, id: `TEMP-${Date.now()}-${Math.random()}` });
       }
     }
 
     setBooks(prev => [...prev, ...createdKits]);
     setFilteredBooks(prev => [...prev, ...createdKits]);
+    if (failureCount > 0) alert(`${failureCount} kits failed to save to database. They are only visible locally until you refresh.`);
+    
     setBulkUploadRows([]);
     setBulkFileName("");
     setBulkError("");
