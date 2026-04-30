@@ -938,27 +938,38 @@ function App() {
   return (
     <div className="d-flex" style={{ minHeight: '100vh' }}>
       {/* SIDEBAR */}
-      <div className="sidebar shadow-sm bg-white d-none d-md-flex flex-column border-end" style={{ width: '250px', position: 'sticky', top: 0, height: '100vh' }}>
-        <div className="p-4 border-bottom mb-3">
-          <h5 className="fw-bold text-primary mb-0">Book ERP</h5>
-          <small className="text-muted">Database Console</small>
+      <div className={`sidebar shadow-sm bg-white d-flex flex-column border-end ${isSidebarCollapsed ? 'collapsed' : ''}`}
+           style={{ width: isSidebarCollapsed ? '70px' : '250px', position: 'sticky', top: 0, height: '100vh', transition: 'width 0.3s ease, min-width 0.3s ease', minWidth: isSidebarCollapsed ? '70px' : '250px' }}>
+        <div className="p-3 border-bottom d-flex align-items-center justify-content-between" style={{ minHeight: '60px' }}>
+          {!isSidebarCollapsed && (
+            <div>
+              <h5 className="fw-bold text-primary mb-0">Book ERP</h5>
+              <small className="text-muted">Console</small>
+            </div>
+          )}
+          <button className="btn btn-sm btn-light border p-0"
+                  onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                  style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}>
+            {isSidebarCollapsed ? <i className="bi bi-arrow-right"></i> : <i className="bi bi-arrow-left"></i>}
+          </button>
         </div>
         
         <div className="px-3 mb-4">
-          <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem', letterSpacing: '0.05em' }}>MAIN</div>
+          {!isSidebarCollapsed && <div className="small text-uppercase text-muted fw-bold mb-2 px-2 mt-3" style={{ fontSize: '0.7rem' }}>MAIN</div>}
           <div 
             className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
             onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
           >
-            Book Kit Lists
+            {isSidebarCollapsed ? "📚" : "Book Kit Lists"}
           </div>
         </div>
 
         <div className="px-3 flex-grow-1 overflow-auto">
-          <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem', letterSpacing: '0.05em' }}>TABLE EXPLORER</div>
+          {!isSidebarCollapsed && <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem' }}>TABLE EXPLORER</div>}
           {tables.map((t, index) => (
             // Only show book_list_users table to Admin
-            (t.table_name !== 'book_list_users' || (currentUser && currentUser.role === 'Admin')) && (
+            (t.table_name !== 'book_list_users' || currentUser?.role === 'Admin') && (
               <div
                 key={index}
                 className={`table-item px-3 py-2 ${selectedTable === t.table_name ? 'active' : ''}`}
@@ -966,16 +977,17 @@ function App() {
                   setSelectedTable(t.table_name);
                   setViewMode('explorer');
                   setTableFilters({}); // Clear filters when changing table
+                  setAppliedTableFilters({});
                 }}
               >
-                {t.table_name}
+                {isSidebarCollapsed ? "⚙️" : t.table_name}
               </div>
             )
           ))}
         </div>
         
         <div className="p-3 border-top mt-auto bg-light">
-          <div className="small text-muted mb-1 px-2">User: <strong>{currentUser?.username}</strong></div>
+          {isSidebarCollapsed ? <span title={currentUser?.username}>👤</span> : <div className="small text-muted mb-1 px-2">User: <strong>{currentUser?.username}</strong></div>}
         </div>
       </div>
 
@@ -1606,10 +1618,13 @@ function App() {
             {selectedTable && (
               <>
               {/* Filter Inputs for specific tables */}
-              {(selectedTable === 'pricing' || selectedTable === 'branches' || selectedTable === 'grades' || selectedTable === 'book_list_users') && (
+              {(selectedTable === 'pricing' || selectedTable === 'branches' || selectedTable === 'grades') && (
                 <div className="card card-soft p-4 shadow-sm border-0 mb-4">
-                  <h5 className="mb-3">Filter Table: {selectedTable}</h5>
-                  <div className="row g-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h5 className="mb-0">Filter Table: {selectedTable}</h5>
+                    <button className="btn btn-primary btn-sm px-4" onClick={handleApplyTableFilters}>Go / Search</button>
+                  </div>
+                  <div className="row g-3 align-items-end">
                     {selectedTable === 'pricing' && (
                       <div className="col-md-6">
                         <label className="form-label">Material Code</label>
@@ -1668,7 +1683,7 @@ function App() {
                       <tr>
                         {tableData.length > 0 && Object.keys(tableData[0]).map(key => <th key={key} className="py-3 px-3">{key}</th>)}
                       </tr>
-                      {userHasRight("Edit/Delete") && <th>Actions</th>}
+                      {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && <th>Actions</th>}
                     </thead>
                     <tbody>
                       {tableData.length > 0 ? tableData.map((row, i) => (
@@ -1678,7 +1693,7 @@ function App() {
                               {val === null ? <span className="text-muted fst-italic">null</span> : typeof val === 'object' ? JSON.stringify(val) : String(val)}
                             </td>
                           ))}
-                          {userHasRight("Edit/Delete") && (
+                          {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && (
                             <td>
                               <div className="d-flex gap-2">
                                 <button className="btn btn-outline-warning btn-sm" onClick={() => handleEditTableRow(row)}>Edit</button>
