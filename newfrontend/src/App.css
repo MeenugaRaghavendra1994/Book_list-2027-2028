@@ -178,3 +178,30 @@
     padding: 0 1rem;
   }
 }
+
+/* SIDEBAR & EXPLORER STYLES */
+.sidebar {
+  transition: all 0.3s ease;
+}
+
+.table-item {
+  padding: 10px 15px;
+  cursor: pointer;
+  border-radius: 10px;
+  margin: 4px 0;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+.table-item:hover {
+  background: #f8fafc;
+}
+
+.table-item.active {
+  background: #e73f9015;
+  color: #e73f90;
+  box-shadow: inset 3px 0 0 #e73f90;
+  font-weight: 700;
+}
