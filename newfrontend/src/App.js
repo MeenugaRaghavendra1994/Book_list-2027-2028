@@ -251,7 +251,7 @@ function App() {
       };
       setUsers(prev => [...prev, savedUser]);
       alert(`User ${savedUser.username} created successfully and saved to database.`);
-    } catch (error) {
+    } catch (err) {
       const fallback = { id: Date.now(), ...payload };
       setUsers(prev => [...prev, fallback]);
       alert(`User ${payload.username} created locally (database save failed).`);
@@ -298,7 +298,7 @@ function App() {
       setEditingUser(null);
       setManageUserForm({ id: null, username: "", password: "", role: "Admin", rights: [] });
       alert(`User ${updatedUser.username} updated successfully.`);
-    } catch (error) {
+    } catch (err) {
       alert("Failed to update user in database.");
     }
   };
@@ -312,7 +312,7 @@ function App() {
         setEditingUser(null);
         setManageUserForm({ id: null, username: "", password: "", role: "Admin", rights: [] });
       }
-    } catch (error) {
+    } catch (err) {
       alert("Failed to delete user from database.");
     }
   };
@@ -795,9 +795,9 @@ function App() {
         setActiveBook(prev => ({ ...prev, createdAt: updatedTime, created_at: updatedTime, books: [...(prev.books || []), savedBookItem] }));
       }
       setShowAddBook(false);
-    } catch (error) {
-      console.error("Book save failed:", error?.response?.data || error.message);
-      alert("Database Error: Could not save the book. " + (error.response?.data || "Check console for details."));
+    } catch (err) {
+      console.error("Book save failed:", err?.response?.data || err.message);
+      alert("Database Error: Could not save the book. " + (err.response?.data || "Check console for details."));
       return; // Stop execution if DB save failed
     }
     setEditingBookIndex(null);
