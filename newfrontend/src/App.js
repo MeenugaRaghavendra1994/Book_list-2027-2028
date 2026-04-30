@@ -67,6 +67,10 @@ function App() {
   const [branchList, setBranchList] = useState([]);
   const [zonesList, setZonesList] = useState([]);
   const [gradeList, setGradeList] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [tableData, setTableData] = useState([]);
+  const [viewMode, setViewMode] = useState("kits"); // 'kits' or 'explorer'
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
 
@@ -124,7 +128,19 @@ function App() {
     axios.get(`${API_BASE_URL}/grades`)
       .then(res => setGradeList(res.data || []))
       .catch(() => setGradeList([]));
+
+    axios.get(`${API_BASE_URL}/tables`)
+      .then(res => setTables(res.data || []))
+      .catch(() => setTables([]));
   }, []);
+
+  useEffect(() => {
+    if (selectedTable && viewMode === "explorer") {
+      axios.get(`${API_BASE_URL}/data/${selectedTable}`)
+        .then(res => setTableData(res.data || []))
+        .catch(() => setTableData([]));
+    }
+  }, [selectedTable, viewMode]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -832,7 +848,49 @@ function App() {
   }
 
   return (
-    <div className="page-wrapper py-4 px-4">
+    <div className="d-flex" style={{ minHeight: '100vh' }}>
+      {/* SIDEBAR */}
+      <div className="sidebar shadow-sm bg-white d-none d-md-flex flex-column border-end" style={{ width: '250px', position: 'sticky', top: 0, height: '100vh' }}>
+        <div className="p-4 border-bottom mb-3">
+          <h5 className="fw-bold text-primary mb-0">Book ERP</h5>
+          <small className="text-muted">Database Console</small>
+        </div>
+        
+        <div className="px-3 mb-4">
+          <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem', letterSpacing: '0.05em' }}>MAIN</div>
+          <div 
+            className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
+            onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
+          >
+            Book Kit Lists
+          </div>
+        </div>
+
+        <div className="px-3 flex-grow-1 overflow-auto">
+          <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem', letterSpacing: '0.05em' }}>TABLE EXPLORER</div>
+          {tables.map((t, index) => (
+            <div
+              key={index}
+              className={`table-item px-3 py-2 ${selectedTable === t.table_name ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedTable(t.table_name);
+                setViewMode('explorer');
+              }}
+            >
+              {t.table_name}
+            </div>
+          ))}
+        </div>
+        
+        <div className="p-3 border-top mt-auto bg-light">
+          <div className="small text-muted mb-1 px-2">User: <strong>{currentUser?.username}</strong></div>
+        </div>
+      </div>
+
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-grow-1 overflow-auto">
+        {viewMode === 'kits' ? (
+          <div className="page-wrapper py-4 px-4">
       <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 gap-3">
         <div>
           <nav className="breadcrumb bg-transparent p-0 mb-2">
@@ -1445,6 +1503,48 @@ function App() {
           </div>
         </div>
       )}
+          </div>
+        ) : (
+          <div className="page-wrapper py-4 px-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h2 className="page-title">Database Explorer</h2>
+              <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
+            </div>
+
+            {selectedTable && (
+              <div className="card card-soft p-4 shadow-sm border-0">
+                <div className="d-flex justify-content-between align-items-center mb-4">
+                  <h4 className="mb-0">Table: <span className="text-danger fw-bold">{selectedTable}</span></h4>
+                  <div className="badge bg-secondary">{tableData.length} records shown</div>
+                </div>
+                
+                <div className="table-responsive rounded-3 border">
+                  <table className="table table-sm table-hover align-middle mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        {tableData.length > 0 && Object.keys(tableData[0]).map(key => <th key={key} className="py-3 px-3">{key}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableData.length > 0 ? tableData.map((row, i) => (
+                        <tr key={i}>
+                          {Object.values(row).map((val, j) => (
+                            <td key={j} className="px-3 text-truncate" style={{ maxWidth: '200px' }}>
+                              {val === null ? <span className="text-muted fst-italic">null</span> : typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                            </td>
+                          ))}
+                        </tr>
+                      )) : (
+                        <tr><td colSpan="10" className="text-center py-5 text-muted">No data found in this table.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
