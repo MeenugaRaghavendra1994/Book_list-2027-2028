@@ -502,9 +502,9 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       const total = Number(d["Total Amount"] || d["total_amount"] || qty * rate) || qty * rate;
       
       return {
-          zone: String(d["Zone"] || "").trim(),
+          zone: String(d["Zone"] || d["Zone Name"] || d["zone_name"] || "").trim(),
           grade: String(d["Grade"] || "").trim(),
-          branch_name: String(d["Branch"] || "").trim(),
+          branch_name: String(d["Branch"] || d["Branch Name"] || d["branch_name"] || d["Branch_Name"] || "").trim(),
           material_code: String(d["Material Code"] || "").trim(),
           subject: String(d["Subject"] || ""),
           material_name: String(d["Material Name"] || ""),
