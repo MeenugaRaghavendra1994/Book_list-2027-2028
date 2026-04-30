@@ -290,13 +290,20 @@ app.post("/kits", async (req, res) => {
     const createdAt = String(d.createdAt || "").trim();
     const statusInfo = String(d.statusInfo || "").trim();
 
+    if (!name || !branch || !grade) {
+      return res.status(400).json({ success: false, error: "Missing required fields: name, branch, and grade are mandatory." });
+    }
+
     const { data, error } = await supabase
       .from('grade_wise_kits')
       .insert([{ name, zone, branch, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo }])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+       console.error("❌ SUPABASE KIT INSERT ERROR:", error.message);
+       throw error;
+    }
 
     console.log("✅ KIT INSERT:", name);
     res.json({ success: true, kit: data });
