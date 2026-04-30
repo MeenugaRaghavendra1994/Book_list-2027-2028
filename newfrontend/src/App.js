@@ -153,10 +153,14 @@ function App() {
   useEffect(() => {
     const next = books.filter(book => {
       return (
-        (!filters.zone || book.zone === filters.zone) &&
-        (!filters.branch || book.branch === filters.branch) &&
-        (!filters.grade || book.grade === filters.grade) &&
-        (!filters.status || book.status === filters.status)
+        (!filters.zone || 
+          String(book.zone || "").trim().toLowerCase() === String(filters.zone).trim().toLowerCase()) &&
+        (!filters.branch || 
+          String(book.branch || "").trim().toLowerCase() === String(filters.branch).trim().toLowerCase()) &&
+        (!filters.grade || 
+          String(book.grade || "").trim().toLowerCase() === String(filters.grade).trim().toLowerCase()) &&
+        (!filters.status || 
+          String(book.status || "").trim().toLowerCase() === String(filters.status).trim().toLowerCase())
       );
     });
     setFilteredBooks(next);
@@ -446,9 +450,9 @@ function App() {
     for (const row of bulkUploadRows) {
       // Normalize keys to handle variations in CSV headers
       const newKit = {
-        name: (row.name || row['Book List Name'] || row.book_list_name || "").trim(),
-        zone: (row.zone || row['Zone'] || "").trim(),
-        branch: (row.branch || row['Branch'] || row['Branch Name'] || "").trim(),
+        name: (row.name || row['Book List Name'] || row.book_list_name || row['Name'] || "").trim(),
+        zone: (row.zone || row['Zone'] || row['zone_name'] || row['Zone Name'] || "").trim(),
+        branch: (row.branch || row['Branch'] || row['Branch Name'] || row['branch_name'] || row['Branch_Name'] || "").trim(),
         grade: (row.grade || row['Grade'] || "").trim(),
         status: (row.status || row['Status'] || "Pending").trim(),
         createdBy: (row.createdBy || row.created_by || row['Created By'] || "Bulk Upload").trim(),
@@ -526,7 +530,7 @@ function App() {
         composite_name: row.composite_name || row['Composite Name'] || "",
         zone: activeBook.zone,
         grade: activeBook.grade,
-        branch: row.branch || row['Branch'] || activeBook.branch || ""
+        branch: (row.branch || row['Branch'] || row['Branch Name'] || row['branch_name'] || activeBook.branch || "").trim()
       };
 
       try {
