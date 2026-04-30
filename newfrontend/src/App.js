@@ -135,15 +135,37 @@ function App() {
     axios.get(`${API_BASE_URL}/tables`)
       .then(res => setTables(res.data || []))
       .catch(() => setTables([]));
+
+    // Persist session on refresh
+    const savedUser = localStorage.getItem("erp_user");
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+      } catch (e) {
+        localStorage.removeItem("erp_user");
+      }
+    }
   }, []);
 
   useEffect(() => {
-    if (selectedTable && viewMode === "explorer") { // Add tableFilters to dependencies
-      axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: tableFilters })
+    if (selectedTable && viewMode === "explorer") {
+      fetchTableData();
+    }
+  }, [selectedTable, viewMode, appliedTableFilters]);
+
+  const fetchTableData = () => {
+    if (selectedTable) {
+      axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: appliedTableFilters })
         .then(res => setTableData(res.data || []))
         .catch(() => setTableData([]));
     }
-  }, [selectedTable, viewMode, tableFilters]);
+  };
+
+  const handleApplyTableFilters = () => {
+    setAppliedTableFilters({ ...tableFilters });
+  };
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -315,12 +337,6 @@ function App() {
     } catch (err) {
       alert("Failed to delete user from database.");
     }
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setCurrentUser(null);
-    setShowCreateUser(false);
   };
 
   const handleView = async (id) => {
