@@ -421,6 +421,65 @@ app.put("/books/:id", async (req, res) => {
   }
 });
 
+app.put("/pricing/:id", async (req, res) => {
+  const { id } = req.params;
+  const { material_code, mrp, cost_price } = req.body; // Assuming these are the fields to update
+
+  try {
+    const { data, error } = await supabase
+      .from('pricing')
+      .update({ material_code: String(material_code).trim(), mrp: Number(mrp), cost_price: Number(cost_price) })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: "Pricing record not found." });
+
+    console.log("✏ UPDATED Pricing:", id);
+    res.json({ success: true, record: data });
+  } catch (err) {
+    console.error("❌ PRICING UPDATE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/grades/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body; // Assuming 'name' is the field to update
+
+  try {
+    const { data, error } = await supabase
+      .from('grades')
+      .update({ name: String(name).trim() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: "Grade record not found." });
+
+    console.log("✏ UPDATED Grade:", id);
+    res.json({ success: true, record: data });
+  } catch (err) {
+    console.error("❌ GRADE UPDATE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/branches/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, zone } = req.body;
+  try {
+    const { data, error } = await supabase.from('branches').update({ name: String(name).trim(), zone: String(zone).trim() }).eq('id', id).select().single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: "Branch record not found." });
+    res.json({ success: true, record: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /* ============================
    ❌ DELETE
 ============================ */
@@ -641,6 +700,44 @@ app.put("/users/:id", async (req, res) => {
   }
 });
 
+app.delete("/pricing/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { error, count } = await supabase
+      .from('pricing')
+      .delete({ count: 'exact' })
+      .eq('id', id);
+
+    if (error) throw error;
+    if (count === 0) return res.status(404).json({ success: false, error: "Pricing record not found." });
+
+    console.log("🗑️ DELETED Pricing:", id);
+    res.json({ success: true, affected: count });
+  } catch (err) {
+    console.error("❌ PRICING DELETE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/grades/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { error, count } = await supabase
+      .from('grades')
+      .delete({ count: 'exact' })
+      .eq('id', id);
+
+    if (error) throw error;
+    if (count === 0) return res.status(404).json({ success: false, error: "Grade record not found." });
+
+    console.log("🗑️ DELETED Grade:", id);
+    res.json({ success: true, affected: count });
+  } catch (err) {
+    console.error("❌ GRADE DELETE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /* ============================
    🗄️ DATABASE EXPLORER
 ============================ */
@@ -675,6 +772,44 @@ app.get("/data/:table", async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error(`❌ EXPLORER FETCH ERROR (${table}):`, err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/export-table/:table", async (req, res) => {
+  const { table } = req.params;
+  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "book_list_users"];
+
+  if (!allowedTables.includes(table)) {
+    return res.status(403).json({ success: false, error: "Access denied to requested table." });
+  }
+
+  try {
+    const { data, error } = await supabase.from(table).select("*");
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      return res.status(404).send("No data to export for this table.");
+    }
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, table);
+
+    const filePath = `/tmp/${table}-export.xlsx`;
+    XLSX.writeFile(wb, filePath);
+
+    res.download(filePath, `${table}-export.xlsx`, (err) => {
+      if (err) {
+        console.error("❌ EXPORT DOWNLOAD ERROR:", err.message);
+      }
+      fs.unlink(filePath, (unlinkErr) => {
+        if (unlinkErr) console.error("❌ ERROR DELETING TEMP FILE:", unlinkErr.message);
+      });
+    });
+
+  } catch (err) {
+    console.error(`❌ EXPORT TABLE ERROR (${table}):`, err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
