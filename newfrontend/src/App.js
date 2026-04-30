@@ -70,6 +70,9 @@ function App() {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
+  const [showEditTableModal, setShowEditTableModal] = useState(false);
+  const [editingTableRow, setEditingTableRow] = useState(null);
+  const [tableFilters, setTableFilters] = useState({}); // For explorer table filters
   const [viewMode, setViewMode] = useState("kits"); // 'kits' or 'explorer'
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
@@ -135,12 +138,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (selectedTable && viewMode === "explorer") {
-      axios.get(`${API_BASE_URL}/data/${selectedTable}`)
+    if (selectedTable && viewMode === "explorer") { // Add tableFilters to dependencies
+      axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: tableFilters })
         .then(res => setTableData(res.data || []))
         .catch(() => setTableData([]));
     }
-  }, [selectedTable, viewMode]);
+  }, [selectedTable, viewMode, tableFilters]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -572,6 +575,91 @@ function App() {
     setBulkBookError("");
   };
 
+  const handleEditTableRow = (row) => {
+    if (!userHasRight("Edit/Delete")) {
+      alert("You do not have permission to edit table rows.");
+      return;
+    }
+    setEditingTableRow(row);
+    setShowEditTableModal(true);
+  };
+
+  const handleDeleteTableRow = async (table, id) => {
+    if (!userHasRight("Edit/Delete")) {
+      alert("You do not have permission to delete table rows.");
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete this record (ID: ${id}) from table "${table}"?`)) return;
+
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/${table}/${id}`);
+      if (response.data.success) {
+        alert(`Record (ID: ${id}) deleted successfully from ${table}.`);
+        // Refresh table data after deletion
+        axios.get(`${API_BASE_URL}/data/${table}`, { params: tableFilters })
+          .then(res => setTableData(res.data || []))
+          .catch(() => setTableData([]));
+      } else {
+        alert("Failed to delete record: " + (response.data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(`Delete failed for ${table} (ID: ${id}):`, err.response?.data || err.message);
+      alert(`Could not delete record from ${table}: ` + (err.response?.data?.error || err.message || "Unknown error"));
+    }
+  };
+
+  const handleSaveTableRow = async () => {
+    if (!editingTableRow || !selectedTable) return;
+    if (!userHasRight("Edit/Delete")) {
+      alert("You do not have permission to save changes.");
+      return;
+    }
+
+    try {
+      const payload = { ...editingTableRow };
+      // Remove id from payload as it's in the URL
+      delete payload.id;
+
+      const response = await axios.put(`${API_BASE_URL}/${selectedTable}/${editingTableRow.id}`, payload);
+      if (response.data.success) {
+        alert(`Record (ID: ${editingTableRow.id}) updated successfully in ${selectedTable}.`);
+        setShowEditTableModal(false);
+        setEditingTableRow(null);
+        // Refresh table data after update
+        axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: tableFilters })
+          .then(res => setTableData(res.data || []))
+          .catch(() => setTableData([]));
+      } else {
+        alert("Failed to update record: " + (response.data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(`Update failed for ${selectedTable} (ID: ${editingTableRow.id}):`, err.response?.data || err.message);
+      alert(`Could not update record in ${selectedTable}: ` + (err.response?.data?.error || err.message || "Unknown error"));
+    }
+  };
+
+  const handleExportTableData = async () => {
+    if (!selectedTable || tableData.length === 0) {
+      alert("No table selected or no data to export.");
+      return;
+    }
+    try {
+      const response = await axios.get(`${API_BASE_URL}/export-table/${selectedTable}`, {
+        responseType: 'blob', // Important for downloading files
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${selectedTable}-export.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      alert("Failed to export table data.");
+      console.error("Export table data error:", error);
+    }
+  };
+
   const handleDeleteBook = async (item) => {
     if (!userHasRight("Edit/Delete")) {
       alert("You do not have permission to delete book items.");
@@ -869,16 +957,20 @@ function App() {
         <div className="px-3 flex-grow-1 overflow-auto">
           <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem', letterSpacing: '0.05em' }}>TABLE EXPLORER</div>
           {tables.map((t, index) => (
-            <div
-              key={index}
-              className={`table-item px-3 py-2 ${selectedTable === t.table_name ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedTable(t.table_name);
-                setViewMode('explorer');
-              }}
-            >
-              {t.table_name}
-            </div>
+            // Only show book_list_users table to Admin
+            (t.table_name !== 'book_list_users' || (currentUser && currentUser.role === 'Admin')) && (
+              <div
+                key={index}
+                className={`table-item px-3 py-2 ${selectedTable === t.table_name ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedTable(t.table_name);
+                  setViewMode('explorer');
+                  setTableFilters({}); // Clear filters when changing table
+                }}
+              >
+                {t.table_name}
+              </div>
+            )
           ))}
         </div>
         
@@ -1512,6 +1604,58 @@ function App() {
             </div>
 
             {selectedTable && (
+              <>
+              {/* Filter Inputs for specific tables */}
+              {(selectedTable === 'pricing' || selectedTable === 'branches' || selectedTable === 'grades' || selectedTable === 'book_list_users') && (
+                <div className="card card-soft p-4 shadow-sm border-0 mb-4">
+                  <h5 className="mb-3">Filter Table: {selectedTable}</h5>
+                  <div className="row g-3">
+                    {selectedTable === 'pricing' && (
+                      <div className="col-md-6">
+                        <label className="form-label">Material Code</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={tableFilters.material_code || ''}
+                          onChange={(e) => setTableFilters(prev => ({ ...prev, material_code: e.target.value }))}
+                          placeholder="Filter by material code"
+                        />
+                      </div>
+                    )}
+                    {selectedTable === 'branches' && (
+                      <>
+                        <div className="col-md-6">
+                          <label className="form-label">Branch Name</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={tableFilters.name || ''}
+                            onChange={(e) => setTableFilters(prev => ({ ...prev, name: e.target.value }))}
+                            placeholder="Filter by branch name"
+                          />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label">Zone</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={tableFilters.zone || ''}
+                            onChange={(e) => setTableFilters(prev => ({ ...prev, zone: e.target.value }))}
+                            placeholder="Filter by zone"
+                          />
+                        </div>
+                      </>
+                    )}
+                    {selectedTable === 'grades' && (
+                      <div className="col-md-6">
+                        <label className="form-label">Grade Name</label>
+                        <input type="text" className="form-control" value={tableFilters.name || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, name: e.target.value }))} placeholder="Filter by grade name" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="card card-soft p-4 shadow-sm border-0">
                 <div className="d-flex justify-content-between align-items-center mb-4">
                   <h4 className="mb-0">Table: <span className="text-danger fw-bold">{selectedTable}</span></h4>
@@ -1524,6 +1668,7 @@ function App() {
                       <tr>
                         {tableData.length > 0 && Object.keys(tableData[0]).map(key => <th key={key} className="py-3 px-3">{key}</th>)}
                       </tr>
+                      {userHasRight("Edit/Delete") && <th>Actions</th>}
                     </thead>
                     <tbody>
                       {tableData.length > 0 ? tableData.map((row, i) => (
@@ -1533,12 +1678,76 @@ function App() {
                               {val === null ? <span className="text-muted fst-italic">null</span> : typeof val === 'object' ? JSON.stringify(val) : String(val)}
                             </td>
                           ))}
+                          {userHasRight("Edit/Delete") && (
+                            <td>
+                              <div className="d-flex gap-2">
+                                <button className="btn btn-outline-warning btn-sm" onClick={() => handleEditTableRow(row)}>Edit</button>
+                                <button className="btn btn-outline-danger btn-sm" onClick={() => handleDeleteTableRow(selectedTable, row.id)}>Delete</button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       )) : (
                         <tr><td colSpan="10" className="text-center py-5 text-muted">No data found in this table.</td></tr>
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-3 d-flex justify-content-end">
+                  <button className="btn btn-success btn-sm" onClick={handleExportTableData}>Export Table</button>
+                </div>
+              </div>
+              </>
+            )}
+
+            {/* Generic Edit Table Row Modal */}
+            {showEditTableModal && editingTableRow && (
+              <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+                <div className="modal-dialog modal-lg">
+                  <div className="modal-content shadow-lg border-0">
+                    <div className="modal-header bg-primary text-white">
+                      <h5 className="modal-title">Edit Record in {selectedTable} (ID: {editingTableRow.id})</h5>
+                      <button type="button" className="btn-close btn-close-white" onClick={() => setShowEditTableModal(false)} aria-label="Close"></button>
+                    </div>
+                    <div className="modal-body p-4 bg-light">
+                      <div className="row g-3">
+                        {Object.keys(editingTableRow).map(key => (
+                          <div className="col-12 col-md-6" key={key}>
+                            <label className="form-label text-capitalize">{key.replace(/_/g, ' ')}</label>
+                            {key === 'id' || key === 'created_at' || key === 'updated_at' ? (
+                              <input type="text" className="form-control" value={editingTableRow[key]} disabled />
+                            ) : (
+                              <input
+                                type={typeof editingTableRow[key] === 'number' ? 'number' : 'text'}
+                                className="form-control"
+                                value={editingTableRow[key] || ''}
+                                onChange={(e) => setEditingTableRow(prev => ({ ...prev, [key]: e.target.value }))}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="modal-footer bg-light">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={handleSaveTableRow}
+                      >
+                        Save Changes
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setShowEditTableModal(false);
+                          setEditingTableRow(null);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
