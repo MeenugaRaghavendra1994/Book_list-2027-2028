@@ -641,6 +641,44 @@ app.put("/users/:id", async (req, res) => {
   }
 });
 
+/* ============================
+   🗄️ DATABASE EXPLORER
+============================ */
+app.get("/tables", async (req, res) => {
+  // We provide the list of tables relevant to this application
+  const tables = [
+    { table_name: "individual_books" },
+    { table_name: "grade_wise_kits" },
+    { table_name: "pricing" },
+    { table_name: "branches" },
+    { table_name: "grades" },
+    { table_name: "book_list_users" }
+  ];
+  res.json(tables);
+});
+
+app.get("/data/:table", async (req, res) => {
+  const { table } = req.params;
+  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "book_list_users"];
+  
+  if (!allowedTables.includes(table)) {
+    return res.status(403).json({ success: false, error: "Access denied to requested table." });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .limit(100);
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error(`❌ EXPLORER FETCH ERROR (${table}):`, err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.delete("/users/:id", async (req, res) => {
   try {
     const { error } = await supabase
