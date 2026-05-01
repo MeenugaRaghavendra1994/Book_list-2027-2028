@@ -61,6 +61,8 @@ function App() {
   const [tableFilters, setTableFilters] = useState({});
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [editingTableRow, setEditingTableRow] = useState(null);
+  const [showAddBranchModal, setShowAddBranchModal] = useState(false);
+  const [newBranchForm, setNewBranchForm] = useState({ name: "", zone: "" });
 
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
@@ -652,6 +654,40 @@ function App() {
     } catch (err) {
       console.error(`Update failed for ${selectedTable} (ID: ${editingTableRow.id}):`, err.response?.data || err.message);
       alert(`Could not update record in ${selectedTable}: ` + (err.response?.data?.error || err.message || "Unknown error"));
+    }
+  };
+
+  const handleAddBranch = () => {
+    setNewBranchForm({ name: "", zone: "" });
+    setShowAddBranchModal(true);
+  };
+
+  const handleSaveNewBranch = async () => {
+    if (!newBranchForm.name.trim() || !newBranchForm.zone.trim()) {
+      alert("Please enter both Branch Name and Zone.");
+      return;
+    }
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/branches`, {
+        name: newBranchForm.name.trim(),
+        zone: newBranchForm.zone.trim(),
+        created_at: new Date().toISOString()
+      });
+
+      if (response.data.success) {
+        alert("New branch created successfully.");
+        setShowAddBranchModal(false);
+        setNewBranchForm({ name: "", zone: "" });
+        axios.get(`${API_BASE_URL}/data/branches`, { params: tableFilters })
+          .then(res => setTableData(res.data || []))
+          .catch(() => setTableData([]));
+      } else {
+        alert("Failed to create branch: " + (response.data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Create branch failed:", err.response?.data || err.message);
+      alert("Could not create branch: " + (err.response?.data?.error || err.message || "Unknown error"));
     }
   };
 
@@ -1701,9 +1737,18 @@ function App() {
               )}
 
               <div className="card card-soft p-4 shadow-sm border-0">
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                  <h4 className="mb-0">Table: <span className="text-danger fw-bold">{selectedTable}</span></h4>
-                  <div className="badge bg-secondary">{tableData.length} records shown</div>
+                <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                  <div>
+                    <h4 className="mb-0">Table: <span className="text-danger fw-bold">{selectedTable}</span></h4>
+                  </div>
+                  <div className="d-flex gap-2 flex-wrap align-items-center">
+                    <div className="badge bg-secondary">{tableData.length} records shown</div>
+                    {selectedTable === 'branches' && userHasRight("Edit/Delete") && (
+                      <button className="btn btn-danger btn-sm" onClick={handleAddBranch}>
+                        + Add New Branch
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="table-responsive rounded-3 border">
@@ -1790,6 +1835,47 @@ function App() {
                       >
                         Cancel
                       </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showAddBranchModal && (
+              <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+                <div className="modal-dialog modal-md">
+                  <div className="modal-content shadow-lg border-0">
+                    <div className="modal-header bg-danger text-white">
+                      <h5 className="modal-title">Add New Branch</h5>
+                      <button type="button" className="btn-close btn-close-white" onClick={() => setShowAddBranchModal(false)} aria-label="Close"></button>
+                    </div>
+                    <div className="modal-body p-4 bg-light">
+                      <div className="row g-3">
+                        <div className="col-12">
+                          <label className="form-label">Branch Name</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={newBranchForm.name}
+                            onChange={(e) => setNewBranchForm(prev => ({ ...prev, name: e.target.value }))}
+                            placeholder="Enter branch name"
+                          />
+                        </div>
+                        <div className="col-12">
+                          <label className="form-label">Zone</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={newBranchForm.zone}
+                            onChange={(e) => setNewBranchForm(prev => ({ ...prev, zone: e.target.value }))}
+                            placeholder="Enter zone"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="modal-footer bg-light">
+                      <button type="button" className="btn btn-danger" onClick={handleSaveNewBranch}>Save Branch</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowAddBranchModal(false)}>Cancel</button>
                     </div>
                   </div>
                 </div>
