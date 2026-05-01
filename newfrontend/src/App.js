@@ -1019,12 +1019,12 @@ function App() {
           {userHasRight("Edit/Delete") && (
             <button className="btn btn-danger btn-sm px-4" onClick={handleCreate}>+ Create Kit</button>
           )}
-          {userHasRight("Edit/Delete") && (
+          {currentUser?.role === "Admin" && (
             <button className="btn btn-outline-primary btn-sm px-4" onClick={() => setShowCreateUser(prev => !prev)}>
               {showCreateUser ? "Cancel User" : "Create User"}
             </button>
           )}
-          {userHasRight("Edit/Delete") && (
+          {currentUser?.role === "Admin" && (
             <button className="btn btn-outline-secondary btn-sm px-4" onClick={() => setShowManageUsers(prev => !prev)}>
               {showManageUsers ? "Close Manage" : "Manage Users"}
             </button>
@@ -1108,7 +1108,7 @@ function App() {
         </div>
       )}
 
-      {showCreateUser && userHasRight("Edit/Delete") && (
+      {showCreateUser && currentUser?.role === "Admin" && (
         <div className="card card-soft mb-4 p-4 shadow-sm">
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div>
@@ -1150,7 +1150,7 @@ function App() {
         </div>
       )}
 
-      {showManageUsers && userHasRight("Edit/Delete") && (
+      {showManageUsers && currentUser?.role === "Admin" && (
         <div className="card card-soft mb-4 p-4 shadow-sm">
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div>
