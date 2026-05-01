@@ -2023,10 +2023,6 @@ function App() {
                   <button className="btn btn-success btn-sm" onClick={handleExportTableData}>Export Table</button>
                 </div>
               </div>
-              </>
-            )}
-
-            {/* Generic Edit Table Row Modal */}
             {showEditTableModal && editingTableRow && (
               <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
                 <div className="modal-dialog modal-lg">
