@@ -1018,7 +1018,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     // Merge the data
     const mergedData = booksData.map(book => {
       const pricing = pricingMap[book.material_code] || {};
-      const projKey = `${book.grade}_${book.branch}_${book.zone}`;
+      const projKey = `${String(book.grade || "").trim()}_${String(book.branch_name || "").trim()}_${String(book.zone || "").trim()}`;
       const projection = projectionsMap[projKey] || {};
       const kit = kitsMap[projKey] || {};
 
@@ -1042,7 +1042,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         quantity: book.quantity,
         zone: book.zone,
         grade: book.grade,
-        branch: book.branch,
+        branch: book.branch_name,
         created_at: book.created_at,
         updated_at: book.updated_at,
         
@@ -1055,7 +1055,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         existing_admissions: projection.existing_admissions || 0,
         
         // From grade_wise_kits table
-        kit_name: kit.kit_name || "N/A"
+        kit_name: kit.name || "N/A",
+        kit_id: kit.id || book.kit_id || "N/A"
       };
     });
 
