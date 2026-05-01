@@ -984,7 +984,6 @@ function App() {
                   setSelectedTable(t.table_name);
                   setViewMode('explorer');
                   setTableFilters({}); // Clear filters when changing table
-                  setAppliedTableFilters({});
                 }}
               >
                 {isSidebarCollapsed ? "⚙️" : t.table_name}
