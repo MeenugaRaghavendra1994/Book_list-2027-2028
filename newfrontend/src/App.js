@@ -61,12 +61,19 @@ function App() {
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [editingTableRow, setEditingTableRow] = useState(null);
 
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
     { id: 1, username: "Raghavendra", password: "8142037547", role: "Admin", rights: ["View", "Edit/Delete"] }
   ]);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const storedUser = window.localStorage.getItem("school_book_erp_currentUser");
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch (err) {
+      return null;
+    }
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(window.localStorage.getItem("school_book_erp_currentUser")));
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [showManageUsers, setShowManageUsers] = useState(false);
   const [newUser, setNewUser] = useState({ username: "", password: "", role: "Admin", rights: [] });
@@ -215,6 +222,7 @@ function App() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setCurrentUser(null);
+    localStorage.removeItem("school_book_erp_currentUser");
   };
 
   const handleApplyTableFilters = () => {
@@ -230,6 +238,7 @@ function App() {
     if (foundUser) {
       setCurrentUser(foundUser);
       setIsAuthenticated(true);
+      localStorage.setItem("school_book_erp_currentUser", JSON.stringify(foundUser));
       setLoginForm({ username: "", password: "" });
       return;
     }
