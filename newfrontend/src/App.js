@@ -1840,6 +1840,9 @@ function App() {
                       <th className="py-3 px-3">Grade</th>
                       <th className="py-3 px-3">Kit ID</th>
                       <th className="py-3 px-3">Branch Name</th>
+                      <th className="py-3 px-3">New Admissions</th>
+                      <th className="py-3 px-3">Existing Admissions</th>
+                      <th className="py-3 px-3">Kit Name</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1867,6 +1870,9 @@ function App() {
                         <td className="px-3 text-truncate">{item.grade}</td>
                         <td className="px-3">{item.kit_id || "N/A"}</td>
                         <td className="px-3 text-truncate">{item.branch}</td>
+                        <td className="px-3 text-center">{item.new_admissions || 0}</td>
+                        <td className="px-3 text-center">{item.existing_admissions || 0}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.kit_name || "N/A"}</td>
                       </tr>
                     )) : (
                       <tr><td colSpan="16" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
@@ -1878,13 +1884,14 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['ID', 'Subject', 'Material Name', 'Material Code', 'Tax Rate', 'Mandatory/Optional', 'Category', 'Volume', 'Year', 'Author', 'Publisher', 'Per Unit Rate', 'Total Amount', 'MRP', 'Cost Price', 'Composite Code', 'Composite Name', 'Quantity', 'Zone', 'Grade', 'Kit ID', 'Branch Name'],
+                    ['ID', 'Subject', 'Material Name', 'Material Code', 'Tax Rate', 'Mandatory/Optional', 'Category', 'Volume', 'Year', 'Author', 'Publisher', 'Per Unit Rate', 'Total Amount', 'MRP', 'Cost Price', 'Composite Code', 'Composite Name', 'Quantity', 'Zone', 'Grade', 'Kit ID', 'Branch Name', 'New Admissions', 'Existing Admissions', 'Kit Name'],
                     ...dashboardData.map(item => [
                       item.id, item.subject, item.material_name, item.material_code, item.tax_rate,
                       item.mandatory_optional, item.category, item.volume, item.year, item.author,
                       item.publisher, item.per_unit_rate, item.total_amount, item.mrp, item.cost_price,
                       item.composite_code, item.composite_name, item.quantity, item.zone, item.grade,
-                      item.kit_id, item.branch
+                      item.kit_id, item.branch,
+                      item.new_admissions, item.existing_admissions, item.kit_name
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
