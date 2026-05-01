@@ -317,7 +317,7 @@ app.post("/kits", async (req, res) => {
 app.get("/branches", async (req, res) => {
   try {
     const zone = req.query.zone || null;
-    let query = supabase.from('branches').select('name, zone').order('name', { ascending: true });
+    let query = supabase.from('branches').select('id, name, zone, created_at').order('name', { ascending: true });
     
     if (zone) {
       query = query.eq('zone', zone);
@@ -329,6 +329,34 @@ app.get("/branches", async (req, res) => {
   } catch (err) {
     console.error("❌ BRANCHES FETCH ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
+  }
+});
+
+app.post("/branches", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const zone = String(req.body.zone || "").trim();
+    const createdAt = req.body.created_at ? String(req.body.created_at) : new Date().toISOString();
+
+    if (!name || !zone) {
+      return res.status(400).json({ success: false, error: "Branch name and zone are required." });
+    }
+
+    const { data, error } = await supabase
+      .from('branches')
+      .insert([{ name, zone, created_at: createdAt }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ BRANCH INSERT ERROR:", error.message);
+      throw error;
+    }
+
+    res.json({ success: true, branch: data });
+  } catch (err) {
+    console.error("❌ BRANCH CREATE ERROR:", err.message, err.details, err.hint);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
