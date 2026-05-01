@@ -62,13 +62,6 @@ function App() {
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [editingTableRow, setEditingTableRow] = useState(null);
 
-  const [newBookItem, setNewBookItem] = useState({
-    category: "", subject: "", material_name: "", material_code: "", tax_rate: "",
-    mandatory_optional: "", volume: "", year: "", author: "", publisher: "",
-    per_unit_rate: "", total_amount: "", mrp: "", cost_price: "", composite_code: "",
-    composite_name: "", quantity: 1, zone: "", grade: "", branch: ""
-  });
-
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
@@ -86,10 +79,6 @@ function App() {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
-  const [showEditTableModal, setShowEditTableModal] = useState(false);
-  const [editingTableRow, setEditingTableRow] = useState(null);
-  const [tableFilters, setTableFilters] = useState({}); // For explorer table filters
-  const [viewMode, setViewMode] = useState("kits"); // 'kits' or 'explorer'
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
 
@@ -222,6 +211,17 @@ function App() {
 
   const handleClear = () => {
     setFilters(initialFilters);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+  };
+
+  const handleApplyTableFilters = () => {
+    // The useEffect already depends on tableFilters, 
+    // but we can use this to trigger additional logic if needed.
+    setAppliedTableFilters({ ...tableFilters });
   };
 
   const handleLogin = (event) => {
