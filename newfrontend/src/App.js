@@ -12,6 +12,9 @@ const initialFilters = {
   status: ""
 };
 
+const roleOptions = ["Admin", "User"];
+const rightsOptions = ["View", "Edit/Delete"];
+
 function App() {
   const [books, setBooks] = useState([]);
   const [filteredBooks, setFilteredBooks] = useState([]);
@@ -53,6 +56,15 @@ function App() {
     grade: "",
     branch: ""
   });
+
+  // Missing state declarations for Table Explorer & Sidebar
+  const [viewMode, setViewMode] = useState("kits");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [tableFilters, setTableFilters] = useState({});
+  const [appliedTableFilters, setAppliedTableFilters] = useState({});
+  const [showEditTableModal, setShowEditTableModal] = useState(false);
+  const [editingTableRow, setEditingTableRow] = useState(null);
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
@@ -70,6 +82,12 @@ function App() {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
+  const [showEditTableModal, setShowEditTableModal] = useState(false);
+  const [editingTableRow, setEditingTableRow] = useState(null);
+  const [tableFilters, setTableFilters] = useState({}); // For explorer table filters
+  const [viewMode, setViewMode] = useState("kits"); // 'kits' or 'explorer'
+  const roleOptions = ["Admin", "User"];
+  const rightsOptions = ["View", "Edit/Delete"];
 
   const userHasRight = (right) => {
     return currentUser && currentUser.rights && currentUser.rights.includes(right);
@@ -129,37 +147,15 @@ function App() {
     axios.get(`${API_BASE_URL}/tables`)
       .then(res => setTables(res.data || []))
       .catch(() => setTables([]));
-
-    // Persist session on refresh
-    const savedUser = localStorage.getItem("erp_user");
-    if (savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
-        setCurrentUser(user);
-        setIsAuthenticated(true);
-      } catch (e) {
-        localStorage.removeItem("erp_user");
-      }
-    }
   }, []);
 
   useEffect(() => {
-    if (selectedTable && viewMode === "explorer") {
-      fetchTableData();
-    }
-  }, [selectedTable, viewMode, appliedTableFilters]);
-
-  const fetchTableData = () => {
-    if (selectedTable) {
-      axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: appliedTableFilters })
+    if (selectedTable && viewMode === "explorer") { // Add tableFilters to dependencies
+      axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: tableFilters })
         .then(res => setTableData(res.data || []))
         .catch(() => setTableData([]));
     }
-  };
-
-  const handleApplyTableFilters = () => {
-    setAppliedTableFilters({ ...tableFilters });
-  };
+  }, [selectedTable, viewMode, tableFilters]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -224,13 +220,6 @@ function App() {
     setFilters(initialFilters);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("erp_user");
-    setIsAuthenticated(false);
-    setCurrentUser(null);
-    setShowCreateUser(false);
-  };
-
   const handleLogin = (event) => {
     event.preventDefault();
     const foundUser = users.find(user =>
@@ -238,7 +227,6 @@ function App() {
       user.password.trim() === loginForm.password.trim()
     );
     if (foundUser) {
-      localStorage.setItem("erp_user", JSON.stringify(foundUser));
       setCurrentUser(foundUser);
       setIsAuthenticated(true);
       setLoginForm({ username: "", password: "" });
