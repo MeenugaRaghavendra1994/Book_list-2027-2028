@@ -90,6 +90,9 @@ function App() {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
+  const [dashboardData, setDashboardData] = useState([]);
+  const [showDashboardSection, setShowDashboardSection] = useState(false);
+  const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "" });
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
 
@@ -160,6 +163,27 @@ function App() {
         .catch(() => setTableData([]));
     }
   }, [selectedTable, viewMode, tableFilters]);
+
+  useEffect(() => {
+    if (viewMode === "dashboard") {
+      axios.get(`${API_BASE_URL}/dashboard/item-wise-summary`)
+        .then(res => {
+          let data = res.data || [];
+          // Apply filters
+          if (dashboardFilters.zone) {
+            data = data.filter(item => item.zone === dashboardFilters.zone);
+          }
+          if (dashboardFilters.branch) {
+            data = data.filter(item => item.branch === dashboardFilters.branch);
+          }
+          if (dashboardFilters.grade) {
+            data = data.filter(item => item.grade === dashboardFilters.grade);
+          }
+          setDashboardData(data);
+        })
+        .catch(() => setDashboardData([]));
+    }
+  }, [viewMode, dashboardFilters]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -1084,6 +1108,29 @@ function App() {
               </div>
             )
           ))}
+
+          {!isSidebarCollapsed && (
+            <div
+              className="d-flex align-items-center justify-content-between table-item px-2 py-2 mt-3"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowDashboardSection(prev => !prev)}
+            >
+              <div className="small text-uppercase text-muted fw-bold" style={{ fontSize: '0.7rem' }}>
+                Dashboard
+              </div>
+              <div className="text-muted">
+                {showDashboardSection ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>}
+              </div>
+            </div>
+          )}
+          {showDashboardSection && (
+            <div
+              className={`table-item px-3 py-2 ${viewMode === 'dashboard' ? 'active' : ''}`}
+              onClick={() => { setViewMode('dashboard'); setSelectedTable(null); }}
+            >
+              {isSidebarCollapsed ? "📊" : "Item Wise Summary"}
+            </div>
+          )}
         </div>
         
         <div className="p-3 border-top mt-auto bg-light">
@@ -1708,15 +1755,140 @@ function App() {
         </div>
       )}
           </div>
-        ) : (
+        ) : viewMode === 'dashboard' ? (
           <div className="page-wrapper py-4 px-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
-              <h2 className="page-title">Database Explorer</h2>
+              <h2 className="page-title">📊 Item Wise Summary Dashboard</h2>
               <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
             </div>
 
-            {selectedTable && (
-              <>
+            {/* Dashboard Filters */}
+            <div className="card card-soft p-4 shadow-sm border-0 mb-4">
+              <div className="mb-3">
+                <h5 className="mb-3">Filter Dashboard</h5>
+              </div>
+              <div className="row gx-3 gy-3">
+                <div className="col-12 col-md-3">
+                  <label className="form-label">Zone</label>
+                  <select 
+                    className="form-select" 
+                    value={dashboardFilters.zone} 
+                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, zone: e.target.value }))}
+                  >
+                    <option value="">All Zones</option>
+                    {zones.map(zone => zone && <option key={zone} value={zone}>{zone}</option>)}
+                  </select>
+                </div>
+                <div className="col-12 col-md-3">
+                  <label className="form-label">Branch</label>
+                  <select 
+                    className="form-select" 
+                    value={dashboardFilters.branch} 
+                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, branch: e.target.value }))}
+                  >
+                    <option value="">All Branches</option>
+                    {branchOptions.map(branch => branch && <option key={branch} value={branch}>{branch}</option>)}
+                  </select>
+                </div>
+                <div className="col-12 col-md-3">
+                  <label className="form-label">Grade</label>
+                  <select 
+                    className="form-select" 
+                    value={dashboardFilters.grade} 
+                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, grade: e.target.value }))}
+                  >
+                    <option value="">All Grades</option>
+                    {grades.map(grade => grade && <option key={grade} value={grade}>{grade}</option>)}
+                  </select>
+                </div>
+                <div className="col-12 col-md-3 d-flex align-items-end">
+                  <button 
+                    className="btn btn-outline-secondary btn-sm w-100" 
+                    onClick={() => setDashboardFilters({ zone: "", branch: "", grade: "" })}
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Dashboard Table */}
+            <div className="card card-soft p-4 shadow-sm border-0">
+              <div className="table-responsive rounded-3 border">
+                <table className="table table-sm table-hover align-middle mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th className="py-3 px-3">ID</th>
+                      <th className="py-3 px-3">Material Code</th>
+                      <th className="py-3 px-3">Material Name</th>
+                      <th className="py-3 px-3">Category</th>
+                      <th className="py-3 px-3">Subject</th>
+                      <th className="py-3 px-3">Grade</th>
+                      <th className="py-3 px-3">Branch</th>
+                      <th className="py-3 px-3">Zone</th>
+                      <th className="py-3 px-3">MRP</th>
+                      <th className="py-3 px-3">Cost Price</th>
+                      <th className="py-3 px-3">New Admissions</th>
+                      <th className="py-3 px-3">Existing Admissions</th>
+                      <th className="py-3 px-3">Kit Name</th>
+                      <th className="py-3 px-3">Author</th>
+                      <th className="py-3 px-3">Publisher</th>
+                      <th className="py-3 px-3">Quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData.length > 0 ? dashboardData.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '80px' }}>{item.id}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.material_code || "N/A"}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.material_name || "N/A"}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.category || "N/A"}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.subject || "N/A"}</td>
+                        <td className="px-3 text-truncate">{item.grade}</td>
+                        <td className="px-3 text-truncate">{item.branch}</td>
+                        <td className="px-3 text-truncate">{item.zone}</td>
+                        <td className="px-3 text-truncate" style={{ fontWeight: 'bold', color: '#28a745' }}>₹{item.mrp || "0"}</td>
+                        <td className="px-3 text-truncate" style={{ fontWeight: 'bold', color: '#007bff' }}>₹{item.cost_price || "0"}</td>
+                        <td className="px-3 text-center" style={{ backgroundColor: '#e7f3ff' }}><strong>{item.new_admissions || 0}</strong></td>
+                        <td className="px-3 text-center" style={{ backgroundColor: '#fff3e7' }}><strong>{item.existing_admissions || 0}</strong></td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '150px', fontWeight: 'bold' }}>{item.kit_name}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '120px' }}>{item.author || "N/A"}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '120px' }}>{item.publisher || "N/A"}</td>
+                        <td className="px-3 text-center">{item.quantity}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan="16" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 d-flex justify-content-between align-items-center">
+                <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
+                <button className="btn btn-success btn-sm" onClick={() => {
+                  const csvContent = [
+                    ['ID', 'Material Code', 'Material Name', 'Category', 'Subject', 'Grade', 'Branch', 'Zone', 'MRP', 'Cost Price', 'New Admissions', 'Existing Admissions', 'Kit Name', 'Author', 'Publisher', 'Quantity'],
+                    ...dashboardData.map(item => [
+                      item.id, item.material_code, item.material_name, item.category, item.subject, 
+                      item.grade, item.branch, item.zone, item.mrp, item.cost_price, 
+                      item.new_admissions, item.existing_admissions, item.kit_name, item.author, item.publisher, item.quantity
+                    ])
+                  ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
+                  
+                  const blob = new Blob([csvContent], { type: 'text/csv' });
+                  const url = window.URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', 'item-wise-summary.csv');
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                }}>Export to CSV</button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="page-wrapper py-4 px-4">
+            <>
               {/* Filter Inputs for specific tables */}
               {(selectedTable === 'pricing' || selectedTable === 'branches' || selectedTable === 'grades' || selectedTable === 'student_projections') && (
                 <div className="card card-soft p-4 shadow-sm border-0 mb-4">
@@ -1999,6 +2171,7 @@ function App() {
                 </div>
               </div>
             )}
+            </>
           </div>
         )}
       </div>
