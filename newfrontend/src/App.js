@@ -1816,7 +1816,7 @@ function App() {
             <div className="card card-soft p-4 shadow-sm border-0">
               <div className="table-responsive rounded-3 border">
                 <table className="table table-sm table-hover align-middle mb-0">
-                  <thead className="table-light">
+                  <thead className="table-light text-nowrap">
                     <tr>
                       <th className="py-3 px-3">ID</th>
                       <th className="py-3 px-3">Subject</th>
@@ -1845,34 +1845,34 @@ function App() {
                       <th className="py-3 px-3">Kit Name</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="text-nowrap">
                     {dashboardData.length > 0 ? dashboardData.map((item, idx) => (
                       <tr key={idx}>
                         <td className="px-3">{item.id}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.subject || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.material_name || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.material_code || "N/A"}</td>
+                        <td className="px-3">{item.subject || "N/A"}</td>
+                        <td className="px-3">{item.material_name || "N/A"}</td>
+                        <td className="px-3">{item.material_code || "N/A"}</td>
                         <td className="px-3">{item.tax_rate}%</td>
                         <td className="px-3">{item.mandatory_optional || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.category || "N/A"}</td>
+                        <td className="px-3">{item.category || "N/A"}</td>
                         <td className="px-3">{item.volume || "N/A"}</td>
                         <td className="px-3">{item.year || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '120px' }}>{item.author || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '120px' }}>{item.publisher || "N/A"}</td>
+                        <td className="px-3">{item.author || "N/A"}</td>
+                        <td className="px-3">{item.publisher || "N/A"}</td>
                         <td className="px-3">₹{item.per_unit_rate || 0}</td>
                         <td className="px-3">₹{item.total_amount || 0}</td>
                         <td className="px-3" style={{ fontWeight: 'bold', color: '#28a745' }}>₹{item.mrp || "0"}</td>
                         <td className="px-3" style={{ fontWeight: 'bold', color: '#007bff' }}>₹{item.cost_price || "0"}</td>
                         <td className="px-3">{item.composite_code || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.composite_name || "N/A"}</td>
+                        <td className="px-3">{item.composite_name || "N/A"}</td>
                         <td className="px-3 text-center">{item.quantity}</td>
-                        <td className="px-3 text-truncate">{item.zone}</td>
-                        <td className="px-3 text-truncate">{item.grade}</td>
+                        <td className="px-3">{item.zone}</td>
+                        <td className="px-3">{item.grade}</td>
                         <td className="px-3">{item.kit_id || "N/A"}</td>
-                        <td className="px-3 text-truncate">{item.branch}</td>
+                        <td className="px-3">{item.branch}</td>
                         <td className="px-3 text-center">{item.new_admissions || 0}</td>
                         <td className="px-3 text-center">{item.existing_admissions || 0}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.kit_name || "N/A"}</td>
+                        <td className="px-3">{item.kit_name || "N/A"}</td>
                       </tr>
                     )) : (
                       <tr><td colSpan="16" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
