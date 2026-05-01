@@ -63,6 +63,8 @@ function App() {
   const [editingTableRow, setEditingTableRow] = useState(null);
   const [showAddBranchModal, setShowAddBranchModal] = useState(false);
   const [newBranchForm, setNewBranchForm] = useState({ name: "", zone: "" });
+  const [showAddProjectionModal, setShowAddProjectionModal] = useState(false);
+  const [newProjectionForm, setNewProjectionForm] = useState({ grade: "", branch: "", zone: "", new_admissions: "", existing_admissions: "", total_projection: "" });
 
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
@@ -164,6 +166,7 @@ function App() {
     const filtered = filters.zone ? branchList.filter(branch => branch.zone === filters.zone) : branchList;
     return ["", ...Array.from(new Set(filtered.map(branch => branch.name)))];
   }, [branchList, filters.zone]);
+  const projectionBranchOptions = useMemo(() => ["", ...Array.from(new Set(branchList.map(branch => branch.name)))], [branchList]);
   const bookBranchOptions = useMemo(() => {
     const currentZone = newBookItem.zone || activeBook?.zone;
     const filtered = currentZone ? branchList.filter(b => b.zone === currentZone) : branchList;
@@ -688,6 +691,38 @@ function App() {
     } catch (err) {
       console.error("Create branch failed:", err.response?.data || err.message);
       alert("Could not create branch: " + (err.response?.data?.error || err.message || "Unknown error"));
+    }
+  };
+
+  const handleSaveNewProjection = async () => {
+    if (!newProjectionForm.grade.trim() || !newProjectionForm.branch.trim() || !newProjectionForm.zone.trim()) {
+      alert("Grade, Branch, and Zone are required.");
+      return;
+    }
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/student_projections`, {
+        grade: newProjectionForm.grade.trim(),
+        branch: newProjectionForm.branch.trim(),
+        zone: newProjectionForm.zone.trim(),
+        new_admissions: Number(newProjectionForm.new_admissions) || 0,
+        existing_admissions: Number(newProjectionForm.existing_admissions) || 0,
+        total_projection: Number(newProjectionForm.total_projection) || 0
+      });
+
+      if (response.data.success) {
+        alert("New projection created successfully.");
+        setShowAddProjectionModal(false);
+        setNewProjectionForm({ grade: "", branch: "", zone: "", new_admissions: "", existing_admissions: "", total_projection: "" });
+        axios.get(`${API_BASE_URL}/data/student_projections`, { params: tableFilters })
+          .then(res => setTableData(res.data || []))
+          .catch(() => setTableData([]));
+      } else {
+        alert("Failed to create projection: " + (response.data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Create projection failed:", err.response?.data || err.message);
+      alert("Could not create projection: " + (err.response?.data?.error || err.message || "Unknown error"));
     }
   };
 
@@ -1683,7 +1718,7 @@ function App() {
             {selectedTable && (
               <>
               {/* Filter Inputs for specific tables */}
-              {(selectedTable === 'pricing' || selectedTable === 'branches' || selectedTable === 'grades') && (
+              {(selectedTable === 'pricing' || selectedTable === 'branches' || selectedTable === 'grades' || selectedTable === 'student_projections') && (
                 <div className="card card-soft p-4 shadow-sm border-0 mb-4">
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="mb-0">Filter Table: {selectedTable}</h5>
@@ -1732,6 +1767,31 @@ function App() {
                         <input type="text" className="form-control" value={tableFilters.name || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, name: e.target.value }))} placeholder="Filter by grade name" />
                       </div>
                     )}
+                    {selectedTable === 'student_projections' && (
+                      <>
+                        <div className="col-md-4">
+                          <label className="form-label">Grade</label>
+                          <select className="form-select" value={tableFilters.grade || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, grade: e.target.value }))}>
+                            <option value="">All Grades</option>
+                            {grades.map(grade => <option key={grade} value={grade}>{grade}</option>)}
+                          </select>
+                        </div>
+                        <div className="col-md-4">
+                          <label className="form-label">Branch</label>
+                          <select className="form-select" value={tableFilters.branch || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, branch: e.target.value }))}>
+                            <option value="">All Branches</option>
+                            {branchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
+                          </select>
+                        </div>
+                        <div className="col-md-4">
+                          <label className="form-label">Zone</label>
+                          <select className="form-select" value={tableFilters.zone || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, zone: e.target.value }))}>
+                            <option value="">All Zones</option>
+                            {zones.map(zone => <option key={zone} value={zone}>{zone || 'All Zones'}</option>)}
+                          </select>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -1748,6 +1808,11 @@ function App() {
                         + Add New Branch
                       </button>
                     )}
+                    {selectedTable === 'student_projections' && userHasRight("Edit/Delete") && (
+                      <button className="btn btn-danger btn-sm" onClick={() => setShowAddProjectionModal(true)}>
+                        + Add New Projection
+                      </button>
+                    )}
                   </div>
                 </div>
                 
@@ -1756,7 +1821,7 @@ function App() {
                     <thead className="table-light">
                       <tr>
                         {tableData.length > 0 && Object.keys(tableData[0]).map(key => <th key={key} className="py-3 px-3">{key}</th>)}
-                        {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && <th>Actions</th>}
+                        {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || selectedTable === 'student_projections' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && <th>Actions</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -1767,7 +1832,7 @@ function App() {
                               {val === null ? <span className="text-muted fst-italic">null</span> : typeof val === 'object' ? JSON.stringify(val) : String(val)}
                             </td>
                           ))}
-                          {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && (
+                          {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || selectedTable === 'student_projections' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && (
                             <td>
                               <div className="d-flex gap-2">
                                 <button className="btn btn-outline-warning btn-sm" onClick={() => handleEditTableRow(row)}>Edit</button>
@@ -1876,6 +1941,59 @@ function App() {
                     <div className="modal-footer bg-light">
                       <button type="button" className="btn btn-danger" onClick={handleSaveNewBranch}>Save Branch</button>
                       <button type="button" className="btn btn-secondary" onClick={() => setShowAddBranchModal(false)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {showAddProjectionModal && (
+              <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+                <div className="modal-dialog modal-md">
+                  <div className="modal-content shadow-lg border-0">
+                    <div className="modal-header bg-danger text-white">
+                      <h5 className="modal-title">Add New Projection</h5>
+                      <button type="button" className="btn-close btn-close-white" onClick={() => setShowAddProjectionModal(false)} aria-label="Close"></button>
+                    </div>
+                    <div className="modal-body p-4 bg-light">
+                      <div className="row g-3">
+                        <div className="col-12 col-md-4">
+                          <label className="form-label">Grade</label>
+                          <select className="form-select" value={newProjectionForm.grade} onChange={(e) => setNewProjectionForm(prev => ({ ...prev, grade: e.target.value }))}>
+                            <option value="">Select Grade</option>
+                            {grades.map(grade => <option key={grade} value={grade}>{grade}</option>)}
+                          </select>
+                        </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label">Branch</label>
+                          <select className="form-select" value={newProjectionForm.branch} onChange={(e) => setNewProjectionForm(prev => ({ ...prev, branch: e.target.value }))}>
+                            <option value="">Select Branch</option>
+                            {projectionBranchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
+                          </select>
+                        </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label">Zone</label>
+                          <select className="form-select" value={newProjectionForm.zone} onChange={(e) => setNewProjectionForm(prev => ({ ...prev, zone: e.target.value }))}>
+                            <option value="">Select Zone</option>
+                            {zones.map(zone => <option key={zone} value={zone}>{zone || 'All Zones'}</option>)}
+                          </select>
+                        </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label">New Admissions</label>
+                          <input type="number" className="form-control" value={newProjectionForm.new_admissions} onChange={(e) => setNewProjectionForm(prev => ({ ...prev, new_admissions: e.target.value }))} placeholder="Enter new admissions" />
+                        </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label">Existing Admissions</label>
+                          <input type="number" className="form-control" value={newProjectionForm.existing_admissions} onChange={(e) => setNewProjectionForm(prev => ({ ...prev, existing_admissions: e.target.value }))} placeholder="Enter existing admissions" />
+                        </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label">Total Projection</label>
+                          <input type="number" className="form-control" value={newProjectionForm.total_projection} onChange={(e) => setNewProjectionForm(prev => ({ ...prev, total_projection: e.target.value }))} placeholder="Enter total projection" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="modal-footer bg-light">
+                      <button type="button" className="btn btn-danger" onClick={handleSaveNewProjection}>Save Projection</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowAddProjectionModal(false)}>Cancel</button>
                     </div>
                   </div>
                 </div>
