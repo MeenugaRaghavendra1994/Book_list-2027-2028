@@ -58,7 +58,6 @@ function App() {
   const [viewMode, setViewMode] = useState("kits");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [tableFilters, setTableFilters] = useState({});
-  const [appliedTableFilters, setAppliedTableFilters] = useState({});
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [editingTableRow, setEditingTableRow] = useState(null);
 
@@ -219,9 +218,7 @@ function App() {
   };
 
   const handleApplyTableFilters = () => {
-    // The useEffect already depends on tableFilters, 
-    // but we can use this to trigger additional logic if needed.
-    setAppliedTableFilters({ ...tableFilters });
+    // The useEffect already depends on tableFilters, so the table will reload automatically.
   };
 
   const handleLogin = (event) => {
