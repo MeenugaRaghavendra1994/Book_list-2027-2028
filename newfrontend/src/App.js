@@ -1688,8 +1688,8 @@ function App() {
                     <thead className="table-light">
                       <tr>
                         {tableData.length > 0 && Object.keys(tableData[0]).map(key => <th key={key} className="py-3 px-3">{key}</th>)}
+                        {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && <th>Actions</th>}
                       </tr>
-                      {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && <th>Actions</th>}
                     </thead>
                     <tbody>
                       {tableData.length > 0 ? tableData.map((row, i) => (
