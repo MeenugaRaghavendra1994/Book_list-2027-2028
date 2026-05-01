@@ -360,6 +360,37 @@ app.post("/branches", async (req, res) => {
   }
 });
 
+app.post("/student_projections", async (req, res) => {
+  try {
+    const grade = String(req.body.grade || "").trim();
+    const branch = String(req.body.branch || "").trim();
+    const zone = String(req.body.zone || "").trim();
+    const newAdmissions = Number(req.body.new_admissions) || 0;
+    const existingAdmissions = Number(req.body.existing_admissions) || 0;
+    const totalProjection = Number(req.body.total_projection) || 0;
+
+    if (!grade || !branch || !zone) {
+      return res.status(400).json({ success: false, error: "Grade, branch, and zone are required." });
+    }
+
+    const { data, error } = await supabase
+      .from('student_projections')
+      .insert([{ grade, branch, zone, new_admissions: newAdmissions, existing_admissions: existingAdmissions, total_projection: totalProjection }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ PROJECTION INSERT ERROR:", error.message);
+      throw error;
+    }
+
+    res.json({ success: true, projection: data });
+  } catch (err) {
+    console.error("❌ PROJECTION CREATE ERROR:", err.message, err.details, err.hint);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get("/zones", async (req, res) => {
   try {
     const { data, error } = await supabase.from('branches').select('zone').not('zone', 'is', null).order('zone');
@@ -507,6 +538,46 @@ app.put("/branches/:id", async (req, res) => {
     if (!data) return res.status(404).json({ success: false, error: "Branch record not found." });
     res.json({ success: true, record: data });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/student_projections/:id", async (req, res) => {
+  const { id } = req.params;
+  const {
+    grade, branch, zone,
+    new_admissions, existing_admissions, total_projection
+  } = req.body;
+
+  try {
+    const payload = {
+      grade: String(grade || "").trim(),
+      branch: String(branch || "").trim(),
+      zone: String(zone || "").trim(),
+      new_admissions: Number(new_admissions) || 0,
+      existing_admissions: Number(existing_admissions) || 0,
+      total_projection: Number(total_projection) || 0
+    };
+
+    const { data, error } = await supabase.from('student_projections').update(payload).eq('id', id).select().single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: "Projection record not found." });
+    res.json({ success: true, record: data });
+  } catch (err) {
+    console.error("❌ PROJECTION UPDATE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/student_projections/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { error, count } = await supabase.from('student_projections').delete({ count: 'exact' }).eq('id', id);
+    if (error) throw error;
+    if (count === 0) return res.status(404).json({ success: false, error: "Projection record not found." });
+    res.json({ success: true, affected: count });
+  } catch (err) {
+    console.error("❌ PROJECTION DELETE ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -785,6 +856,7 @@ app.get("/tables", async (req, res) => {
     { table_name: "pricing" },
     { table_name: "branches" },
     { table_name: "grades" },
+    { table_name: "student_projections" },
     { table_name: "book_list_users" }
   ];
   res.json(tables);
@@ -793,7 +865,7 @@ app.get("/tables", async (req, res) => {
 // GET /data/:table - Get data for a specific table with optional filters
 app.get("/data/:table", async (req, res) => {
   const { table } = req.params;
-  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "book_list_users"];
+  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "student_projections", "book_list_users"];
   
   if (!allowedTables.includes(table)) {
     return res.status(403).json({ success: false, error: "Access denied to requested table." });
@@ -814,6 +886,13 @@ app.get("/data/:table", async (req, res) => {
   } else if (table === 'grades') {
     const nameFilter = req.query.name;
     if (nameFilter) query = query.ilike('name', `%${nameFilter}%`);
+  } else if (table === 'student_projections') {
+    const gradeFilter = req.query.grade;
+    const branchFilter = req.query.branch;
+    const zoneFilter = req.query.zone;
+    if (gradeFilter) query = query.ilike('grade', `%${gradeFilter}%`);
+    if (branchFilter) query = query.ilike('branch', `%${branchFilter}%`);
+    if (zoneFilter) query = query.ilike('zone', `%${zoneFilter}%`);
   } else if (table === 'book_list_users') {
     // For book_list_users, ensure only admin can view/filter
     // In a real app, this would be handled by authentication middleware
@@ -836,7 +915,7 @@ app.get("/data/:table", async (req, res) => {
 // GET /export-table/:table - Export data from a specific table as XLSX
 app.get("/export-table/:table", async (req, res) => {
   const { table } = req.params;
-  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "book_list_users"];
+  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "student_projections", "book_list_users"];
 
   if (!allowedTables.includes(table)) {
     return res.status(403).json({ success: false, error: "Access denied to requested table." });
