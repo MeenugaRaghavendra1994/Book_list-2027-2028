@@ -982,7 +982,7 @@ function App() {
         </div>
 
         <div className="px-3 flex-grow-1 overflow-auto">
-          {!isSidebarCollapsed && <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem' }}>TABLE EXPLORER</div>}
+          {!isSidebarCollapsed && <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem' }}>Reports & Masters</div>}
           {tables.map((t, index) => (
             // Only show book_list_users table to Admin
             (t.table_name !== 'book_list_users' || currentUser?.role === 'Admin') && (
