@@ -57,6 +57,7 @@ function App() {
   // Missing state declarations for Table Explorer & Sidebar
   const [viewMode, setViewMode] = useState("kits");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showReportsSection, setShowReportsSection] = useState(false);
   const [tableFilters, setTableFilters] = useState({});
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [editingTableRow, setEditingTableRow] = useState(null);
@@ -982,8 +983,21 @@ function App() {
         </div>
 
         <div className="px-3 flex-grow-1 overflow-auto">
-          {!isSidebarCollapsed && <div className="small text-uppercase text-muted fw-bold mb-2 px-2" style={{ fontSize: '0.7rem' }}>Reports & Masters</div>}
-          {tables.map((t, index) => (
+          {!isSidebarCollapsed && (
+            <div
+              className="d-flex align-items-center justify-content-between table-item px-2 py-2"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowReportsSection(prev => !prev)}
+            >
+              <div className="small text-uppercase text-muted fw-bold" style={{ fontSize: '0.7rem' }}>
+                Reports & Masters
+              </div>
+              <div className="text-muted">
+                {showReportsSection ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>}
+              </div>
+            </div>
+          )}
+          {showReportsSection && tables.map((t, index) => (
             // Only show book_list_users table to Admin
             (t.table_name !== 'book_list_users' || currentUser?.role === 'Admin') && (
               <div
