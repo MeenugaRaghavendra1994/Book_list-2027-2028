@@ -62,6 +62,13 @@ function App() {
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [editingTableRow, setEditingTableRow] = useState(null);
 
+  const [newBookItem, setNewBookItem] = useState({
+    category: "", subject: "", material_name: "", material_code: "", tax_rate: "",
+    mandatory_optional: "", volume: "", year: "", author: "", publisher: "",
+    per_unit_rate: "", total_amount: "", mrp: "", cost_price: "", composite_code: "",
+    composite_name: "", quantity: 1, zone: "", grade: "", branch: ""
+  });
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
@@ -144,37 +151,15 @@ function App() {
     axios.get(`${API_BASE_URL}/tables`)
       .then(res => setTables(res.data || []))
       .catch(() => setTables([]));
-
-    // Persist session on refresh
-    const savedUser = localStorage.getItem("erp_user");
-    if (savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
-        setCurrentUser(user);
-        setIsAuthenticated(true);
-      } catch (e) {
-        localStorage.removeItem("erp_user");
-      }
-    }
   }, []);
 
   useEffect(() => {
-    if (selectedTable && viewMode === "explorer") {
-      fetchTableData();
-    }
-  }, [selectedTable, viewMode, appliedTableFilters]);
-
-  const fetchTableData = () => {
-    if (selectedTable) {
-      axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: appliedTableFilters })
+    if (selectedTable && viewMode === "explorer") { // Add tableFilters to dependencies
+      axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: tableFilters })
         .then(res => setTableData(res.data || []))
         .catch(() => setTableData([]));
     }
-  };
-
-  const handleApplyTableFilters = () => {
-    setAppliedTableFilters({ ...tableFilters });
-  };
+  }, [selectedTable, viewMode, tableFilters]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
