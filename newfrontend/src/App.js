@@ -1049,7 +1049,7 @@ function App() {
             className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
             onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
           >
-            {isSidebarCollapsed ? "📚" : "Book Kit Lists"}
+            {isSidebarCollapsed ? "📚" : "View/Create Book List"}
           </div>
         </div>
 
