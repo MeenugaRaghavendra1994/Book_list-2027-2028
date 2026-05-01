@@ -1056,7 +1056,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         
         // From grade_wise_kits table
         kit_name: kit.name || "N/A",
-        kit_id: kit.id || book.kit_id || "N/A"
+        kit_id: kit.id || book.kit_id || "N/A",
+        total_books: (Number(projection.new_admissions || 0) + Number(projection.existing_admissions || 0)) * (Number(book.quantity) || 0)
       };
     });
 
