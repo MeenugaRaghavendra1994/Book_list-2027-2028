@@ -12,6 +12,9 @@ const initialFilters = {
   status: ""
 };
 
+const roleOptions = ["Admin", "User"];
+const rightsOptions = ["View", "Edit/Delete"];
+
 function App() {
   const [books, setBooks] = useState([]);
   const [filteredBooks, setFilteredBooks] = useState([]);
@@ -70,6 +73,12 @@ function App() {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
+  const [showEditTableModal, setShowEditTableModal] = useState(false);
+  const [editingTableRow, setEditingTableRow] = useState(null);
+  const [tableFilters, setTableFilters] = useState({}); // For explorer table filters
+  const [viewMode, setViewMode] = useState("kits"); // 'kits' or 'explorer'
+  const roleOptions = ["Admin", "User"];
+  const rightsOptions = ["View", "Edit/Delete"];
 
   const userHasRight = (right) => {
     return currentUser && currentUser.rights && currentUser.rights.includes(right);
@@ -231,7 +240,6 @@ function App() {
       user.password.trim() === loginForm.password.trim()
     );
     if (foundUser) {
-      localStorage.setItem("erp_user", JSON.stringify(foundUser));
       setCurrentUser(foundUser);
       setIsAuthenticated(true);
       setLoginForm({ username: "", password: "" });
@@ -332,6 +340,12 @@ function App() {
     } catch (err) {
       alert("Failed to delete user from database.");
     }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setShowCreateUser(false);
   };
 
   const handleView = async (id) => {
