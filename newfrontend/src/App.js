@@ -231,6 +231,7 @@ function App() {
       user.password.trim() === loginForm.password.trim()
     );
     if (foundUser) {
+      localStorage.setItem("erp_user", JSON.stringify(foundUser));
       setCurrentUser(foundUser);
       setIsAuthenticated(true);
       setLoginForm({ username: "", password: "" });
