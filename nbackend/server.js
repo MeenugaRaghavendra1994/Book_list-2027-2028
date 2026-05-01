@@ -967,7 +967,107 @@ app.delete("/users/:id", async (req, res) => {
 });
 
 /* ============================
-   📥 DOWNLOAD
+   � DASHBOARD ENDPOINTS
+============================ */
+
+// GET /dashboard/item-wise-summary - Get merged data from multiple tables
+app.get("/dashboard/item-wise-summary", async (req, res) => {
+  try {
+    // Fetch all individual books
+    const { data: booksData, error: booksError } = await supabase
+      .from('individual_books')
+      .select('*')
+      .limit(500);
+
+    if (booksError) throw booksError;
+    if (!booksData || booksData.length === 0) {
+      return res.json([]);
+    }
+
+    // Fetch all pricing data
+    const { data: pricingData, error: pricingError } = await supabase
+      .from('pricing')
+      .select('*');
+    if (pricingError) console.warn("❌ Pricing fetch warning:", pricingError.message);
+    const pricingMap = {};
+    (pricingData || []).forEach(p => {
+      pricingMap[p.material_code] = p;
+    });
+
+    // Fetch all student projections
+    const { data: projectionsData, error: projectionsError } = await supabase
+      .from('student_projections')
+      .select('*');
+    if (projectionsError) console.warn("❌ Projections fetch warning:", projectionsError.message);
+    const projectionsMap = {};
+    (projectionsData || []).forEach(p => {
+      const key = `${p.grade}_${p.branch}_${p.zone}`;
+      projectionsMap[key] = p;
+    });
+
+    // Fetch all grade_wise_kits
+    const { data: kitsData, error: kitsError } = await supabase
+      .from('grade_wise_kits')
+      .select('*');
+    if (kitsError) console.warn("❌ Grade kits fetch warning:", kitsError.message);
+    const kitsMap = {};
+    (kitsData || []).forEach(k => {
+      kitsMap[`${k.grade}_${k.branch}_${k.zone}`] = k;
+    });
+
+    // Merge the data
+    const mergedData = booksData.map(book => {
+      const pricing = pricingMap[book.material_code] || {};
+      const projKey = `${book.grade}_${book.branch}_${book.zone}`;
+      const projection = projectionsMap[projKey] || {};
+      const kit = kitsMap[projKey] || {};
+
+      return {
+        // All individual_books columns
+        id: book.id,
+        category: book.category,
+        subject: book.subject,
+        material_name: book.material_name,
+        material_code: book.material_code,
+        tax_rate: book.tax_rate,
+        mandatory_optional: book.mandatory_optional,
+        volume: book.volume,
+        year: book.year,
+        author: book.author,
+        publisher: book.publisher,
+        per_unit_rate: book.per_unit_rate,
+        total_amount: book.total_amount,
+        composite_code: book.composite_code,
+        composite_name: book.composite_name,
+        quantity: book.quantity,
+        zone: book.zone,
+        grade: book.grade,
+        branch: book.branch,
+        created_at: book.created_at,
+        updated_at: book.updated_at,
+        
+        // From pricing table
+        mrp: pricing.mrp || book.mrp,
+        cost_price: pricing.cost_price || book.cost_price,
+        
+        // From student_projections table
+        new_admissions: projection.new_admissions || 0,
+        existing_admissions: projection.existing_admissions || 0,
+        
+        // From grade_wise_kits table
+        kit_name: kit.kit_name || "N/A"
+      };
+    });
+
+    res.json(mergedData);
+  } catch (err) {
+    console.error("❌ DASHBOARD FETCH ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   �📥 DOWNLOAD
 ============================ */
 app.get("/download", async (req, res) => {
   const { data, error } = await supabase.from('individual_books').select('*');
