@@ -190,6 +190,10 @@ function App() {
     const filtered = filters.zone ? branchList.filter(branch => branch.zone === filters.zone) : branchList;
     return ["", ...Array.from(new Set(filtered.map(branch => branch.name)))];
   }, [branchList, filters.zone]);
+  const dashboardBranchOptions = useMemo(() => {
+    const filtered = dashboardFilters.zone ? branchList.filter(b => b.zone === dashboardFilters.zone) : branchList;
+    return ["", ...Array.from(new Set(filtered.map(b => b.name)))];
+  }, [branchList, dashboardFilters.zone]);
   const projectionBranchOptions = useMemo(() => ["", ...Array.from(new Set(branchList.map(branch => branch.name)))], [branchList]);
   const bookBranchOptions = useMemo(() => {
     const currentZone = newBookItem.zone || activeBook?.zone;
@@ -1773,7 +1777,7 @@ function App() {
                   <select 
                     className="form-select" 
                     value={dashboardFilters.zone} 
-                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, zone: e.target.value }))}
+                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, zone: e.target.value, branch: "" }))}
                   >
                     <option value="">All Zones</option>
                     {zones.map(zone => zone && <option key={zone} value={zone}>{zone}</option>)}
@@ -1787,7 +1791,7 @@ function App() {
                     onChange={(e) => setDashboardFilters(prev => ({ ...prev, branch: e.target.value }))}
                   >
                     <option value="">All Branches</option>
-                    {branchOptions.map(branch => branch && <option key={branch} value={branch}>{branch}</option>)}
+                    {dashboardBranchOptions.map(branch => branch && <option key={branch} value={branch}>{branch}</option>)}
                   </select>
                 </div>
                 <div className="col-12 col-md-3">
@@ -1843,6 +1847,7 @@ function App() {
                       <th className="py-3 px-3">New Admissions</th>
                       <th className="py-3 px-3">Existing Admissions</th>
                       <th className="py-3 px-3">Kit Name</th>
+                      <th className="py-3 px-3">Total Books Requirement</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
@@ -1873,9 +1878,10 @@ function App() {
                         <td className="px-3 text-center">{item.new_admissions || 0}</td>
                         <td className="px-3 text-center">{item.existing_admissions || 0}</td>
                         <td className="px-3">{item.kit_name || "N/A"}</td>
+                        <td className="px-3 text-center fw-bold text-danger">{item.total_books || 0}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan="16" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
+                      <tr><td colSpan="26" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1884,14 +1890,14 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['ID', 'Subject', 'Material Name', 'Material Code', 'Tax Rate', 'Mandatory/Optional', 'Category', 'Volume', 'Year', 'Author', 'Publisher', 'Per Unit Rate', 'Total Amount', 'MRP', 'Cost Price', 'Composite Code', 'Composite Name', 'Quantity', 'Zone', 'Grade', 'Kit ID', 'Branch Name', 'New Admissions', 'Existing Admissions', 'Kit Name'],
+                    ['ID', 'Subject', 'Material Name', 'Material Code', 'Tax Rate', 'Mandatory/Optional', 'Category', 'Volume', 'Year', 'Author', 'Publisher', 'Per Unit Rate', 'Total Amount', 'MRP', 'Cost Price', 'Composite Code', 'Composite Name', 'Quantity', 'Zone', 'Grade', 'Kit ID', 'Branch Name', 'New Admissions', 'Existing Admissions', 'Kit Name', 'Total Books Requirement'],
                     ...dashboardData.map(item => [
                       item.id, item.subject, item.material_name, item.material_code, item.tax_rate,
                       item.mandatory_optional, item.category, item.volume, item.year, item.author,
                       item.publisher, item.per_unit_rate, item.total_amount, item.mrp, item.cost_price,
                       item.composite_code, item.composite_name, item.quantity, item.zone, item.grade,
-                      item.kit_id, item.branch,
-                      item.new_admissions, item.existing_admissions, item.kit_name
+                      item.kit_id, item.branch, item.new_admissions, item.existing_admissions, item.kit_name,
+                      item.total_books
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
