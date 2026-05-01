@@ -194,6 +194,10 @@ function App() {
     const filtered = dashboardFilters.zone ? branchList.filter(b => b.zone === dashboardFilters.zone) : branchList;
     return ["", ...Array.from(new Set(filtered.map(b => b.name)))];
   }, [branchList, dashboardFilters.zone]);
+  const tableExplorerBranchOptions = useMemo(() => {
+    const filtered = tableFilters.zone ? branchList.filter(b => b.zone === tableFilters.zone) : branchList;
+    return ["", ...Array.from(new Set(filtered.map(b => b.name)))];
+  }, [branchList, tableFilters.zone]);
   const projectionBranchOptions = useMemo(() => ["", ...Array.from(new Set(branchList.map(branch => branch.name)))], [branchList]);
   const bookBranchOptions = useMemo(() => {
     const currentZone = newBookItem.zone || activeBook?.zone;
@@ -1979,7 +1983,7 @@ function App() {
                           <label className="form-label">Branch</label>
                           <select className="form-select" value={tableFilters.branch || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, branch: e.target.value }))}>
                             <option value="">All Branches</option>
-                            {branchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
+                            {tableExplorerBranchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
                           </select>
                         </div>
                         <div className="col-md-4">
