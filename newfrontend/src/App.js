@@ -171,13 +171,13 @@ function App() {
           let data = res.data || [];
           // Apply filters
           if (dashboardFilters.zone) {
-            data = data.filter(item => item.zone === dashboardFilters.zone);
+            data = data.filter(item => String(item.zone || "").trim() === String(dashboardFilters.zone).trim());
           }
           if (dashboardFilters.branch) {
-            data = data.filter(item => item.branch === dashboardFilters.branch);
+            data = data.filter(item => String(item.branch || "").trim() === String(dashboardFilters.branch).trim());
           }
           if (dashboardFilters.grade) {
-            data = data.filter(item => item.grade === dashboardFilters.grade);
+            data = data.filter(item => String(item.grade || "").trim() === String(dashboardFilters.grade).trim());
           }
           setDashboardData(data);
         })
@@ -1819,42 +1819,54 @@ function App() {
                   <thead className="table-light">
                     <tr>
                       <th className="py-3 px-3">ID</th>
-                      <th className="py-3 px-3">Material Code</th>
-                      <th className="py-3 px-3">Material Name</th>
-                      <th className="py-3 px-3">Category</th>
                       <th className="py-3 px-3">Subject</th>
-                      <th className="py-3 px-3">Grade</th>
-                      <th className="py-3 px-3">Branch</th>
-                      <th className="py-3 px-3">Zone</th>
-                      <th className="py-3 px-3">MRP</th>
-                      <th className="py-3 px-3">Cost Price</th>
-                      <th className="py-3 px-3">New Admissions</th>
-                      <th className="py-3 px-3">Existing Admissions</th>
-                      <th className="py-3 px-3">Kit Name</th>
+                      <th className="py-3 px-3">Material Name</th>
+                      <th className="py-3 px-3">Material Code</th>
+                      <th className="py-3 px-3">Tax Rate</th>
+                      <th className="py-3 px-3">Mandatory/Optional</th>
+                      <th className="py-3 px-3">Category</th>
+                      <th className="py-3 px-3">Volume</th>
+                      <th className="py-3 px-3">Year</th>
                       <th className="py-3 px-3">Author</th>
                       <th className="py-3 px-3">Publisher</th>
+                      <th className="py-3 px-3">Per Unit Rate</th>
+                      <th className="py-3 px-3">Total Amount</th>
+                      <th className="py-3 px-3">MRP</th>
+                      <th className="py-3 px-3">Cost Price</th>
+                      <th className="py-3 px-3">Composite Code</th>
+                      <th className="py-3 px-3">Composite Name</th>
                       <th className="py-3 px-3">Quantity</th>
+                      <th className="py-3 px-3">Zone</th>
+                      <th className="py-3 px-3">Grade</th>
+                      <th className="py-3 px-3">Kit ID</th>
+                      <th className="py-3 px-3">Branch Name</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dashboardData.length > 0 ? dashboardData.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '80px' }}>{item.id}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.material_code || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.material_name || "N/A"}</td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.category || "N/A"}</td>
+                        <td className="px-3">{item.id}</td>
                         <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.subject || "N/A"}</td>
-                        <td className="px-3 text-truncate">{item.grade}</td>
-                        <td className="px-3 text-truncate">{item.branch}</td>
-                        <td className="px-3 text-truncate">{item.zone}</td>
-                        <td className="px-3 text-truncate" style={{ fontWeight: 'bold', color: '#28a745' }}>₹{item.mrp || "0"}</td>
-                        <td className="px-3 text-truncate" style={{ fontWeight: 'bold', color: '#007bff' }}>₹{item.cost_price || "0"}</td>
-                        <td className="px-3 text-center" style={{ backgroundColor: '#e7f3ff' }}><strong>{item.new_admissions || 0}</strong></td>
-                        <td className="px-3 text-center" style={{ backgroundColor: '#fff3e7' }}><strong>{item.existing_admissions || 0}</strong></td>
-                        <td className="px-3 text-truncate" style={{ maxWidth: '150px', fontWeight: 'bold' }}>{item.kit_name}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.material_name || "N/A"}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.material_code || "N/A"}</td>
+                        <td className="px-3">{item.tax_rate}%</td>
+                        <td className="px-3">{item.mandatory_optional || "N/A"}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '100px' }}>{item.category || "N/A"}</td>
+                        <td className="px-3">{item.volume || "N/A"}</td>
+                        <td className="px-3">{item.year || "N/A"}</td>
                         <td className="px-3 text-truncate" style={{ maxWidth: '120px' }}>{item.author || "N/A"}</td>
                         <td className="px-3 text-truncate" style={{ maxWidth: '120px' }}>{item.publisher || "N/A"}</td>
+                        <td className="px-3">₹{item.per_unit_rate || 0}</td>
+                        <td className="px-3">₹{item.total_amount || 0}</td>
+                        <td className="px-3" style={{ fontWeight: 'bold', color: '#28a745' }}>₹{item.mrp || "0"}</td>
+                        <td className="px-3" style={{ fontWeight: 'bold', color: '#007bff' }}>₹{item.cost_price || "0"}</td>
+                        <td className="px-3">{item.composite_code || "N/A"}</td>
+                        <td className="px-3 text-truncate" style={{ maxWidth: '150px' }}>{item.composite_name || "N/A"}</td>
                         <td className="px-3 text-center">{item.quantity}</td>
+                        <td className="px-3 text-truncate">{item.zone}</td>
+                        <td className="px-3 text-truncate">{item.grade}</td>
+                        <td className="px-3">{item.kit_id || "N/A"}</td>
+                        <td className="px-3 text-truncate">{item.branch}</td>
                       </tr>
                     )) : (
                       <tr><td colSpan="16" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
@@ -1866,11 +1878,13 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['ID', 'Material Code', 'Material Name', 'Category', 'Subject', 'Grade', 'Branch', 'Zone', 'MRP', 'Cost Price', 'New Admissions', 'Existing Admissions', 'Kit Name', 'Author', 'Publisher', 'Quantity'],
+                    ['ID', 'Subject', 'Material Name', 'Material Code', 'Tax Rate', 'Mandatory/Optional', 'Category', 'Volume', 'Year', 'Author', 'Publisher', 'Per Unit Rate', 'Total Amount', 'MRP', 'Cost Price', 'Composite Code', 'Composite Name', 'Quantity', 'Zone', 'Grade', 'Kit ID', 'Branch Name'],
                     ...dashboardData.map(item => [
-                      item.id, item.material_code, item.material_name, item.category, item.subject, 
-                      item.grade, item.branch, item.zone, item.mrp, item.cost_price, 
-                      item.new_admissions, item.existing_admissions, item.kit_name, item.author, item.publisher, item.quantity
+                      item.id, item.subject, item.material_name, item.material_code, item.tax_rate,
+                      item.mandatory_optional, item.category, item.volume, item.year, item.author,
+                      item.publisher, item.per_unit_rate, item.total_amount, item.mrp, item.cost_price,
+                      item.composite_code, item.composite_name, item.quantity, item.zone, item.grade,
+                      item.kit_id, item.branch
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
