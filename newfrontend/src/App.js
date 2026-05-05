@@ -1007,16 +1007,38 @@ function App() {
     link.click();
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!filteredBooks.length) return;
-    const { headers, rows } = buildExportRows(filteredBooks);
-    downloadCsv(headers, rows, "book-list-export.csv");
+    try {
+      // Fetch complete kit data with books for all filtered kits
+      const kitsWithBooks = await Promise.all(
+        filteredBooks.map(kit =>
+          axios.get(`${API_BASE_URL}/kits/${kit.id}`)
+            .then(res => res.data)
+            .catch(() => kit) // Fallback to original kit if fetch fails
+        )
+      );
+      const { headers, rows } = buildExportRows(kitsWithBooks);
+      downloadCsv(headers, rows, "book-list-export.csv");
+    } catch (error) {
+      console.error("Export error:", error);
+      alert("Failed to export. Please try again.");
+    }
   };
 
-  const handleExportKit = (kit) => {
+  const handleExportKit = async (kit) => {
     if (!kit) return;
-    const { headers, rows } = buildExportRows([kit]);
-    downloadCsv(headers, rows, `${kit.name || 'kit'}-export.csv`);
+    try {
+      // Fetch complete kit data with books
+      const kitWithBooks = await axios.get(`${API_BASE_URL}/kits/${kit.id}`)
+        .then(res => res.data)
+        .catch(() => kit); // Fallback to original kit if fetch fails
+      const { headers, rows } = buildExportRows([kitWithBooks]);
+      downloadCsv(headers, rows, `${kit.name || 'kit'}-export.csv`);
+    } catch (error) {
+      console.error("Export error:", error);
+      alert("Failed to export. Please try again.");
+    }
   };
 
   const activeCount = filteredBooks.length;
