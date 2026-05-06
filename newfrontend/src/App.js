@@ -23,7 +23,7 @@ function App() {
   const [showAddBook, setShowAddBook] = useState(false);
   const [editingBookIndex, setEditingBookIndex] = useState(null);
   const [filters, setFilters] = useState(initialFilters);
-  const [editForm, setEditForm] = useState({ name: "", zone: "", branch: "", grade: "", status: "Pending" });
+  const [editForm, setEditForm] = useState({ name: "", zone: "", branch: [], grade: "", status: "Pending" });
   const [createForm, setCreateForm] = useState({ name: "", zone: "", branch: [], grade: "", status: "Pending" });
   const [bulkUploadRows, setBulkUploadRows] = useState([]);
   const [bulkFileName, setBulkFileName] = useState("");
@@ -213,11 +213,13 @@ function App() {
 
   useEffect(() => {
     const next = books.filter(book => {
+      const branchString = String(book.branch || "");
+      const branchItems = branchString.split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
       return (
         (!filters.zone || 
           String(book.zone || "").trim().toLowerCase() === String(filters.zone).trim().toLowerCase()) &&
         (!filters.branch || 
-          String(book.branch || "").trim().toLowerCase() === String(filters.branch).trim().toLowerCase()) &&
+          branchItems.includes(String(filters.branch).trim().toLowerCase())) &&
         (!filters.grade || 
           String(book.grade || "").trim().toLowerCase() === String(filters.grade).trim().toLowerCase()) &&
         (!filters.status || 
@@ -392,8 +394,11 @@ function App() {
     }
     const book = books.find(item => item.id === id);
     if (!book) return;
+    const branchArray = Array.isArray(book.branch)
+      ? book.branch.map(item => String(item || "").trim()).filter(Boolean)
+      : String(book.branch || "").split(',').map(item => item.trim()).filter(Boolean);
     setActiveBook(book);
-    setEditForm({ name: book.name, zone: book.zone, branch: book.branch, grade: book.grade, status: book.status });
+    setEditForm({ name: book.name, zone: book.zone, branch: branchArray, grade: book.grade, status: book.status });
     setShowEdit(true);
     setShowView(false);
     setShowCreate(false);
@@ -803,11 +808,35 @@ function App() {
     }
   };
 
-  const handleSave = () => {
-    setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, ...editForm } : book));
-    setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, ...editForm } : book));
-    setShowEdit(false);
-    setActiveBook(null);
+  const handleSave = async () => {
+    if (!activeBook) return;
+    if (!editForm.name.trim() || !editForm.zone.trim() || !editForm.grade.trim()) {
+      alert("Please enter Book List Name, Zone and Grade.");
+      return;
+    }
+
+    const payload = {
+      name: editForm.name.trim(),
+      zone: editForm.zone.trim(),
+      grade: editForm.grade.trim(),
+      status: editForm.status,
+      createdBy: activeBook.created_by || activeBook.createdBy || "",
+      createdAt: activeBook.created_at || activeBook.createdAt || "",
+      statusInfo: activeBook.status_info || activeBook.statusInfo || "",
+      branch: Array.isArray(editForm.branch) ? editForm.branch : String(editForm.branch || "").split(',').map(item => item.trim()).filter(Boolean)
+    };
+
+    try {
+      const response = await axios.put(`${API_BASE_URL}/kits/${activeBook.id}`, payload);
+      const updatedKit = response.data.kit || { ...activeBook, ...payload, branch: Array.isArray(payload.branch) ? payload.branch.join(', ') : String(payload.branch) };
+      setBooks(prev => prev.map(book => book.id === activeBook.id ? updatedKit : book));
+      setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? updatedKit : book));
+      setActiveBook(null);
+      setShowEdit(false);
+    } catch (err) {
+      console.error("Failed to update kit:", err);
+      alert("Could not save kit changes. Please try again.");
+    }
   };
 
   const handleAddBook = () => {
@@ -1725,11 +1754,15 @@ function App() {
               <input type="text" className="form-control" value={editForm.name} onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="col-12 col-md-6">
-              <label className="form-label">Branch</label>
-              <select className="form-select" value={editForm.branch} onChange={e => setEditForm(prev => ({ ...prev, branch: e.target.value }))}>
+              <label className="form-label">Branches</label>
+              <select className="form-select" multiple size={6} value={editForm.branch || []} onChange={e => {
+                const selected = Array.from(e.target.selectedOptions).map(option => option.value);
+                setEditForm(prev => ({ ...prev, branch: selected }));
+              }}>
                 <option value="">Select Branch</option>
                 {editBranchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
               </select>
+              <div className="form-text">Select one or more branches for this book list.</div>
             </div>
             <div className="col-12 col-md-4">
               <label className="form-label">Zone</label>
@@ -1738,7 +1771,9 @@ function App() {
                 setEditForm(prev => ({
                   ...prev,
                   zone: zoneValue,
-                  branch: prev.branch && branchList.some(branch => branch.name === prev.branch && branch.zone === zoneValue) ? prev.branch : ""
+                  branch: Array.isArray(prev.branch)
+                    ? prev.branch.filter(branchName => branchList.some(branch => branch.name === branchName && branch.zone === zoneValue))
+                    : []
                 }));
               }}>
                 <option value="">Select Zone</option>
