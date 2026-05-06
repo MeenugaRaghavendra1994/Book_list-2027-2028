@@ -3,7 +3,6 @@ if (dns.setDefaultResultOrder) dns.setDefaultResultOrder('ipv4first');
 
 const express = require("express");
 const cors = require("cors");
-const multer = require("multer");
 const XLSX = require("xlsx");
 const fs = require("fs");
 require('dotenv').config();
@@ -99,12 +98,6 @@ async function testConnection() {
 if (supabase) {
   testConnection();
 }
-
-/* ============================
-   FILE UPLOAD CONFIG
-============================ */
-// Vercel functions only have write access to /tmp
-const upload = multer({ dest: "/tmp" });
 
 /* ============================
    🔍 CONNECTION DIAGNOSTICS
@@ -726,83 +719,6 @@ app.delete("/kits/:id", async (req, res) => {
   } catch (err) {
     console.error("❌ KIT DELETE ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/* ============================
-   �📂 BULK UPLOAD (FINAL FIX)
-============================ */
-app.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    console.log("📂 Upload Started");
-
-    const workbook = XLSX.readFile(req.file.path);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet);
-
-    console.log(`📊 Processing ${data.length} rows...`);
-
-    // Prepare all rows for bulk insertion
-    const rowsToInsert = data.map(d => {
-      const qty = parseFloat(d["Quantity"]) || 0;
-      const rate = parseFloat(d["Per Unit Rate"]) || 0;
-      const total = Number(d["Total Amount"] || d["total_amount"] || qty * rate) || qty * rate;
-      
-      return {
-          zone: String(d["Zone"] || d["Zone Name"] || d["zone_name"] || "").trim(),
-          grade: String(d["Grade"] || "").trim(),
-          branch_name: String(d["Branch"] || d["Branch Name"] || d["branch_name"] || d["Branch_Name"] || "").trim(),
-          material_code: String(d["Material Code"] || "").trim(),
-          subject: String(d["Subject"] || ""),
-          material_name: String(d["Material Name"] || ""),
-          tax_rate: parseFloat(d["Tax Rate"]) || 0,
-          mandatory_optional: String(d["Mandatory/Optional"] || d["mandatory_optional"] || ""),
-          category: String(d["Category"] || ""),
-          volume: String(d["Volume"] || ""),
-          year: String(d["Year"] || ""),
-          author: String(d["Author"] || ""),
-          publisher: String(d["Publisher"] || ""),
-          quantity: qty,
-          per_unit_rate: rate,
-          total_amount: total,
-          mrp: parseFloat(d["MRP"] || 0),
-          cost_price: parseFloat(d["Cost Price"] || 0),
-          composite_code: String(d["Composite Code"] || ""),
-          composite_name: String(d["Composite Name"] || "")
-      };
-    });
-
-    // Bulk Pricing Lookup
-    const codes = rowsToInsert.map(r => r.material_code);
-    const { data: pricingList } = await supabase
-      .from('pricing')
-      .select('material_code, mrp, cost_price')
-      .in('material_code', codes);
-
-    if (pricingList && pricingList.length > 0) {
-      const priceMap = new Map(pricingList.map(p => [p.material_code, p]));
-      rowsToInsert.forEach(row => {
-        const p = priceMap.get(row.material_code);
-        if (p) {
-          row.mrp = p.mrp || row.mrp;
-          row.cost_price = p.cost_price || row.cost_price;
-        }
-      });
-    }
-
-    const { data: insertedData, error } = await supabase
-      .from('individual_books')
-      .insert(rowsToInsert);
-
-    if (error) throw error;
-
-    fs.unlinkSync(req.file.path);
-
-    res.json({ success: true, count: rowsToInsert.length });
-
-  } catch (err) {
-    console.error("❌ UPLOAD ERROR:", err.message, err.details, err.hint);
-    res.status(500).send(err.message);
   }
 });
 
