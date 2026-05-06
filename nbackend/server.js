@@ -1112,6 +1112,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         // If a branch filter is applied, only aggregate data for that specific branch
         if (normalizedFilter && normBranch !== normalizedFilter) return;
 
+        // Book List Quantity = Sum (Kit Quantity per assigned Branch)
+        summary[key].book_list_quantity += qty;
+
         // Projection = Sum (Branch Projection * Kit Quantity)
         const branchProj = (projMap[normGrade] && projMap[normGrade][normBranch]) || 0;
         summary[key].projection += (branchProj * qty);
