@@ -385,6 +385,30 @@ app.put("/kits/:id", async (req, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: "Kit record not found." });
 
+    // Synchronize individual books: remove branches no longer in the kit
+    const { data: books, error: fetchBooksError } = await supabase
+      .from('individual_books')
+      .select('id, branch_name')
+      .eq('kit_id', id);
+
+    if (!fetchBooksError && books) {
+      for (const book of books) {
+        if (book.branch_name) {
+          const bookBranches = book.branch_name.split(',').map(b => b.trim()).filter(Boolean);
+          // Only keep branches that are still present in the updated kit
+          const updatedBookBranches = bookBranches.filter(b => branchValues.includes(b));
+          const updatedBranchString = updatedBookBranches.join(', ');
+
+          if (updatedBranchString !== book.branch_name) {
+            await supabase
+              .from('individual_books')
+              .update({ branch_name: updatedBranchString })
+              .eq('id', book.id);
+          }
+        }
+      }
+    }
+
     res.json({ success: true, kit: data });
   } catch (err) {
     console.error("❌ KIT UPDATE ERROR:", err.message, err.details, err.hint);
