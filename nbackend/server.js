@@ -1010,6 +1010,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     let booksQuery = supabase.from('individual_books').select('*');
     if (zoneFilter) booksQuery = booksQuery.eq('zone', zoneFilter);
     if (branchFilter) booksQuery = booksQuery.eq('branch_name', branchFilter);
+    if (branchFilter) booksQuery = booksQuery.ilike('branch_name', `%${branchFilter}%`);
     if (gradeFilter) booksQuery = booksQuery.eq('grade', gradeFilter);
     if (materialNameFilter) booksQuery = booksQuery.ilike('material_name', `%${materialNameFilter}%`);
 
@@ -1107,6 +1108,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       branches.forEach(b => {
         const normBranch = b.toLowerCase();
+
+        // If a branch filter is applied, only aggregate data for that specific branch
+        if (branchFilter && normBranch !== branchFilter.toLowerCase()) return;
 
         // Projection = Sum (Branch Projection * Kit Quantity)
         const branchProj = (projMap[normGrade] && projMap[normGrade][normBranch]) || 0;
