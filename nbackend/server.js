@@ -1030,7 +1030,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const g = String(kit.grade || "").trim();
       const bs = String(kit.branch || "").split(',').map(s => s.trim()).filter(Boolean);
       if (!validGradeBranches[g]) validGradeBranches[g] = new Set();
-      bs.forEach(b => validGradeBranches[g].add(b));
+      bs.forEach(b => validGradeBranches[g].add(b.toLowerCase()));
     });
 
     let projectionsQuery = supabase.from('student_projections').select('*');
@@ -1072,8 +1072,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     (projectionsData || []).forEach(p => {
       const g = String(p.grade || "").trim().toLowerCase();
       const b = String(p.branch || "").trim().toLowerCase();
-      // Original keys for validation but lookup uses normalized
-      if (validGradeBranches[String(p.grade || "").trim()] && validGradeBranches[String(p.grade || "").trim()].has(String(p.branch || "").trim())) {
+      // Use normalized guard
+      if (validGradeBranches[g] && validGradeBranches[g].has(b)) {
         if (!projMap[g]) projMap[g] = {};
         projMap[g][b] = (projMap[g][b] || 0) + (Number(p.total_projection) || 0);
       }
@@ -1115,7 +1115,11 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         // Paid = Sum (Branch Paid Orders * Kit Quantity)
         // Check both Composite Code and Material Code in the order table
         let branchPaid = 0;
-        if (orderMap[normGrade] && orderMap[normGrade][normBranch]) {
+        
+        // MIRROR LOGIC: Only count orders if the branch is valid for this grade
+        const isValid = validGradeBranches[normGrade] && validGradeBranches[normGrade].has(normBranch);
+
+        if (isValid && orderMap[normGrade] && orderMap[normGrade][normBranch]) {
           if (compositeCode && orderMap[normGrade][normBranch][compositeCode]) branchPaid += orderMap[normGrade][normBranch][compositeCode];
           if (materialCode && materialCode !== compositeCode && orderMap[normGrade][normBranch][materialCode]) branchPaid += orderMap[normGrade][normBranch][materialCode];
         }
