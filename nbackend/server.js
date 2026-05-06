@@ -283,30 +283,74 @@ app.post("/kits", async (req, res) => {
   try {
     const name = String(d.name || "").trim();
     const zone = String(d.zone || "").trim();
-    const branch = String(d.branch || "").trim();
     const grade = String(d.grade || "").trim();
     const status = String(d.status || "Pending").trim();
     const createdBy = String(d.createdBy || "").trim();
     const createdAt = String(d.createdAt || "").trim();
     const statusInfo = String(d.statusInfo || "").trim();
 
-    if (!name || !branch || !grade) {
-      return res.status(400).json({ success: false, error: "Missing required fields: name, branch, and grade are mandatory." });
+    if (!name || !zone || !grade) {
+      return res.status(400).json({ success: false, error: "Missing required fields: name, zone, and grade are mandatory." });
     }
+
+    let branchValues = [];
+    if (Array.isArray(d.branch)) {
+      branchValues = d.branch.map(item => String(item || "").trim()).filter(Boolean);
+    } else if (d.branch) {
+      branchValues = [String(d.branch).trim()];
+    }
+
+    if (branchValues.length === 0) {
+      const { data: zoneBranches, error: branchError } = await supabase
+        .from('branches')
+        .select('name')
+        .eq('zone', zone);
+
+      if (branchError) throw branchError;
+      branchValues = (zoneBranches || []).map(b => String(b.name || "").trim()).filter(Boolean);
+    }
+
+    branchValues = [...new Set(branchValues)];
+
+    if (branchValues.length === 0) {
+      return res.status(400).json({ success: false, error: "No branches found for the selected zone. Please add branches for this zone first." });
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from('grade_wise_kits')
+      .select('id')
+      .eq('name', name)
+      .eq('zone', zone)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      return res.status(409).json({ success: false, error: `A book list named "${name}" already exists for zone "${zone}".` });
+    }
+
+    const payload = branchValues.map(branchName => ({
+      name,
+      zone,
+      branch: branchName,
+      grade,
+      status,
+      created_by: createdBy,
+      created_at: createdAt,
+      status_info: statusInfo
+    }));
 
     const { data, error } = await supabase
       .from('grade_wise_kits')
-      .insert([{ name, zone, branch, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo }])
-      .select()
-      .single();
+      .insert(payload)
+      .select();
 
     if (error) {
        console.error("❌ SUPABASE KIT INSERT ERROR:", error.message);
        throw error;
     }
 
-    console.log("✅ KIT INSERT:", name);
-    res.json({ success: true, kit: data });
+    console.log("✅ KIT INSERT:", name, "zone:", zone, "branches:", branchValues.length);
+    res.json({ success: true, kits: data });
 
   } catch (err) {
     console.error("❌ KIT INSERT ERROR:", err.message, err.details, err.hint);
@@ -970,98 +1014,80 @@ app.delete("/users/:id", async (req, res) => {
    � DASHBOARD ENDPOINTS
 ============================ */
 
-// GET /dashboard/item-wise-summary - Get merged data from multiple tables
+// GET /dashboard/item-wise-summary - Get aggregated item summary with grade-wise projection
 app.get("/dashboard/item-wise-summary", async (req, res) => {
   try {
-    // Fetch all individual books
-    const { data: booksData, error: booksError } = await supabase
-      .from('individual_books')
-      .select('*')
-      .limit(500);
+    const zoneFilter = String(req.query.zone || "").trim();
+    const branchFilter = String(req.query.branch || "").trim();
+    const gradeFilter = String(req.query.grade || "").trim();
 
+    let booksQuery = supabase.from('individual_books').select('*');
+    if (zoneFilter) booksQuery = booksQuery.eq('zone', zoneFilter);
+    if (branchFilter) booksQuery = booksQuery.eq('branch_name', branchFilter);
+    if (gradeFilter) booksQuery = booksQuery.eq('grade', gradeFilter);
+
+    const { data: booksData, error: booksError } = await booksQuery;
     if (booksError) throw booksError;
     if (!booksData || booksData.length === 0) {
       return res.json([]);
     }
 
-    // Fetch all pricing data
-    const { data: pricingData, error: pricingError } = await supabase
-      .from('pricing')
-      .select('*');
-    if (pricingError) console.warn("❌ Pricing fetch warning:", pricingError.message);
-    const pricingMap = {};
-    (pricingData || []).forEach(p => {
-      pricingMap[p.material_code] = p;
-    });
+    let projectionsQuery = supabase.from('student_projections').select('*');
+    if (zoneFilter) projectionsQuery = projectionsQuery.eq('zone', zoneFilter);
+    if (branchFilter) projectionsQuery = projectionsQuery.eq('branch', branchFilter);
+    if (gradeFilter) projectionsQuery = projectionsQuery.eq('grade', gradeFilter);
 
-    // Fetch all student projections
-    const { data: projectionsData, error: projectionsError } = await supabase
-      .from('student_projections')
-      .select('*');
+    const { data: projectionsData, error: projectionsError } = await projectionsQuery;
     if (projectionsError) console.warn("❌ Projections fetch warning:", projectionsError.message);
-    const projectionsMap = {};
+
+    const projectionByGrade = {};
     (projectionsData || []).forEach(p => {
-      const key = `${p.grade}_${p.branch}_${p.zone}`;
-      projectionsMap[key] = p;
+      const gradeKey = String(p.grade || "").trim();
+      projectionByGrade[gradeKey] = (projectionByGrade[gradeKey] || 0) + Number(p.total_projection || 0);
     });
 
-    // Fetch all grade_wise_kits
-    const { data: kitsData, error: kitsError } = await supabase
-      .from('grade_wise_kits')
-      .select('*');
-    if (kitsError) console.warn("❌ Grade kits fetch warning:", kitsError.message);
-    const kitsMap = {};
-    (kitsData || []).forEach(k => {
-      kitsMap[`${k.grade}_${k.branch}_${k.zone}`] = k;
+    const summary = {};
+    (booksData || []).forEach(book => {
+      const grade = String(book.grade || "").trim();
+      const materialCode = String(book.material_code || "").trim();
+      const materialName = String(book.material_name || "").trim();
+      if (!grade || !materialCode) return;
+      const key = `${grade}||${materialCode}`;
+
+      if (!summary[key]) {
+        summary[key] = {
+          grade,
+          material_code: materialCode,
+          material_name: materialName,
+          book_list_quantity: 0,
+          zones: new Set(),
+          branches: new Set()
+        };
+      }
+
+      summary[key].book_list_quantity += Number(book.quantity || 0);
+      summary[key].zones.add(String(book.zone || "").trim());
+      summary[key].branches.add(String(book.branch_name || "").trim());
     });
 
-    // Merge the data
-    const mergedData = booksData.map(book => {
-      const pricing = pricingMap[book.material_code] || {};
-      const projKey = `${String(book.grade || "").trim()}_${String(book.branch_name || "").trim()}_${String(book.zone || "").trim()}`;
-      const projection = projectionsMap[projKey] || {};
-      const kit = kitsMap[projKey] || {};
+    const result = Object.values(summary)
+      .map(item => ({
+        grade: item.grade,
+        material_code: item.material_code,
+        material_name: item.material_name,
+        book_list_quantity: item.book_list_quantity,
+        projection: projectionByGrade[item.grade] || 0,
+        zones: Array.from(item.zones).filter(Boolean),
+        branches: Array.from(item.branches).filter(Boolean)
+      }))
+      .sort((a, b) => {
+        if (a.grade === b.grade) {
+          return a.material_code.localeCompare(b.material_code);
+        }
+        return a.grade.localeCompare(b.grade);
+      });
 
-      return {
-        // All individual_books columns
-        id: book.id,
-        category: book.category,
-        subject: book.subject,
-        material_name: book.material_name,
-        material_code: book.material_code,
-        tax_rate: book.tax_rate,
-        mandatory_optional: book.mandatory_optional,
-        volume: book.volume,
-        year: book.year,
-        author: book.author,
-        publisher: book.publisher,
-        per_unit_rate: book.per_unit_rate,
-        total_amount: book.total_amount,
-        composite_code: book.composite_code,
-        composite_name: book.composite_name,
-        quantity: book.quantity,
-        zone: book.zone,
-        grade: book.grade,
-        branch: book.branch_name,
-        created_at: book.created_at,
-        updated_at: book.updated_at,
-        
-        // From pricing table
-        mrp: pricing.mrp || book.mrp,
-        cost_price: pricing.cost_price || book.cost_price,
-        
-        // From student_projections table
-        new_admissions: projection.new_admissions || 0,
-        existing_admissions: projection.existing_admissions || 0,
-        
-        // From grade_wise_kits table
-        kit_name: kit.name || "N/A",
-        kit_id: kit.id || book.kit_id || "N/A",
-        total_books: (Number(projection.new_admissions || 0) + Number(projection.existing_admissions || 0)) * (Number(book.quantity) || 0)
-      };
-    });
-
-    res.json(mergedData);
+    res.json(result);
   } catch (err) {
     console.error("❌ DASHBOARD FETCH ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
