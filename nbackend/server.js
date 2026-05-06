@@ -1274,7 +1274,7 @@ app.post("/run-dispatch-load", async (req, res) => {
     const accessToken = await getAccessToken();
     
     // BRANCHES to process (test with one first)
-    const BRANCHES = [245];
+    const BRANCHES = [245,20,3,13];
     
     // Clear existing data in orders_table
     await supabase.from('orders_table').delete().neq('id', 0);
