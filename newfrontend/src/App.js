@@ -289,7 +289,7 @@ function App() {
         .catch(() => setOrderTableData([]))
         .finally(() => setIsOrderTableLoading(false));
     }
-  }, [viewMode]);
+  }, [viewMode, orderTableFilters]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
