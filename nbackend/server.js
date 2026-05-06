@@ -1027,10 +1027,14 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const validGradeBranches = {};
     (kitsData || []).forEach(kit => {
-      const g = String(kit.grade || "").trim().toLowerCase(); // Normalize grade key
-      const bs = String(kit.branch || "").split(',').map(s => s.trim()).filter(Boolean);
-      if (!validGradeBranches[g]) validGradeBranches[g] = new Set();
-      bs.forEach(b => validGradeBranches[g].add(b.toLowerCase())); // Normalize branch key
+      const gradeStr = String(kit.grade || "").trim().toLowerCase();
+      if (!gradeStr) return;
+
+      if (!validGradeBranches[gradeStr]) validGradeBranches[gradeStr] = new Set();
+      
+      // Split branch string which might contain multiple branches separated by commas or newlines
+      const bs = String(kit.branch || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+      bs.forEach(b => validGradeBranches[gradeStr].add(b.toLowerCase()));
     });
 
     let projectionsQuery = supabase.from('student_projections').select('*');
@@ -1101,7 +1105,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       }
 
       const qty = Number(book.quantity || 0);
-      const branches = String(book.branch_name || "").split(',').map(s => s.trim()).filter(Boolean);
+      // Robustly split branch names, handling multiple delimiters or extra spaces
+      const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
       const compositeCode = String(book.composite_code || "").trim();
       const normGrade = grade.toLowerCase();
       const normalizedFilter = branchFilter ? branchFilter.toLowerCase() : null;
