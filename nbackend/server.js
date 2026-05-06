@@ -1334,12 +1334,23 @@ app.post("/run-dispatch-load", async (req, res) => {
 ============================ */
 app.get("/order-table", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('orders_table')
-      .select('*')
-      .order('branch_name', { ascending: true });
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
 
-    if (error) throw error;
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
     res.json(data);
   } catch (err) {
     console.error("GET ORDER TABLE ERROR:", err.message);
