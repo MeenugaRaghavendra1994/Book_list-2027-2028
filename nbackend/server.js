@@ -1030,7 +1030,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const g = String(kit.grade || "").trim().toLowerCase(); // Normalize grade key
       const bs = String(kit.branch || "").split(',').map(s => s.trim()).filter(Boolean);
       if (!validGradeBranches[g]) validGradeBranches[g] = new Set();
-      bs.forEach(b => validGradeBranches[g].add(b.toLowerCase()));
+      bs.forEach(b => validGradeBranches[g].add(b.toLowerCase())); // Normalize branch key
     });
 
     let projectionsQuery = supabase.from('student_projections').select('*');
@@ -1283,31 +1283,56 @@ const processBranch = async (branch, accessToken) => {
   }
 };
 
+// Helper to get all branch IDs from the database
+const getAllBranchIds = async () => {
+  const { data, error } = await supabase.from('branches').select('id');
+  if (error) {
+    console.error("❌ Error fetching all branch IDs:", error.message);
+    return [];
+  }
+  return data.map(b => b.id);
+};
+
 app.post("/run-dispatch-load", async (req, res) => {
   // Simple auth check: expect user in body
   const { user } = req.body;
   if (!user || user.role !== 'Admin') {
     return res.status(403).json({ success: false, error: "Unauthorized: Admin access required" });
   }
+  
+  let logs = [];
+  const log = (message) => {
+    console.log(message);
+    logs.push(message);
+  };
 
   try {
+    log("Starting dispatch data load process...");
     const accessToken = await getAccessToken();
     
-    // BRANCHES to process (test with one first)
-    const BRANCHES = [245,20,3,13,57];
+    const allBranches = await getAllBranchIds();
+    log(`Found ${allBranches.length} branches to process.`);
     
     // Clear existing data in orders_table
-    await supabase.from('orders_table').delete().neq('id', 0);
+    await supabase.from('orders_table').delete().neq('id', 0); // Delete all records
+    log("Cleared existing data from orders_table.");
     
     let allRows = [];
     
-    // Process branches sequentially to avoid rate limits
-    for (const branch of BRANCHES) {
-      const result = await processBranch(branch, accessToken);
-      if (result.rows) {
-        allRows.push(...result.rows);
+    // Process branches in parallel using Promise.allSettled for robustness
+    const results = await Promise.allSettled(allBranches.map(branch => processBranch(branch, accessToken)));
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value.rows) {
+        allRows.push(...result.value.rows);
+        log(`Successfully processed branch ID ${allBranches[index]}. Fetched ${result.value.rows.length} rows.`);
+      } else if (result.status === 'rejected') {
+        log(`❌ Failed to process branch ID ${allBranches[index]} due to unhandled error: ${result.reason}`);
+      } else if (result.status === 'fulfilled' && result.value.failed_branch) {
+        log(`❌ Failed to process branch ID ${result.value.failed_branch}: ${result.value.error}`);
       }
-    }
+    });
+    log(`Total raw rows fetched: ${allRows.length}.`);
     
     // Aggregate data by branch_name, grade_name, item_sku, item_name and sum quantities
     console.log("📊 Aggregating data into orders_table");
@@ -1326,14 +1351,15 @@ app.post("/run-dispatch-load", async (req, res) => {
     
     const aggRows = Object.values(aggregated);
     if (aggRows.length > 0) {
+      log(`Aggregated ${aggRows.length} unique records.`);
       const { error: insertError } = await supabase.from('orders_table').insert(aggRows);
       if (insertError) throw insertError;
-      console.log(`📥 inserted ${aggRows.length} aggregated rows into orders_table`);
+      log(`Successfully inserted ${aggRows.length} aggregated records into orders_table.`);
     }
     
     res.json({ 
       success: true, 
-      message: `Dispatch data loaded successfully. Processed ${allRows.length} raw rows, aggregated into ${aggRows.length} records.` 
+      message: `Dispatch data loaded successfully. Processed ${allRows.length} raw rows, aggregated into ${aggRows.length} records.`, logs 
     });
     
   } catch (err) {

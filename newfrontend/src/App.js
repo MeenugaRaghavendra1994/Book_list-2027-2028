@@ -180,6 +180,8 @@ function App() {
   const [orderTableFilters, setOrderTableFilters] = useState({ branch_name: "", grade_name: "", item_sku: "", item_name: "" });
   const [orderTableData, setOrderTableData] = useState([]);
   const [dashboardData, setDashboardData] = useState([]);
+  const [showDispatchLoadModal, setShowDispatchLoadModal] = useState(false);
+  const [dispatchLoadLogs, setDispatchLoadLogs] = useState([]);
   const [isOrderTableLoading, setIsOrderTableLoading] = useState(false);
   const [showDashboardSection, setShowDashboardSection] = useState(false);
   const [showDataSection, setShowDataSection] = useState(false);
@@ -471,20 +473,26 @@ function App() {
   };
 
   const handleRunDispatchLoad = async () => {
-    // eslint-disable-next-line no-restricted-globals
-    if (!confirm("Are you sure you want to run the dispatch data load? This may take some time.")) return;
+    if (!window.confirm("Are you sure you want to run the dispatch data load? This may take some time and clear existing order data.")) return;
+    
+    setShowDispatchLoadModal(true);
+    setDispatchLoadLogs(["Starting dispatch data load... This may take a few minutes."]);
+
     try {
-      await axios.post(`${API_BASE_URL}/run-dispatch-load`, { user: currentUser });
-      alert("Dispatch data loaded successfully!");
-      // Optionally refresh order table if viewing it
+      const response = await axios.post(`${API_BASE_URL}/run-dispatch-load`, { user: currentUser });
+      setDispatchLoadLogs(prev => [...prev, ...response.data.logs, "Dispatch data loaded successfully!"]);
+      
       if (viewMode === 'order-table') {
         axios.get(`${API_BASE_URL}/order-table`)
           .then(res => setOrderTableData(res.data || []))
           .catch(() => setOrderTableData([]));
       }
     } catch (error) {
-      alert("Error running dispatch load: " + (error.response?.data?.error || error.message));
+      const errorMessage = "Error running dispatch load: " + (error.response?.data?.error || error.message);
+      setDispatchLoadLogs(prev => [...prev, errorMessage]);
     }
+    // Keep modal open until user closes it, or for a few seconds
+    // For now, user will close manually.
   };
 
   const handleApplyTableFilters = () => {
@@ -2111,6 +2119,36 @@ function App() {
               <h2 className="page-title">📦 Order Table</h2>
               <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
             </div>
+
+            {/* Dispatch Load Modal */}
+            {showDispatchLoadModal && (
+              <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+                <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: '400px' }}>
+                  <div className="modal-content shadow-lg border-0">
+                    <div className="modal-header bg-primary text-white">
+                      <h5 className="modal-title">Running Dispatch Load</h5>
+                      <button type="button" className="btn-close btn-close-white" onClick={() => setShowDispatchLoadModal(false)} aria-label="Close"></button>
+                    </div>
+                    <div className="modal-body p-4 bg-light" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      <div className="d-flex align-items-center mb-3">
+                        <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                        <span className="fw-bold text-primary">Processing...</span>
+                      </div>
+                      <div className="small text-muted">
+                        {dispatchLoadLogs.map((log, index) => (
+                          <div key={index}>{log}</div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="modal-footer bg-light">
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowDispatchLoadModal(false)}>
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Order Table Filters */}
             <div className="card card-soft p-4 shadow-sm border-0 mb-4">
