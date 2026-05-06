@@ -166,21 +166,14 @@ function App() {
 
   useEffect(() => {
     if (viewMode === "dashboard") {
-      axios.get(`${API_BASE_URL}/dashboard/item-wise-summary`)
-        .then(res => {
-          let data = res.data || [];
-          // Apply filters
-          if (dashboardFilters.zone) {
-            data = data.filter(item => String(item.zone || "").trim() === String(dashboardFilters.zone).trim());
-          }
-          if (dashboardFilters.branch) {
-            data = data.filter(item => String(item.branch || "").trim() === String(dashboardFilters.branch).trim());
-          }
-          if (dashboardFilters.grade) {
-            data = data.filter(item => String(item.grade || "").trim() === String(dashboardFilters.grade).trim());
-          }
-          setDashboardData(data);
-        })
+      axios.get(`${API_BASE_URL}/dashboard/item-wise-summary`, {
+        params: {
+          zone: dashboardFilters.zone,
+          branch: dashboardFilters.branch,
+          grade: dashboardFilters.grade
+        }
+      })
+        .then(res => setDashboardData(res.data || []))
         .catch(() => setDashboardData([]));
     }
   }, [viewMode, dashboardFilters]);
@@ -415,45 +408,33 @@ function App() {
     setShowView(false);
     setShowEdit(false);
     setActiveBook(null);
-    setCreateForm({ name: "", zone: "", branch: "", grade: "", status: "Pending" });
+    setCreateForm({ name: "", zone: "", branch: [], grade: "", status: "Pending" });
   };
 
   const handleCreateSave = async () => {
-    const branchValues = Array.isArray(createForm.branch) ? createForm.branch.filter(Boolean) : [createForm.branch].filter(Boolean);
-    if (!branchValues.length) {
-      alert("Please select at least one branch.");
+    if (!createForm.name.trim() || !createForm.zone.trim() || !createForm.grade.trim()) {
+      alert("Please enter Book List Name, Zone and Grade.");
       return;
     }
 
-    const createdKits = [];
+    const payload = {
+      ...createForm,
+      createdBy: "Meenga Raghavendra - 20240001178_OIS",
+      createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, ''),
+      statusInfo: createForm.status || "Pending"
+    };
+
     try {
-      for (const branch of branchValues) {
-        const newBook = {
-          ...createForm,
-          branch,
-          createdBy: "Meenga Raghavendra - 20240001178_OIS",
-          createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, ''),
-          statusInfo: createForm.status || "Pending",
-          books: []
-        };
-        const res = await axios.post(`${API_BASE_URL}/kits`, newBook);
-        createdKits.push(res.data.kit);
+      const res = await axios.post(`${API_BASE_URL}/kits`, payload);
+      const createdKits = Array.isArray(res.data.kits) ? res.data.kits : (res.data.kit ? [res.data.kit] : []);
+      if (createdKits.length) {
+        setBooks(prev => [...prev, ...createdKits]);
+        setFilteredBooks(prev => [...prev, ...createdKits]);
       }
-      setBooks(prev => [...prev, ...createdKits]);
-      setFilteredBooks(prev => [...prev, ...createdKits]);
     } catch (err) {
-      console.error("Failed to create kits:", err);
-      const fallbackKits = branchValues.map(branch => ({
-        id: books.length ? Math.max(...books.map(b => b.id)) + 1 : 1,
-        ...createForm,
-        branch,
-        createdBy: "Meenga Raghavendra - 20240001178_OIS",
-        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, ''),
-        statusInfo: createForm.status || "Pending",
-        books: []
-      }));
-      setBooks(prev => [...prev, ...fallbackKits]);
-      setFilteredBooks(prev => [...prev, ...fallbackKits]);
+      console.error("Failed to create kit:", err);
+      alert("Could not create book list. Please check the name, zone, and existing records.");
+      return;
     }
 
     setShowCreate(false);
@@ -1234,7 +1215,7 @@ function App() {
               <input type="text" className="form-control" value={createForm.name} onChange={e => setCreateForm(prev => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="col-12 col-md-6">
-              <label className="form-label">Branch</label>
+              <label className="form-label">Branches (optional)</label>
               <select className="form-select" multiple size={6} value={createForm.branch} onChange={e => {
                 const selected = Array.from(e.target.selectedOptions).map(option => option.value);
                 setCreateForm(prev => ({ ...prev, branch: selected }));
@@ -1242,7 +1223,7 @@ function App() {
                 <option value="">Select Branch</option>
                 {createBranchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
               </select>
-              <div className="form-text">Hold Ctrl/Cmd to select multiple branches.</div>
+              <div className="form-text">Leave empty to assign the book list to all branches in the selected zone automatically.</div>
             </div>
             <div className="col-12 col-md-4">
               <label className="form-label">Zone</label>
@@ -1848,66 +1829,24 @@ function App() {
                 <table className="table table-sm table-hover align-middle mb-0">
                   <thead className="table-light text-nowrap">
                     <tr>
-                      <th className="py-3 px-3">ID</th>
-                      <th className="py-3 px-3">Subject</th>
-                      <th className="py-3 px-3">Material Name</th>
-                      <th className="py-3 px-3">Material Code</th>
-                      <th className="py-3 px-3">Tax Rate</th>
-                      <th className="py-3 px-3">Mandatory/Optional</th>
-                      <th className="py-3 px-3">Category</th>
-                      <th className="py-3 px-3">Volume</th>
-                      <th className="py-3 px-3">Year</th>
-                      <th className="py-3 px-3">Author</th>
-                      <th className="py-3 px-3">Publisher</th>
-                      <th className="py-3 px-3">Per Unit Rate</th>
-                      <th className="py-3 px-3">Total Amount</th>
-                      <th className="py-3 px-3">MRP</th>
-                      <th className="py-3 px-3">Cost Price</th>
-                      <th className="py-3 px-3">Composite Code</th>
-                      <th className="py-3 px-3">Composite Name</th>
-                      <th className="py-3 px-3">Quantity</th>
-                      <th className="py-3 px-3">Zone</th>
                       <th className="py-3 px-3">Grade</th>
-                      <th className="py-3 px-3">Kit ID</th>
-                      <th className="py-3 px-3">Branch Name</th>
-                      <th className="py-3 px-3">New Admissions</th>
-                      <th className="py-3 px-3">Existing Admissions</th>
-                      <th className="py-3 px-3">Kit Name</th>
-                      <th className="py-3 px-3">Total Books Requirement</th>
+                      <th className="py-3 px-3">Material Code</th>
+                      <th className="py-3 px-3">Material Name</th>
+                      <th className="py-3 px-3">Book List Quantity</th>
+                      <th className="py-3 px-3">Projection</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
                     {dashboardData.length > 0 ? dashboardData.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="px-3">{item.id}</td>
-                        <td className="px-3">{item.subject || "N/A"}</td>
-                        <td className="px-3">{item.material_name || "N/A"}</td>
+                        <td className="px-3">{item.grade || "N/A"}</td>
                         <td className="px-3">{item.material_code || "N/A"}</td>
-                        <td className="px-3">{item.tax_rate}%</td>
-                        <td className="px-3">{item.mandatory_optional || "N/A"}</td>
-                        <td className="px-3">{item.category || "N/A"}</td>
-                        <td className="px-3">{item.volume || "N/A"}</td>
-                        <td className="px-3">{item.year || "N/A"}</td>
-                        <td className="px-3">{item.author || "N/A"}</td>
-                        <td className="px-3">{item.publisher || "N/A"}</td>
-                        <td className="px-3">₹{item.per_unit_rate || 0}</td>
-                        <td className="px-3">₹{item.total_amount || 0}</td>
-                        <td className="px-3" style={{ fontWeight: 'bold', color: '#28a745' }}>₹{item.mrp || "0"}</td>
-                        <td className="px-3" style={{ fontWeight: 'bold', color: '#007bff' }}>₹{item.cost_price || "0"}</td>
-                        <td className="px-3">{item.composite_code || "N/A"}</td>
-                        <td className="px-3">{item.composite_name || "N/A"}</td>
-                        <td className="px-3 text-center">{item.quantity}</td>
-                        <td className="px-3">{item.zone}</td>
-                        <td className="px-3">{item.grade}</td>
-                        <td className="px-3">{item.kit_id || "N/A"}</td>
-                        <td className="px-3">{item.branch}</td>
-                        <td className="px-3 text-center">{item.new_admissions || 0}</td>
-                        <td className="px-3 text-center">{item.existing_admissions || 0}</td>
-                        <td className="px-3">{item.kit_name || "N/A"}</td>
-                        <td className="px-3 text-center fw-bold text-danger">{item.total_books || 0}</td>
+                        <td className="px-3">{item.material_name || "N/A"}</td>
+                        <td className="px-3 text-center">{item.book_list_quantity || 0}</td>
+                        <td className="px-3 text-center">{item.projection || 0}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan="26" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
+                      <tr><td colSpan="5" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1916,14 +1855,9 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['ID', 'Subject', 'Material Name', 'Material Code', 'Tax Rate', 'Mandatory/Optional', 'Category', 'Volume', 'Year', 'Author', 'Publisher', 'Per Unit Rate', 'Total Amount', 'MRP', 'Cost Price', 'Composite Code', 'Composite Name', 'Quantity', 'Zone', 'Grade', 'Kit ID', 'Branch Name', 'New Admissions', 'Existing Admissions', 'Kit Name', 'Total Books Requirement'],
+                    ['Grade', 'Material Code', 'Material Name', 'Book List Quantity', 'Projection'],
                     ...dashboardData.map(item => [
-                      item.id, item.subject, item.material_name, item.material_code, item.tax_rate,
-                      item.mandatory_optional, item.category, item.volume, item.year, item.author,
-                      item.publisher, item.per_unit_rate, item.total_amount, item.mrp, item.cost_price,
-                      item.composite_code, item.composite_name, item.quantity, item.zone, item.grade,
-                      item.kit_id, item.branch, item.new_admissions, item.existing_admissions, item.kit_name,
-                      item.total_books
+                      item.grade, item.material_code, item.material_name, item.book_list_quantity, item.projection
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
