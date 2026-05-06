@@ -1085,7 +1085,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         material_name: item.material_name,
         book_list_quantity: item.book_list_quantity,
         projection: projectionByGrade[item.grade] || 0,
-        order_quantity: orderByGradeItem[`${item.grade}||${item.material_code}`] || 0,
+        paid_quantity: orderByGradeItem[`${item.grade}||${item.material_code}`] || 0,
         zones: Array.from(item.zones).filter(Boolean),
         branches: Array.from(item.branches).filter(Boolean)
       }))

@@ -2031,7 +2031,7 @@ function App() {
                       <th className="py-3 px-3">Material Name</th>
                       <th className="py-3 px-3">Book List Quantity</th>
                       <th className="py-3 px-3">Projection</th>
-                      <th className="py-3 px-3">Order Quantity</th>
+                      <th className="py-3 px-3">Paid quantity</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
@@ -2042,7 +2042,7 @@ function App() {
                         <td className="px-3">{item.material_name || "N/A"}</td>
                         <td className="px-3 text-center">{item.book_list_quantity || 0}</td>
                         <td className="px-3 text-center">{item.projection || 0}</td>
-                        <td className="px-3 text-center">{item.order_quantity || 0}</td>
+                        <td className="px-3 text-center">{item.paid_quantity || 0}</td>
                       </tr>
                     )) : (
                       <tr><td colSpan="6" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
@@ -2054,9 +2054,9 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['Grade', 'Material Code', 'Material Name', 'Book List Quantity', 'Projection', 'Order Quantity'],
+                    ['Grade', 'Material Code', 'Material Name', 'Book List Quantity', 'Projection', 'Paid quantity'],
                     ...dashboardData.map(item => [
-                      item.grade, item.material_code, item.material_name, item.book_list_quantity, item.projection, item.order_quantity
+                      item.grade, item.material_code, item.material_name, item.book_list_quantity, item.projection, item.paid_quantity
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
@@ -2089,7 +2089,7 @@ function App() {
                       <th className="py-3 px-3">Grade Name</th>
                       <th className="py-3 px-3">Item SKU</th>
                       <th className="py-3 px-3">Item Name</th>
-                      <th className="py-3 px-3">Quantity</th>
+                      <th className="py-3 px-3">Paid quantity</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
