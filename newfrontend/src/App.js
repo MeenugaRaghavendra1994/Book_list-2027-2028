@@ -336,7 +336,7 @@ function App() {
     }
 
     return (
-      <div ref={previewRef} className="position-relative d-inline-block" style={{ minWidth: 220 }}>
+      <div ref={previewRef} className="position-relative d-inline-block" style={{ minWidth: 150, maxWidth: 260 }}>
         <div className="d-flex flex-wrap gap-1 align-items-center">
           {visibleBranches.map((branchName, index) => (
             <span key={`${branchName}-${index}`} className="badge bg-secondary">{branchName}</span>
@@ -353,9 +353,21 @@ function App() {
         </div>
 
         {openPreview && (
-          <div className="position-absolute bg-white border rounded shadow-sm mt-2" style={{ width: 280, maxHeight: 240, overflowY: 'auto', zIndex: 1100 }}>
+          <div
+            className="position-absolute bg-white border rounded shadow-sm mt-2"
+            style={{
+              left: 0,
+              top: '100%',
+              width: 'min(280px, calc(100vw - 40px))',
+              maxHeight: 260,
+              overflowY: 'auto',
+              zIndex: 1100,
+              boxSizing: 'border-box',
+              wordBreak: 'break-word'
+            }}
+          >
             {branches.map((branchName, index) => (
-              <div key={`${branchName}-${index}`} className="px-3 py-2 border-bottom">
+              <div key={`${branchName}-${index}`} className="px-3 py-2 border-bottom" style={{ whiteSpace: 'normal', overflowWrap: 'break-word' }}>
                 {branchName}
               </div>
             ))}
