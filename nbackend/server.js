@@ -1135,7 +1135,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         summary[key].branches.add(b);
       });
 
-      summary[key].book_list_quantity += qty; // This should be added once per material code, not per branch
       summary[key].zones.add(String(book.zone || "").trim());
     });
 

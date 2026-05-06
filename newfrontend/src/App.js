@@ -2095,9 +2095,9 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['Grade', 'Material Code', 'Material Name', 'Book List Quantity', 'Projection', 'Paid quantity'],
+                    ['Grade', 'Material Code', 'Material Name', 'Projection', 'Paid quantity'],
                     ...dashboardData.map(item => [
-                      item.grade, item.material_code, item.material_name, item.book_list_quantity, item.projection, item.paid_quantity
+                      item.grade, item.material_code, item.material_name, item.projection, item.paid_quantity
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
