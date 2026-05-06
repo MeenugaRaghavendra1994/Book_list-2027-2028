@@ -25,9 +25,6 @@ function App() {
   const [filters, setFilters] = useState(initialFilters);
   const [editForm, setEditForm] = useState({ name: "", zone: "", branch: [], grade: "", status: "Pending" });
   const [createForm, setCreateForm] = useState({ name: "", zone: "", branch: [], grade: "", status: "Pending" });
-  const [bulkUploadRows, setBulkUploadRows] = useState([]);
-  const [bulkFileName, setBulkFileName] = useState("");
-  const [bulkError, setBulkError] = useState("");
   const [bulkBookRows, setBulkBookRows] = useState([]);
   const [bulkBookFileName, setBulkBookFileName] = useState("");
   const [bulkBookError, setBulkBookError] = useState("");
@@ -211,10 +208,27 @@ function App() {
   const volumeOptions = ["", "Volume 1", "Volume 2", "Volume 3", "Volume 4","Term 1","Term 2"];
   const yearOptions = ["", "2023-2024", "2024-2025", "2025-2026", "2026-2027", "2027-2028"];
 
+  const normalizeBranchArray = (branchData) => {
+    if (Array.isArray(branchData)) {
+      return branchData.map(item => String(item || "").trim()).filter(Boolean);
+    }
+    if (!branchData) return [];
+    return String(branchData).split(',').map(item => item.trim()).filter(Boolean);
+  };
+
+  const displayBranches = (branchData) => normalizeBranchArray(branchData).join(', ');
+
+  const renderBranchBadges = (branchData) => {
+    const branches = normalizeBranchArray(branchData);
+    if (!branches.length) return <span className="text-muted">None</span>;
+    return branches.map((branchName, index) => (
+      <span key={`${branchName}-${index}`} className="badge bg-secondary me-1 mb-1">{branchName}</span>
+    ));
+  };
+
   useEffect(() => {
     const next = books.filter(book => {
-      const branchString = String(book.branch || "");
-      const branchItems = branchString.split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
+      const branchItems = normalizeBranchArray(book.branch).map(item => item.toLowerCase());
       return (
         (!filters.zone || 
           String(book.zone || "").trim().toLowerCase() === String(filters.zone).trim().toLowerCase()) &&
@@ -474,70 +488,6 @@ function App() {
       });
       return row;
     });
-  };
-
-  const handleBulkFileChange = async (event) => {
-    setBulkError("");
-    const file = event.target.files[0];
-    if (!file) return;
-    setBulkFileName(file.name);
-
-    try {
-      const content = await file.text();
-      const rows = parseCsv(content);
-      if (!rows.length) {
-        setBulkError("CSV file is empty or invalid.");
-        setBulkUploadRows([]);
-        return;
-      }
-      setBulkUploadRows(rows);
-    } catch (error) {
-      setBulkError("Unable to read CSV file.");
-      setBulkUploadRows([]);
-    }
-  };
-
-  const handleBulkUpload = async () => {
-    if (!bulkUploadRows.length) {
-      setBulkError("Please choose a valid CSV file first.");
-      return;
-    }
-
-    const createdKits = [];
-    let failureCount = 0;
-
-    for (const row of bulkUploadRows) {
-      // Normalize keys to handle variations in CSV headers
-      const newKit = {
-        name: (row.name || row['Book List Name'] || row.book_list_name || row['Name'] || "").trim(),
-        zone: (row.zone || row['Zone'] || row['zone_name'] || row['Zone Name'] || "").trim(),
-        branch: (row.branch || row['Branch'] || row['Branch Name'] || row['branch_name'] || row['Branch_Name'] || "").trim(),
-        grade: (row.grade || row['Grade'] || "").trim(),
-        status: (row.status || row['Status'] || "Pending").trim(),
-        createdBy: (row.createdBy || row.created_by || row['Created By'] || "Bulk Upload").trim(),
-        createdAt: (row.createdAt || row.created_at || row['Created At'] || new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, '')).trim(),
-        statusInfo: (row.statusInfo || row.status_info || row['Status Info'] || row.status || "Pending").trim(),
-        books: []
-      };
-
-      try {
-        const response = await axios.post(`${API_BASE_URL}/kits`, newKit);
-        createdKits.push(response.data.kit);
-      } catch (err) {
-        console.error("Database Save Failed for kit:", newKit.name, err.message);
-        failureCount++;
-        // We push a temporary ID for local view, but warn the user later
-        createdKits.push({ ...newKit, id: `TEMP-${Date.now()}-${Math.random()}` });
-      }
-    }
-
-    setBooks(prev => [...prev, ...createdKits]);
-    setFilteredBooks(prev => [...prev, ...createdKits]);
-    if (failureCount > 0) alert(`${failureCount} kits failed to save to database. They are only visible locally until you refresh.`);
-    
-    setBulkUploadRows([]);
-    setBulkFileName("");
-    setBulkError("");
   };
 
   const handleBulkBookFileChange = async (event) => {
@@ -1223,21 +1173,6 @@ function App() {
             </div>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowCreate(false)}>Cancel</button>
           </div>
-          <div className="row gx-3 gy-3 mb-3">
-            <div className="col-12">
-              <label className="form-label">Bulk Upload Kits (CSV)</label>
-              <input type="file" accept=".csv" className="form-control" onChange={handleBulkFileChange} />
-              {bulkFileName && <div className="mt-2 text-sm text-muted">Selected file: {bulkFileName}</div>}
-              {bulkError && <div className="mt-2 text-danger">{bulkError}</div>}
-              {bulkUploadRows.length > 0 && (
-                <div className="mt-2">
-                  <div className="text-muted">Parsed {bulkUploadRows.length} rows from CSV.</div>
-                  <button className="btn btn-outline-primary btn-sm mt-2" onClick={handleBulkUpload}>Upload Kits</button>
-                </div>
-              )}
-              <div className="mt-2 text-muted">CSV columns should include: name, zone, branch, grade, status, createdBy, createdAt, statusInfo</div>
-            </div>
-          </div>
           <div className="row gx-3 gy-3">
             <div className="col-12 col-md-6">
               <label className="form-label">Book List Name</label>
@@ -1481,7 +1416,7 @@ function App() {
                 <td>{index + 1}</td>
                 <td>{book.name}</td>
                 <td>{book.zone}</td>
-                <td>{book.branch}</td>
+                <td>{renderBranchBadges(book.branch)}</td>
                 <td>{book.grade}</td>
                 <td>{book.createdBy}<br /><span className="text-muted small">{book.createdAt}</span></td>
                 <td><span className="badge bg-info text-dark">{book.status}</span></td>
@@ -1710,7 +1645,7 @@ function App() {
                           <td>{item.quantity}</td>
                           <td>{item.zone || activeBook.zone}</td>
                           <td>{item.grade || activeBook.grade}</td>
-                          <td>{item.branch_name || item.branch || activeBook.branch}</td>
+                          <td>{renderBranchBadges(item.branch_name || item.branch || activeBook.branch)}</td>
                           <td>
                             <div className="d-flex gap-2">
                               {userHasRight("Edit/Delete") && (
