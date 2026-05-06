@@ -178,6 +178,7 @@ function App() {
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
   const [dashboardData, setDashboardData] = useState([]);
+  const [orderTableData, setOrderTableData] = useState([]);
   const [showDashboardSection, setShowDashboardSection] = useState(false);
   const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "" });
   const roleOptions = ["Admin", "User"];
@@ -264,6 +265,14 @@ function App() {
         .catch(() => setDashboardData([]));
     }
   }, [viewMode, dashboardFilters]);
+
+  useEffect(() => {
+    if (viewMode === "order-table") {
+      axios.get(`${API_BASE_URL}/order-table`)
+        .then(res => setOrderTableData(res.data || []))
+        .catch(() => setOrderTableData([]));
+    }
+  }, [viewMode]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -440,6 +449,22 @@ function App() {
     setIsAuthenticated(false);
     setCurrentUser(null);
     localStorage.removeItem("school_book_erp_currentUser");
+  };
+
+  const handleRunDispatchLoad = async () => {
+    if (!confirm("Are you sure you want to run the dispatch data load? This may take some time.")) return;
+    try {
+      const response = await axios.post(`${API_BASE_URL}/run-dispatch-load`, { user: currentUser });
+      alert("Dispatch data loaded successfully!");
+      // Optionally refresh order table if viewing it
+      if (viewMode === 'order-table') {
+        axios.get(`${API_BASE_URL}/order-table`)
+          .then(res => setOrderTableData(res.data || []))
+          .catch(() => setOrderTableData([]));
+      }
+    } catch (error) {
+      alert("Error running dispatch load: " + (error.response?.data?.error || error.message));
+    }
   };
 
   const handleApplyTableFilters = () => {
@@ -1268,6 +1293,14 @@ function App() {
               </div>
             )
           ))}
+          {showReportsSection && (
+            <div
+              className={`table-item px-3 py-2 ${viewMode === 'order-table' ? 'active' : ''}`}
+              onClick={() => { setViewMode('order-table'); setSelectedTable(null); }}
+            >
+              {isSidebarCollapsed ? "📦" : "Order Table"}
+            </div>
+          )}
 
           {!isSidebarCollapsed && (
             <div
@@ -1289,6 +1322,15 @@ function App() {
               onClick={() => { setViewMode('dashboard'); setSelectedTable(null); }}
             >
               {isSidebarCollapsed ? "📊" : "Item Wise Summary"}
+            </div>
+          )}
+          {currentUser?.role === 'Admin' && (
+            <div
+              className="table-item px-3 py-2 mt-3"
+              onClick={handleRunDispatchLoad}
+              style={{ cursor: 'pointer', backgroundColor: '#fff3cd', border: '1px solid #ffeaa7' }}
+            >
+              {isSidebarCollapsed ? "🚀" : "Run Dispatch Load"}
             </div>
           )}
         </div>
@@ -1972,6 +2014,7 @@ function App() {
                       <th className="py-3 px-3">Material Name</th>
                       <th className="py-3 px-3">Book List Quantity</th>
                       <th className="py-3 px-3">Projection</th>
+                      <th className="py-3 px-3">Order Quantity</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
@@ -1982,9 +2025,10 @@ function App() {
                         <td className="px-3">{item.material_name || "N/A"}</td>
                         <td className="px-3 text-center">{item.book_list_quantity || 0}</td>
                         <td className="px-3 text-center">{item.projection || 0}</td>
+                        <td className="px-3 text-center">{item.order_quantity || 0}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan="5" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
+                      <tr><td colSpan="6" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1993,9 +2037,9 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['Grade', 'Material Code', 'Material Name', 'Book List Quantity', 'Projection'],
+                    ['Grade', 'Material Code', 'Material Name', 'Book List Quantity', 'Projection', 'Order Quantity'],
                     ...dashboardData.map(item => [
-                      item.grade, item.material_code, item.material_name, item.book_list_quantity, item.projection
+                      item.grade, item.material_code, item.material_name, item.book_list_quantity, item.projection, item.order_quantity
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
@@ -2004,6 +2048,63 @@ function App() {
                   const link = document.createElement('a');
                   link.href = url;
                   link.setAttribute('download', 'item-wise-summary.csv');
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                }}>Export to CSV</button>
+              </div>
+            </div>
+          </div>
+        ) : viewMode === 'order-table' ? (
+          <div className="page-wrapper py-4 px-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h2 className="page-title">📦 Order Table</h2>
+              <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
+            </div>
+
+            {/* Order Table */}
+            <div className="card card-soft p-4 shadow-sm border-0">
+              <div className="table-responsive rounded-3 border">
+                <table className="table table-sm table-hover align-middle mb-0">
+                  <thead className="table-light text-nowrap">
+                    <tr>
+                      <th className="py-3 px-3">Branch Name</th>
+                      <th className="py-3 px-3">Grade Name</th>
+                      <th className="py-3 px-3">Item SKU</th>
+                      <th className="py-3 px-3">Item Name</th>
+                      <th className="py-3 px-3">Quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-nowrap">
+                    {orderTableData.length > 0 ? orderTableData.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-3">{item.branch_name || "N/A"}</td>
+                        <td className="px-3">{item.grade_name || "N/A"}</td>
+                        <td className="px-3">{item.item_sku || "N/A"}</td>
+                        <td className="px-3">{item.item_name || "N/A"}</td>
+                        <td className="px-3 text-center">{item.quantity || 0}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan="5" className="text-center py-5 text-muted">No data found. Run dispatch load to populate data.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 d-flex justify-content-between align-items-center">
+                <small className="text-muted">Total Items: <strong>{orderTableData.length}</strong></small>
+                <button className="btn btn-success btn-sm" onClick={() => {
+                  const csvContent = [
+                    ['Branch Name', 'Grade Name', 'Item SKU', 'Item Name', 'Quantity'],
+                    ...orderTableData.map(item => [
+                      item.branch_name, item.grade_name, item.item_sku, item.item_name, item.quantity
+                    ])
+                  ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
+                  
+                  const blob = new Blob([csvContent], { type: 'text/csv' });
+                  const url = window.URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', 'order-table.csv');
                   document.body.appendChild(link);
                   link.click();
                   link.remove();
