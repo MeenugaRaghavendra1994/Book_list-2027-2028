@@ -977,6 +977,10 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const branchFilter = String(req.query.branch || "").trim();
     const gradeFilter = String(req.query.grade || "").trim();
 
+    // Fetch branches for filtering
+    const { data: branchList, error: branchError } = await supabase.from('branches').select('*');
+    if (branchError) console.warn("❌ Branches fetch warning:", branchError.message);
+
     let booksQuery = supabase.from('individual_books').select('*');
     if (zoneFilter) booksQuery = booksQuery.eq('zone', zoneFilter);
     if (branchFilter) booksQuery = booksQuery.eq('branch_name', branchFilter);
@@ -995,6 +999,29 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const { data: projectionsData, error: projectionsError } = await projectionsQuery;
     if (projectionsError) console.warn("❌ Projections fetch warning:", projectionsError.message);
+
+    // Fetch order table data
+    let orderQuery = supabase.from('order_table').select('*');
+    if (zoneFilter) {
+      // Since order_table has branch_name, we need to filter by branches in that zone
+      const zoneBranches = (branchList || []).filter(b => b.zone === zoneFilter).map(b => b.name);
+      if (zoneBranches.length > 0) {
+        orderQuery = orderQuery.in('branch_name', zoneBranches);
+      }
+    }
+    if (branchFilter) orderQuery = orderQuery.eq('branch_name', branchFilter);
+    if (gradeFilter) orderQuery = orderQuery.eq('grade_name', gradeFilter);
+
+    const { data: orderData, error: orderError } = await orderQuery;
+    if (orderError) console.warn("❌ Order data fetch warning:", orderError.message);
+
+    const orderByGradeItem = {};
+    (orderData || []).forEach(order => {
+      const grade = String(order.grade_name || "").trim();
+      const itemSku = String(order.item_sku || "").trim();
+      const key = `${grade}||${itemSku}`;
+      orderByGradeItem[key] = (orderByGradeItem[key] || 0) + Number(order.quantity || 0);
+    });
 
     const projectionByGrade = {};
     (projectionsData || []).forEach(p => {
@@ -1033,6 +1060,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         material_name: item.material_name,
         book_list_quantity: item.book_list_quantity,
         projection: projectionByGrade[item.grade] || 0,
+        order_quantity: orderByGradeItem[`${item.grade}||${item.material_code}`] || 0,
         zones: Array.from(item.zones).filter(Boolean),
         branches: Array.from(item.branches).filter(Boolean)
       }))
@@ -1067,6 +1095,67 @@ app.get("/download", async (req, res) => {
   XLSX.writeFile(wb, file);
 
   res.download(file);
+});
+
+/* ============================
+   🚀 RUN DISPATCH DATA LOAD
+============================ */
+const { spawn } = require('child_process');
+
+app.post("/run-dispatch-load", async (req, res) => {
+  // Simple auth check: expect user in body
+  const { user } = req.body;
+  if (!user || user.role !== 'Admin') {
+    return res.status(403).json({ success: false, error: "Unauthorized: Admin access required" });
+  }
+
+  try {
+    const pythonProcess = spawn('python', ['load_dispatch_data.py'], { cwd: __dirname });
+
+    let output = '';
+    let errorOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        res.json({ success: true, message: "Dispatch data loaded successfully", output });
+      } else {
+        res.status(500).json({ success: false, error: `Process failed with code ${code}`, output: errorOutput });
+      }
+    });
+
+    pythonProcess.on('error', (err) => {
+      res.status(500).json({ success: false, error: err.message });
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('order_table')
+      .select('*')
+      .order('branch_name', { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 /* ============================
