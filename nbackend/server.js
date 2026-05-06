@@ -1059,22 +1059,23 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     // Map orders by Grade -> Branch -> SKU
     const orderMap = {};
     (orderData || []).forEach(order => {
-      const g = String(order.grade_name || "").trim();
-      const b = String(order.branch_name || "").trim();
+      const g = String(order.grade_name || "").trim().toLowerCase();
+      const b = String(order.branch_name || "").trim().toLowerCase();
       const sku = String(order.item_sku || "").trim();
       if (!orderMap[g]) orderMap[g] = {};
       if (!orderMap[g][b]) orderMap[g][b] = {};
-      orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + Number(order.quantity || 0);
+      orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + (Number(order.quantity) || 0);
     });
 
     // Map projections by Grade -> Branch
     const projMap = {};
     (projectionsData || []).forEach(p => {
-      const g = String(p.grade || "").trim();
-      const b = String(p.branch || "").trim();
-      if (validGradeBranches[g] && validGradeBranches[g].has(b)) {
+      const g = String(p.grade || "").trim().toLowerCase();
+      const b = String(p.branch || "").trim().toLowerCase();
+      // Original keys for validation but lookup uses normalized
+      if (validGradeBranches[String(p.grade || "").trim()] && validGradeBranches[String(p.grade || "").trim()].has(String(p.branch || "").trim())) {
         if (!projMap[g]) projMap[g] = {};
-        projMap[g][b] = (projMap[g][b] || 0) + Number(p.total_projection || 0);
+        projMap[g][b] = (projMap[g][b] || 0) + (Number(p.total_projection) || 0);
       }
     });
 
@@ -1101,15 +1102,23 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       const qty = Number(book.quantity || 0);
       const branches = String(book.branch_name || "").split(',').map(s => s.trim()).filter(Boolean);
-      const cc = String(book.composite_code || "").trim();
+      const compositeCode = String(book.composite_code || "").trim();
+      const normGrade = grade.toLowerCase();
 
       branches.forEach(b => {
+        const normBranch = b.toLowerCase();
+
         // Projection = Sum (Branch Projection * Kit Quantity)
-        const branchProj = (projMap[grade] && projMap[grade][b]) || 0;
+        const branchProj = (projMap[normGrade] && projMap[normGrade][normBranch]) || 0;
         summary[key].projection += (branchProj * qty);
 
         // Paid = Sum (Branch Paid Orders * Kit Quantity)
-        const branchPaid = (orderMap[grade] && orderMap[grade][b] && orderMap[grade][b][cc]) || 0;
+        // Check both Composite Code and Material Code in the order table
+        let branchPaid = 0;
+        if (orderMap[normGrade] && orderMap[normGrade][normBranch]) {
+          if (compositeCode && orderMap[normGrade][normBranch][compositeCode]) branchPaid += orderMap[normGrade][normBranch][compositeCode];
+          if (materialCode && materialCode !== compositeCode && orderMap[normGrade][normBranch][materialCode]) branchPaid += orderMap[normGrade][normBranch][materialCode];
+        }
         summary[key].paid_quantity += (branchPaid * qty);
         
         summary[key].branches.add(b);

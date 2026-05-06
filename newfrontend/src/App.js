@@ -160,7 +160,6 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const storedUser = window.localStorage.getItem("school_book_erp_currentUser");
-      // Ensure rights are parsed if stored as string
       return storedUser ? JSON.parse(storedUser) : null;
     } catch (err) {
       return null;
@@ -179,10 +178,8 @@ function App() {
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
   const [dashboardData, setDashboardData] = useState([]);
-  const [orderTableFilters, setOrderTableFilters] = useState({ branch_name: "", grade_name: "", item_sku: "", item_name: "" });
   const [orderTableData, setOrderTableData] = useState([]);
   const [showDashboardSection, setShowDashboardSection] = useState(false);
-  const [isOrderTableLoading, setIsOrderTableLoading] = useState(false);
   const [showDataSection, setShowDataSection] = useState(false);
   const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "", material_name: "" });
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
@@ -275,21 +272,12 @@ function App() {
   }, [viewMode, dashboardFilters]);
 
   useEffect(() => {
-    if (viewMode === "order-table") { // Add orderTableFilters to dependencies
-      setIsOrderTableLoading(true);
-      axios.get(`${API_BASE_URL}/order-table`, {
-        params: {
-          branch_name: orderTableFilters.branch_name,
-          grade_name: orderTableFilters.grade_name,
-          item_sku: orderTableFilters.item_sku,
-          item_name: orderTableFilters.item_name,
-        }
-      })
+    if (viewMode === "order-table") {
+      axios.get(`${API_BASE_URL}/order-table`)
         .then(res => setOrderTableData(res.data || []))
-        .catch(() => setOrderTableData([]))
-        .finally(() => setIsOrderTableLoading(false));
+        .catch(() => setOrderTableData([]));
     }
-  }, [viewMode, orderTableFilters]);
+  }, [viewMode]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -2085,9 +2073,9 @@ function App() {
                 <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
                   const csvContent = [
-                    ['Grade', 'Material Code', 'Material Name', 'Projection', 'Paid quantity'],
+                    ['Grade', 'Material Code', 'Material Name', 'Book List Quantity', 'Projection', 'Paid quantity'],
                     ...dashboardData.map(item => [
-                      item.grade, item.material_code, item.material_name, item.projection, item.paid_quantity
+                      item.grade, item.material_code, item.material_name, item.book_list_quantity, item.projection, item.paid_quantity
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   
@@ -2110,63 +2098,6 @@ function App() {
               <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
             </div>
 
-            {/* Order Table Filters */}
-            <div className="card card-soft p-4 shadow-sm border-0 mb-4">
-              <div className="mb-3">
-                <h5 className="mb-3">Filter Order Table</h5>
-              </div>
-              <div className="row gx-3 gy-3">
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Branch Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search branch name..."
-                    value={orderTableFilters.branch_name}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, branch_name: e.target.value }))}
-                  />
-                </div>
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Grade Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search grade name..."
-                    value={orderTableFilters.grade_name}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, grade_name: e.target.value }))}
-                  />
-                </div>
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Item SKU</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search item SKU..."
-                    value={orderTableFilters.item_sku}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, item_sku: e.target.value }))}
-                  />
-                </div>
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Item Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search item name..."
-                    value={orderTableFilters.item_name}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, item_name: e.target.value }))}
-                  />
-                </div>
-                <div className="col-12 col-md-12 d-flex justify-content-end mt-2">
-                  <button 
-                    className="btn btn-outline-secondary btn-sm px-4" 
-                    onClick={() => setOrderTableFilters({ branch_name: "", grade_name: "", item_sku: "", item_name: "" })}
-                  >
-                    Clear Filters
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {/* Order Table */}
             <div className="card card-soft p-4 shadow-sm border-0">
               <div className="table-responsive rounded-3 border">
@@ -2181,14 +2112,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
-                    {isOrderTableLoading ? (
-                      <tr>
-                        <td colSpan="5" className="text-center py-5">
-                          <div className="spinner-border spinner-border-sm text-danger me-2" role="status"></div>
-                          <span className="fw-bold text-danger">Fetching Order Data...</span>
-                        </td>
-                      </tr>
-                    ) : orderTableData.length > 0 ? orderTableData.map((item, idx) => (
+                    {orderTableData.length > 0 ? orderTableData.map((item, idx) => (
                       <tr key={idx}>
                         <td className="px-3">{item.branch_name || "N/A"}</td>
                         <td className="px-3">{item.grade_name || "N/A"}</td>
