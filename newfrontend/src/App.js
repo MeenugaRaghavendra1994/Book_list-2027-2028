@@ -306,8 +306,6 @@ function App() {
     return String(branchData).split(',').map(item => item.trim()).filter(Boolean);
   };
 
-  const displayBranches = (branchData) => normalizeBranchArray(branchData).join(', ');
-
   const renderBranchBadges = (branchData) => {
     const branches = normalizeBranchArray(branchData);
     if (!branches.length) return <span className="text-muted">None</span>;
