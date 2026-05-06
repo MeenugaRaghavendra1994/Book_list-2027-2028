@@ -1027,7 +1027,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const validGradeBranches = {};
     (kitsData || []).forEach(kit => {
-      const g = String(kit.grade || "").trim();
+      const g = String(kit.grade || "").trim().toLowerCase(); // Normalize grade key
       const bs = String(kit.branch || "").split(',').map(s => s.trim()).filter(Boolean);
       if (!validGradeBranches[g]) validGradeBranches[g] = new Set();
       bs.forEach(b => validGradeBranches[g].add(b.toLowerCase()));
@@ -1128,7 +1128,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         summary[key].branches.add(b);
       });
 
-      summary[key].book_list_quantity += qty;
+      summary[key].book_list_quantity += qty; // This should be added once per material code, not per branch
       summary[key].zones.add(String(book.zone || "").trim());
     });
 
