@@ -180,6 +180,7 @@ function App() {
   const [dashboardData, setDashboardData] = useState([]);
   const [orderTableData, setOrderTableData] = useState([]);
   const [showDashboardSection, setShowDashboardSection] = useState(false);
+  const [showDataSection, setShowDataSection] = useState(false);
   const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "" });
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
@@ -1303,6 +1304,30 @@ function App() {
             </div>
           )}
 
+          {!isSidebarCollapsed && currentUser?.role === 'Admin' && (
+            <div
+              className="d-flex align-items-center justify-content-between table-item px-2 py-2 mt-3"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowDataSection(prev => !prev)}
+            >
+              <div className="small text-uppercase text-muted fw-bold" style={{ fontSize: '0.7rem' }}>
+                Data Management
+              </div>
+              <div className="text-muted">
+                {showDataSection ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>}
+              </div>
+            </div>
+          )}
+          {showDataSection && currentUser?.role === 'Admin' && (
+            <div
+              className="table-item px-3 py-2"
+              onClick={handleRunDispatchLoad}
+              style={{ cursor: 'pointer', backgroundColor: '#fff3cd', border: '1px solid #ffeaa7' }}
+            >
+              {isSidebarCollapsed ? "🚀" : "Run Dispatch Load"}
+            </div>
+          )}
+
           {!isSidebarCollapsed && (
             <div
               className="d-flex align-items-center justify-content-between table-item px-2 py-2 mt-3"
@@ -1323,15 +1348,6 @@ function App() {
               onClick={() => { setViewMode('dashboard'); setSelectedTable(null); }}
             >
               {isSidebarCollapsed ? "📊" : "Item Wise Summary"}
-            </div>
-          )}
-          {currentUser?.role === 'Admin' && (
-            <div
-              className="table-item px-3 py-2 mt-3"
-              onClick={handleRunDispatchLoad}
-              style={{ cursor: 'pointer', backgroundColor: '#fff3cd', border: '1px solid #ffeaa7' }}
-            >
-              {isSidebarCollapsed ? "🚀" : "Run Dispatch Load"}
             </div>
           )}
         </div>

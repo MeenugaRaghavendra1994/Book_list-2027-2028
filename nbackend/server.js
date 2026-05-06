@@ -5,6 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const XLSX = require("xlsx");
 const fs = require("fs");
+const axios = require("axios");
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
@@ -1100,7 +1101,114 @@ app.get("/download", async (req, res) => {
 /* ============================
    🚀 RUN DISPATCH DATA LOAD
 ============================ */
-const { spawn } = require('child_process');
+
+// Helper functions
+const clean = (value) => {
+  if (value == null || value === '') return null;
+  const v = String(value).trim();
+  if (v === '' || v.toLowerCase() === 'none' || v.toLowerCase() === 'null' || v.toLowerCase() === 'nan') return null;
+  if (v.endsWith('.0')) {
+    try {
+      return String(Math.floor(parseFloat(v)));
+    } catch {
+      return v;
+    }
+  }
+  return v;
+};
+
+const toInt = (value) => {
+  try {
+    if (value == null) return null;
+    return Math.floor(parseFloat(value));
+  } catch {
+    return null;
+  }
+};
+
+const cleanDatetime = (value) => {
+  if (value == null) return null;
+  try {
+    const parsed = new Date(value);
+    if (isNaN(parsed.getTime())) return null;
+    if (parsed.getFullYear() < 1900 || parsed.getFullYear() > 2100) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const getAccessToken = async () => {
+  const response = await axios.post("https://orchids.letseduvate.com/qbox/erp_user/access-token/", {
+    refresh: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc5MjgxOTM4NCwianRpIjoiYWZlYzE0YmQ2MDk5NDIxMmI3OTg0NmMzNjhiNjk0MTEiLCJ1c2VyX2lkIjo2NDUxNjMsImVtYWlsIjoibWVlbnVnYS5yYWdoYXZlbmRyYUBvcmNoaWRzaW50bC5lZHUuaW4iLCJmaXJzdF9uYW1lIjoiTUVFTlVHQSBSQUdIQVZFTkRSQSIsImxhc3RfbmFtZSI6IiIsImlzX2FjdGl2ZSI6dHJ1ZSwiaXNfc3VwZXJ1c2VyIjpmYWxzZSwidXNlcm5hbWUiOiIyMDI0MDAwMTE3OF9PSVMiLCJ1c2VyX2xldmVsIjozMywiYWNjZXNzX2xldmVsIjoiem9uZSIsInZlciI6MTB9.9_lvSVFhxyyPy5uX2ov0PDh7yuc3lnnRzjWYgEqgOSQ"
+  });
+  return response.data.data;
+};
+
+const processBranch = async (branch, accessToken) => {
+  console.log(`🚀 Fetching branch ${branch}`);
+
+  const url = `https://orchids.finance.letseduvate.com/qbox/ekart/branch-wise-dispatch-report/?finance_session_year=47&branch=${branch}&is_branch_wise_report=true`;
+
+  try {
+    const response = await axios.get(url, {
+      headers: { "Authorization": `Bearer ${accessToken}` },
+      responseType: 'arraybuffer',
+      timeout: 60000
+    });
+
+    const workbook = XLSX.read(response.data, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: null });
+
+    const rows = [];
+    for (const row of jsonData) {
+      try {
+        rows.push({
+          zone_id: clean(row['Zone ID']),
+          zone_name: clean(row['Zone Name']),
+          branch_id: clean(row['Branch ID']),
+          branch_name: clean(row['Branch Name']),
+          grade_name: clean(row['Grade Name']),
+          branch_pin_code: clean(row['Branch Pin Code']),
+          city: clean(row['City']),
+          student_name: clean(row['Student Name']),
+          erp_id: clean(row['ERP ID']),
+          ekart_order_no: clean(row['Ekart Order No']),
+          ekart_tracking_no: clean(row['Ekart Tracking No']),
+          ekart_order_created_at: clean(row['Ekart Order Created At']),
+          transaction_no: clean(row['Transaction No']),
+          payment_date: clean(row['Payment Date']),
+          payment_month: clean(row['Payment Month']),
+          item_sku: clean(row['Item SKU']),
+          item_name: clean(row['Item Name']),
+          quantity: toInt(row['Quantity']),
+          docket_id: clean(row['Docket ID']),
+          invoice_id: clean(row['Invoice ID']),
+          sub_category_name: clean(row['Sub Category Name']),
+          volume: clean(row['Volume']),
+          order_type: clean(row['Order Type']),
+          expected_delivery_date: clean(row['Expected Delivery Date']),
+          shipped_datetime: cleanDatetime(row['Shipped Datetime']),
+          delivery_datetime: cleanDatetime(row['Delivery Datetime']),
+          current_status: clean(row['Current Status']),
+          recieved_by_parent_datetime: cleanDatetime(row['Recieved By Parent Datetime']),
+          sales_order: clean(row['Sales Order']),
+          packed_datetime: cleanDatetime(row['Packed Datetime'])
+        });
+      } catch (e) {
+        console.error(`Failed to process row for branch ${branch}:`, e.message);
+      }
+    }
+
+    console.log(`✅ branch=${branch} done; rows=${rows.length}`);
+    return { rows };
+  } catch (e) {
+    console.error(`Failed branch ${branch}:`, e.message);
+    return { failed_branch: branch, error: e.message };
+  }
+};
 
 app.post("/run-dispatch-load", async (req, res) => {
   // Simple auth check: expect user in body
@@ -1110,32 +1218,66 @@ app.post("/run-dispatch-load", async (req, res) => {
   }
 
   try {
-    const pythonProcess = spawn('python', ['load_dispatch_data.py'], { cwd: __dirname });
-
-    let output = '';
-    let errorOutput = '';
-
-    pythonProcess.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    pythonProcess.on('close', (code) => {
-      if (code === 0) {
-        res.json({ success: true, message: "Dispatch data loaded successfully", output });
-      } else {
-        res.status(500).json({ success: false, error: `Process failed with code ${code}`, output: errorOutput });
+    const accessToken = await getAccessToken();
+    
+    // BRANCHES to process (test with one first)
+    const BRANCHES = [245];
+    
+    // Clear existing data
+    await supabase.from('dispatch_tracker_2627').delete().neq('id', 0);
+    
+    let allRows = [];
+    
+    // Process branches sequentially to avoid rate limits
+    for (const branch of BRANCHES) {
+      const result = await processBranch(branch, accessToken);
+      if (result.rows) {
+        // Insert rows
+        const { error } = await supabase.from('dispatch_tracker_2627').insert(result.rows);
+        if (error) throw error;
+        allRows.push(...result.rows);
+        console.log(`📥 inserted ${result.rows.length} rows for branch ${branch}`);
       }
+    }
+    
+    // Aggregate into order_table
+    console.log("📊 Aggregating data into order_table");
+    const { error: aggError } = await supabase.from('order_table').delete().neq('id', 0); // Clear existing
+    if (aggError) console.error("Clear error:", aggError);
+    
+    // Insert aggregated data
+    const { data: aggData, error: aggError2 } = await supabase
+      .from('dispatch_tracker_2627')
+      .select('branch_name, grade_name, item_sku, item_name, quantity')
+      .not('quantity', 'is', null);
+    
+    if (aggError2) throw aggError2;
+    
+    const aggregated = {};
+    aggData.forEach(row => {
+      const key = `${row.branch_name}||${row.grade_name}||${row.item_sku}||${row.item_name}`;
+      aggregated[key] = {
+        branch_name: row.branch_name,
+        grade_name: row.grade_name,
+        item_sku: row.item_sku,
+        item_name: row.item_name,
+        quantity: (aggregated[key]?.quantity || 0) + (row.quantity || 0)
+      };
     });
-
-    pythonProcess.on('error', (err) => {
-      res.status(500).json({ success: false, error: err.message });
+    
+    const aggRows = Object.values(aggregated);
+    if (aggRows.length > 0) {
+      const { error: insertError } = await supabase.from('order_table').insert(aggRows);
+      if (insertError) throw insertError;
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `Dispatch data loaded successfully. Processed ${allRows.length} rows.` 
     });
-
+    
   } catch (err) {
+    console.error("❌ DISPATCH LOAD ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
