@@ -1,6 +1,96 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import './App.css';
+
+const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = false, placeholder = "Search branch..." }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) setSearchTerm("");
+  }, [isOpen]);
+
+  const normalizedValue = Array.isArray(value) ? value.map(item => String(item || "").trim()).filter(Boolean) : [];
+  const filteredOptions = options
+    .filter(option => Boolean(option) && String(option).toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => String(a).localeCompare(String(b)));
+
+  const toggleOption = (option) => {
+    const normalized = String(option || "").trim();
+    if (!normalized) return;
+    if (normalizedValue.includes(normalized)) {
+      onChange(normalizedValue.filter(item => item !== normalized));
+    } else {
+      onChange([...normalizedValue, normalized]);
+    }
+  };
+
+  const removeOption = (option) => {
+    const normalized = String(option || "").trim();
+    onChange(normalizedValue.filter(item => item !== normalized));
+  };
+
+  return (
+    <div className="position-relative" ref={containerRef}>
+      <div
+        className={`form-control d-flex flex-wrap align-items-center gap-1 ${disabled ? 'bg-light' : 'cursor-pointer'}`}
+        onClick={() => { if (!disabled) setIsOpen(prev => !prev); }}
+        style={{ minHeight: 'calc(1.5em + 1rem)', cursor: disabled ? 'not-allowed' : 'pointer' }}
+      >
+        {normalizedValue.length === 0 && <span className="text-muted">{placeholder}</span>}
+        {normalizedValue.map((selected) => (
+          <span key={selected} className="badge bg-secondary d-flex align-items-center gap-1">
+            {selected}
+            <button type="button" className="btn-close btn-close-white btn-sm" aria-label="Remove" onClick={(e) => { e.stopPropagation(); removeOption(selected); }} />
+          </span>
+        ))}
+        <input
+          type="text"
+          className="border-0 flex-grow-1"
+          placeholder={normalizedValue.length === 0 ? placeholder : "Search branches..."}
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          disabled={disabled}
+          onFocus={() => setIsOpen(true)}
+          style={{ minWidth: 100, outline: 'none', boxShadow: 'none' }}
+        />
+      </div>
+
+      {isOpen && !disabled && (
+        <div className="position-absolute w-100 bg-white border rounded shadow-sm" style={{ maxHeight: 260, overflowY: 'auto', zIndex: 1050 }}>
+          {filteredOptions.length > 0 ? filteredOptions.map((option) => {
+            const normalized = String(option || "").trim();
+            const checked = normalizedValue.includes(normalized);
+            return (
+              <button
+                key={normalized}
+                type="button"
+                className="dropdown-item d-flex align-items-center justify-content-between"
+                onClick={() => toggleOption(normalized)}
+              >
+                <span>{normalized}</span>
+                <span>{checked ? '✓' : ''}</span>
+              </button>
+            );
+          }) : (
+            <div className="p-3 text-muted">No branches found.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Ensure it defaults to /api for Vercel deployments if no env var is provided
 const API_BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname === "localhost" ? "http://localhost:5000" : "/api");
@@ -196,11 +286,11 @@ function App() {
   }, [branchList, newBookItem.zone, activeBook]);
   const createBranchOptions = useMemo(() => {
     const filtered = createForm.zone ? branchList.filter(branch => branch.zone === createForm.zone) : branchList;
-    return ["", ...Array.from(new Set(filtered.map(branch => branch.name)))];
+    return Array.from(new Set(filtered.map(branch => branch.name))).filter(Boolean).sort();
   }, [branchList, createForm.zone]);
   const editBranchOptions = useMemo(() => {
     const filtered = editForm.zone ? branchList.filter(branch => branch.zone === editForm.zone) : branchList;
-    return ["", ...Array.from(new Set(filtered.map(branch => branch.name)))];
+    return Array.from(new Set(filtered.map(branch => branch.name))).filter(Boolean).sort();
   }, [branchList, editForm.zone]);
   const grades = useMemo(() => ["", ...gradeList.filter(Boolean)], [gradeList]);
   const statusOptions = ["", "Pending", "Approved", "Completed"];
@@ -1180,13 +1270,12 @@ function App() {
             </div>
             <div className="col-12 col-md-6">
               <label className="form-label">Branches (optional)</label>
-              <select className="form-select" multiple size={6} value={createForm.branch} onChange={e => {
-                const selected = Array.from(e.target.selectedOptions).map(option => option.value);
-                setCreateForm(prev => ({ ...prev, branch: selected }));
-              }}>
-                <option value="">Select Branch</option>
-                {createBranchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
-              </select>
+              <BranchMultiSelect
+                options={createBranchOptions}
+                value={createForm.branch}
+                onChange={(selected) => setCreateForm(prev => ({ ...prev, branch: selected }))}
+                placeholder="Search and select branches"
+              />
               <div className="form-text">Leave empty to assign the book list to all branches in the selected zone automatically.</div>
             </div>
             <div className="col-12 col-md-4">
@@ -1690,13 +1779,12 @@ function App() {
             </div>
             <div className="col-12 col-md-6">
               <label className="form-label">Branches</label>
-              <select className="form-select" multiple size={6} value={editForm.branch || []} onChange={e => {
-                const selected = Array.from(e.target.selectedOptions).map(option => option.value);
-                setEditForm(prev => ({ ...prev, branch: selected }));
-              }}>
-                <option value="">Select Branch</option>
-                {editBranchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
-              </select>
+              <BranchMultiSelect
+                options={editBranchOptions}
+                value={editForm.branch || []}
+                onChange={(selected) => setEditForm(prev => ({ ...prev, branch: selected }))}
+                placeholder="Search and select branches"
+              />
               <div className="form-text">Select one or more branches for this book list.</div>
             </div>
             <div className="col-12 col-md-4">
