@@ -316,6 +316,7 @@ function App() {
 
   const BranchPreviewDropdown = ({ branchData }) => {
     const [openPreview, setOpenPreview] = useState(false);
+    const [popupStyle, setPopupStyle] = useState({});
     const previewRef = useRef(null);
     const branches = normalizeBranchArray(branchData);
     const visibleBranches = branches.slice(0, 3);
@@ -331,12 +332,31 @@ function App() {
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    useEffect(() => {
+      if (!openPreview || !previewRef.current) return;
+      const rect = previewRef.current.getBoundingClientRect();
+      const popupWidth = Math.min(280, window.innerWidth - 40);
+      const left = Math.max(20, Math.min(rect.left + window.scrollX, window.innerWidth - popupWidth - 20));
+      const top = rect.bottom + window.scrollY + 8;
+      setPopupStyle({
+        position: 'fixed',
+        left,
+        top,
+        width: popupWidth,
+        maxHeight: 260,
+        overflowY: 'auto',
+        zIndex: 9999,
+        boxSizing: 'border-box',
+        wordBreak: 'break-word'
+      });
+    }, [openPreview]);
+
     if (!branches.length) {
       return <span className="text-muted">None</span>;
     }
 
     return (
-      <div ref={previewRef} className="position-relative d-inline-block" style={{ minWidth: 150, maxWidth: 260 }}>
+      <div ref={previewRef} className="d-inline-block" style={{ minWidth: 150, maxWidth: 260 }}>
         <div className="d-flex flex-wrap gap-1 align-items-center">
           {visibleBranches.map((branchName, index) => (
             <span key={`${branchName}-${index}`} className="badge bg-secondary">{branchName}</span>
@@ -353,19 +373,7 @@ function App() {
         </div>
 
         {openPreview && (
-          <div
-            className="position-absolute bg-white border rounded shadow-sm mt-2"
-            style={{
-              left: 0,
-              top: '100%',
-              width: 'min(280px, calc(100vw - 40px))',
-              maxHeight: 260,
-              overflowY: 'auto',
-              zIndex: 1100,
-              boxSizing: 'border-box',
-              wordBreak: 'break-word'
-            }}
-          >
+          <div className="bg-white border rounded shadow-sm mt-2" style={popupStyle}>
             {branches.map((branchName, index) => (
               <div key={`${branchName}-${index}`} className="px-3 py-2 border-bottom" style={{ whiteSpace: 'normal', overflowWrap: 'break-word' }}>
                 {branchName}
