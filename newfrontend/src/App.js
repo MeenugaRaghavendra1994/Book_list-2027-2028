@@ -314,6 +314,57 @@ function App() {
     ));
   };
 
+  const BranchPreviewDropdown = ({ branchData }) => {
+    const [openPreview, setOpenPreview] = useState(false);
+    const previewRef = useRef(null);
+    const branches = normalizeBranchArray(branchData);
+    const visibleBranches = branches.slice(0, 3);
+    const hiddenCount = branches.length - visibleBranches.length;
+
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (previewRef.current && !previewRef.current.contains(event.target)) {
+          setOpenPreview(false);
+        }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    if (!branches.length) {
+      return <span className="text-muted">None</span>;
+    }
+
+    return (
+      <div ref={previewRef} className="position-relative d-inline-block" style={{ minWidth: 220 }}>
+        <div className="d-flex flex-wrap gap-1 align-items-center">
+          {visibleBranches.map((branchName, index) => (
+            <span key={`${branchName}-${index}`} className="badge bg-secondary">{branchName}</span>
+          ))}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary px-2 py-1"
+              onClick={(e) => { e.stopPropagation(); setOpenPreview(prev => !prev); }}
+            >
+              +{hiddenCount} more
+            </button>
+          )}
+        </div>
+
+        {openPreview && (
+          <div className="position-absolute bg-white border rounded shadow-sm mt-2" style={{ width: 280, maxHeight: 240, overflowY: 'auto', zIndex: 1100 }}>
+            {branches.map((branchName, index) => (
+              <div key={`${branchName}-${index}`} className="px-3 py-2 border-bottom">
+                {branchName}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   useEffect(() => {
     const next = books.filter(book => {
       const branchItems = normalizeBranchArray(book.branch).map(item => item.toLowerCase());
@@ -1503,7 +1554,7 @@ function App() {
                 <td>{index + 1}</td>
                 <td>{book.name}</td>
                 <td>{book.zone}</td>
-                <td>{renderBranchBadges(book.branch)}</td>
+                <td><BranchPreviewDropdown branchData={book.branch} /></td>
                 <td>{book.grade}</td>
                 <td>{book.createdBy}<br /><span className="text-muted small">{book.createdAt}</span></td>
                 <td><span className="badge bg-info text-dark">{book.status}</span></td>
