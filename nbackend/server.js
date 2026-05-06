@@ -1001,6 +1001,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const zoneFilter = String(req.query.zone || "").trim();
     const branchFilter = String(req.query.branch || "").trim();
     const gradeFilter = String(req.query.grade || "").trim();
+    const materialNameFilter = String(req.query.material_name || "").trim();
 
     // Fetch branches for filtering
     const { data: branchList, error: branchError } = await supabase.from('branches').select('*');
@@ -1010,6 +1011,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (zoneFilter) booksQuery = booksQuery.eq('zone', zoneFilter);
     if (branchFilter) booksQuery = booksQuery.eq('branch_name', branchFilter);
     if (gradeFilter) booksQuery = booksQuery.eq('grade', gradeFilter);
+    if (materialNameFilter) booksQuery = booksQuery.ilike('material_name', `%${materialNameFilter}%`);
 
     const { data: booksData, error: booksError } = await booksQuery;
     if (booksError) throw booksError;
@@ -1088,7 +1090,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           book_list_quantity: 0,
           zones: new Set(),
           branches: new Set(),
-          composite_codes: new Set()
+          composite_mappings: []
         };
       }
 
@@ -1096,15 +1098,19 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       summary[key].zones.add(String(book.zone || "").trim());
       summary[key].branches.add(String(book.branch_name || "").trim());
       if (book.composite_code) {
-        summary[key].composite_codes.add(String(book.composite_code).trim());
+        summary[key].composite_mappings.push({
+          cc: String(book.composite_code).trim(),
+          qty: Number(book.quantity) || 0
+        });
       }
     });
 
     const result = Object.values(summary)
       .map(item => {
         let totalPaid = 0;
-        item.composite_codes.forEach(cc => {
-          totalPaid += (orderByGradeItem[`${item.grade}||${cc}`] || 0);
+        item.composite_mappings.forEach(m => {
+          const orders = orderByGradeItem[`${item.grade}||${m.cc}`] || 0;
+          totalPaid += (orders * m.qty);
         });
 
         return {

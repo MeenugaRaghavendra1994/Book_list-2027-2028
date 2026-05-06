@@ -181,7 +181,8 @@ function App() {
   const [orderTableData, setOrderTableData] = useState([]);
   const [showDashboardSection, setShowDashboardSection] = useState(false);
   const [showDataSection, setShowDataSection] = useState(false);
-  const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "" });
+  const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "", material_name: "" });
+  const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
 
@@ -255,15 +256,18 @@ function App() {
 
   useEffect(() => {
     if (viewMode === "dashboard") {
+      setIsDashboardLoading(true);
       axios.get(`${API_BASE_URL}/dashboard/item-wise-summary`, {
         params: {
           zone: dashboardFilters.zone,
           branch: dashboardFilters.branch,
-          grade: dashboardFilters.grade
+          grade: dashboardFilters.grade,
+          material_name: dashboardFilters.material_name
         }
       })
         .then(res => setDashboardData(res.data || []))
-        .catch(() => setDashboardData([]));
+        .catch(() => setDashboardData([]))
+        .finally(() => setIsDashboardLoading(false));
     }
   }, [viewMode, dashboardFilters]);
 
@@ -2009,10 +2013,20 @@ function App() {
                     {grades.map(grade => grade && <option key={grade} value={grade}>{grade}</option>)}
                   </select>
                 </div>
-                <div className="col-12 col-md-3 d-flex align-items-end">
+                <div className="col-12 col-md-3">
+                  <label className="form-label">Search Material Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search item name..."
+                    value={dashboardFilters.material_name}
+                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, material_name: e.target.value }))}
+                  />
+                </div>
+                <div className="col-12 col-md-12 d-flex justify-content-end mt-2">
                   <button 
-                    className="btn btn-outline-secondary btn-sm w-100" 
-                    onClick={() => setDashboardFilters({ zone: "", branch: "", grade: "" })}
+                    className="btn btn-outline-secondary btn-sm px-4" 
+                    onClick={() => setDashboardFilters({ zone: "", branch: "", grade: "", material_name: "" })}
                   >
                     Clear Filters
                   </button>
@@ -2035,7 +2049,14 @@ function App() {
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
-                    {dashboardData.length > 0 ? dashboardData.map((item, idx) => (
+                    {isDashboardLoading ? (
+                      <tr>
+                        <td colSpan="6" className="text-center py-5">
+                          <div className="spinner-border spinner-border-sm text-danger me-2" role="status"></div>
+                          <span className="fw-bold text-danger">Fetching Summary Data...</span>
+                        </td>
+                      </tr>
+                    ) : dashboardData.length > 0 ? dashboardData.map((item, idx) => (
                       <tr key={idx}>
                         <td className="px-3">{item.grade || "N/A"}</td>
                         <td className="px-3">{item.material_code || "N/A"}</td>
