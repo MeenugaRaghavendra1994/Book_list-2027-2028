@@ -452,6 +452,7 @@ function App() {
   };
 
   const handleRunDispatchLoad = async () => {
+    // eslint-disable-next-line no-restricted-globals
     if (!confirm("Are you sure you want to run the dispatch data load? This may take some time.")) return;
     try {
       const response = await axios.post(`${API_BASE_URL}/run-dispatch-load`, { user: currentUser });
