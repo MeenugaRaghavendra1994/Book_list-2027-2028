@@ -179,6 +179,7 @@ function App() {
   const [tableData, setTableData] = useState([]);
   const [orderTableFilters, setOrderTableFilters] = useState({ branch_name: "", grade_name: "", item_sku: "", item_name: "" });
   const [orderTableData, setOrderTableData] = useState([]);
+  const [dashboardData, setDashboardData] = useState([]);
   const [isOrderTableLoading, setIsOrderTableLoading] = useState(false);
   const [showDashboardSection, setShowDashboardSection] = useState(false);
   const [showDataSection, setShowDataSection] = useState(false);
@@ -197,7 +198,10 @@ function App() {
         const normalized = res.data.map(kit => ({
           ...kit,
           createdBy: kit.created_by || kit.createdBy || "Meenuga Raghavendra - 20240001178_OIS",
-          createdAt: kit.created_at || kit.createdAt || "25th Aug 26, 06:15 PM",
+          createdAt: kit.created_at || kit.createdAt || new Date().toLocaleString('en-GB', { 
+            day: '2-digit', month: 'short', year: '2-digit', 
+            hour: '2-digit', minute: '2-digit', hour12: true 
+          }).replace(/,/g, ''),
           statusInfo: kit.status_info || kit.statusInfo || "Pending",
           status: kit.status || "Pending",
           books: kit.books || []
