@@ -332,13 +332,13 @@ function App() {
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    useEffect(() => {
-      if (!openPreview || !previewRef.current) return;
+    const calculatePopupStyle = () => {
+      if (!previewRef.current) return {};
       const rect = previewRef.current.getBoundingClientRect();
       const popupWidth = Math.min(280, window.innerWidth - 40);
       const left = Math.max(20, Math.min(rect.left + window.scrollX, window.innerWidth - popupWidth - 20));
       const top = rect.bottom + window.scrollY + 8;
-      setPopupStyle({
+      return {
         position: 'fixed',
         left,
         top,
@@ -348,8 +348,18 @@ function App() {
         zIndex: 9999,
         boxSizing: 'border-box',
         wordBreak: 'break-word'
-      });
-    }, [openPreview]);
+      };
+    };
+
+    const togglePreview = (e) => {
+      e.stopPropagation();
+      if (openPreview) {
+        setOpenPreview(false);
+        return;
+      }
+      setPopupStyle(calculatePopupStyle());
+      setOpenPreview(true);
+    };
 
     if (!branches.length) {
       return <span className="text-muted">None</span>;
@@ -365,7 +375,8 @@ function App() {
             <button
               type="button"
               className="btn btn-sm btn-outline-secondary px-2 py-1"
-              onClick={(e) => { e.stopPropagation(); setOpenPreview(prev => !prev); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={togglePreview}
             >
               +{hiddenCount} more
             </button>
