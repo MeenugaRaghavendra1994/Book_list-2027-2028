@@ -1056,21 +1056,25 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const { data: orderData, error: orderError } = await orderQuery;
     if (orderError) console.warn("❌ Order data fetch warning:", orderError.message);
 
-    const orderByGradeItem = {};
+    // Map orders by Grade -> Branch -> SKU
+    const orderMap = {};
     (orderData || []).forEach(order => {
-      const grade = String(order.grade_name || "").trim();
-      const itemSku = String(order.item_sku || "").trim();
-      const key = `${grade}||${itemSku}`;
-      orderByGradeItem[key] = (orderByGradeItem[key] || 0) + Number(order.quantity || 0);
+      const g = String(order.grade_name || "").trim();
+      const b = String(order.branch_name || "").trim();
+      const sku = String(order.item_sku || "").trim();
+      if (!orderMap[g]) orderMap[g] = {};
+      if (!orderMap[g][b]) orderMap[g][b] = {};
+      orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + Number(order.quantity || 0);
     });
 
-    const projectionByGrade = {};
+    // Map projections by Grade -> Branch
+    const projMap = {};
     (projectionsData || []).forEach(p => {
       const g = String(p.grade || "").trim();
       const b = String(p.branch || "").trim();
-      // Only count projections for branches that are part of a kit for this specific grade
       if (validGradeBranches[g] && validGradeBranches[g].has(b)) {
-        projectionByGrade[g] = (projectionByGrade[g] || 0) + Number(p.total_projection || 0);
+        if (!projMap[g]) projMap[g] = {};
+        projMap[g][b] = (projMap[g][b] || 0) + Number(p.total_projection || 0);
       }
     });
 
@@ -1088,42 +1092,39 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           material_code: materialCode,
           material_name: materialName,
           book_list_quantity: 0,
+          projection: 0,
+          paid_quantity: 0,
           zones: new Set(),
-          branches: new Set(),
-          composite_mappings: []
+          branches: new Set()
         };
       }
 
-      summary[key].book_list_quantity += Number(book.quantity || 0);
+      const qty = Number(book.quantity || 0);
+      const branches = String(book.branch_name || "").split(',').map(s => s.trim()).filter(Boolean);
+      const cc = String(book.composite_code || "").trim();
+
+      branches.forEach(b => {
+        // Projection = Sum (Branch Projection * Kit Quantity)
+        const branchProj = (projMap[grade] && projMap[grade][b]) || 0;
+        summary[key].projection += (branchProj * qty);
+
+        // Paid = Sum (Branch Paid Orders * Kit Quantity)
+        const branchPaid = (orderMap[grade] && orderMap[grade][b] && orderMap[grade][b][cc]) || 0;
+        summary[key].paid_quantity += (branchPaid * qty);
+        
+        summary[key].branches.add(b);
+      });
+
+      summary[key].book_list_quantity += qty;
       summary[key].zones.add(String(book.zone || "").trim());
-      summary[key].branches.add(String(book.branch_name || "").trim());
-      if (book.composite_code) {
-        summary[key].composite_mappings.push({
-          cc: String(book.composite_code).trim(),
-          qty: Number(book.quantity) || 0
-        });
-      }
     });
 
     const result = Object.values(summary)
-      .map(item => {
-        let totalPaid = 0;
-        item.composite_mappings.forEach(m => {
-          const orders = orderByGradeItem[`${item.grade}||${m.cc}`] || 0;
-          totalPaid += (orders * m.qty);
-        });
-
-        return {
-          grade: item.grade,
-          material_code: item.material_code,
-          material_name: item.material_name,
-          book_list_quantity: item.book_list_quantity,
-          projection: (projectionByGrade[item.grade] || 0) * item.book_list_quantity,
-          paid_quantity: totalPaid,
+      .map(item => ({
+          ...item,
           zones: Array.from(item.zones).filter(Boolean),
           branches: Array.from(item.branches).filter(Boolean)
-        };
-      })
+      }))
       .sort((a, b) => {
         if (a.grade === b.grade) {
           return a.material_code.localeCompare(b.material_code);
