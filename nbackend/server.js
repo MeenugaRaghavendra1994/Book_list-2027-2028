@@ -328,21 +328,13 @@ app.post("/kits", async (req, res) => {
       return res.status(409).json({ success: false, error: `A book list named "${name}" already exists for zone "${zone}".` });
     }
 
-    const payload = branchValues.map(branchName => ({
-      name,
-      zone,
-      branch: branchName,
-      grade,
-      status,
-      created_by: createdBy,
-      created_at: createdAt,
-      status_info: statusInfo
-    }));
+    const branchString = branchValues.join(', ');
 
     const { data, error } = await supabase
       .from('grade_wise_kits')
-      .insert(payload)
-      .select();
+      .insert([{ name, zone, branch: branchString, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo }])
+      .select()
+      .single();
 
     if (error) {
        console.error("❌ SUPABASE KIT INSERT ERROR:", error.message);
@@ -350,10 +342,58 @@ app.post("/kits", async (req, res) => {
     }
 
     console.log("✅ KIT INSERT:", name, "zone:", zone, "branches:", branchValues.length);
-    res.json({ success: true, kits: data });
+    res.json({ success: true, kit: data });
 
   } catch (err) {
     console.error("❌ KIT INSERT ERROR:", err.message, err.details, err.hint);
+    res.status(500).send(err.message);
+  }
+});
+
+// PUT /kits/:id - Update a single kit with multiple branches
+app.put("/kits/:id", async (req, res) => {
+  const d = req.body;
+  try {
+    const id = req.params.id;
+    const name = String(d.name || "").trim();
+    const zone = String(d.zone || "").trim();
+    const grade = String(d.grade || "").trim();
+    const status = String(d.status || "Pending").trim();
+    const createdBy = String(d.createdBy || "").trim();
+    const createdAt = String(d.createdAt || "").trim();
+    const statusInfo = String(d.statusInfo || "").trim();
+
+    let branchValues = [];
+    if (Array.isArray(d.branch)) {
+      branchValues = d.branch.map(item => String(item || "").trim()).filter(Boolean);
+    } else if (d.branch) {
+      branchValues = [String(d.branch).trim()];
+    }
+
+    if (branchValues.length === 0 && zone) {
+      const { data: zoneBranches, error: branchError } = await supabase
+        .from('branches')
+        .select('name')
+        .eq('zone', zone);
+      if (branchError) throw branchError;
+      branchValues = (zoneBranches || []).map(b => String(b.name || "").trim()).filter(Boolean);
+    }
+
+    const branchString = branchValues.length ? branchValues.join(', ') : "";
+
+    const { data, error } = await supabase
+      .from('grade_wise_kits')
+      .update({ name, zone, branch: branchString, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: "Kit record not found." });
+
+    res.json({ success: true, kit: data });
+  } catch (err) {
+    console.error("❌ KIT UPDATE ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
   }
 });
