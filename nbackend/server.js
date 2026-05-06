@@ -1087,26 +1087,37 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           material_name: materialName,
           book_list_quantity: 0,
           zones: new Set(),
-          branches: new Set()
+          branches: new Set(),
+          composite_codes: new Set()
         };
       }
 
       summary[key].book_list_quantity += Number(book.quantity || 0);
       summary[key].zones.add(String(book.zone || "").trim());
       summary[key].branches.add(String(book.branch_name || "").trim());
+      if (book.composite_code) {
+        summary[key].composite_codes.add(String(book.composite_code).trim());
+      }
     });
 
     const result = Object.values(summary)
-      .map(item => ({
-        grade: item.grade,
-        material_code: item.material_code,
-        material_name: item.material_name,
-        book_list_quantity: item.book_list_quantity,
-        projection: projectionByGrade[item.grade] || 0,
-        paid_quantity: orderByGradeItem[`${item.grade}||${item.material_code}`] || 0,
-        zones: Array.from(item.zones).filter(Boolean),
-        branches: Array.from(item.branches).filter(Boolean)
-      }))
+      .map(item => {
+        let totalPaid = 0;
+        item.composite_codes.forEach(cc => {
+          totalPaid += (orderByGradeItem[`${item.grade}||${cc}`] || 0);
+        });
+
+        return {
+          grade: item.grade,
+          material_code: item.material_code,
+          material_name: item.material_name,
+          book_list_quantity: item.book_list_quantity,
+          projection: projectionByGrade[item.grade] || 0,
+          paid_quantity: totalPaid,
+          zones: Array.from(item.zones).filter(Boolean),
+          branches: Array.from(item.branches).filter(Boolean)
+        };
+      })
       .sort((a, b) => {
         if (a.grade === b.grade) {
           return a.material_code.localeCompare(b.material_code);
