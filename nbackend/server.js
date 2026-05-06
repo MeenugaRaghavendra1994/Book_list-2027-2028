@@ -1017,6 +1017,20 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       return res.json([]);
     }
 
+    // Fetch kits to identify valid branch-grade combinations for projections
+    let kitsQuery = supabase.from('grade_wise_kits').select('grade, branch');
+    if (zoneFilter) kitsQuery = kitsQuery.eq('zone', zoneFilter);
+    if (gradeFilter) kitsQuery = kitsQuery.eq('grade', gradeFilter);
+    const { data: kitsData } = await kitsQuery;
+
+    const validGradeBranches = {};
+    (kitsData || []).forEach(kit => {
+      const g = String(kit.grade || "").trim();
+      const bs = String(kit.branch || "").split(',').map(s => s.trim()).filter(Boolean);
+      if (!validGradeBranches[g]) validGradeBranches[g] = new Set();
+      bs.forEach(b => validGradeBranches[g].add(b));
+    });
+
     let projectionsQuery = supabase.from('student_projections').select('*');
     if (zoneFilter) projectionsQuery = projectionsQuery.eq('zone', zoneFilter);
     if (branchFilter) projectionsQuery = projectionsQuery.eq('branch', branchFilter);
@@ -1050,8 +1064,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const projectionByGrade = {};
     (projectionsData || []).forEach(p => {
-      const gradeKey = String(p.grade || "").trim();
-      projectionByGrade[gradeKey] = (projectionByGrade[gradeKey] || 0) + Number(p.total_projection || 0);
+      const g = String(p.grade || "").trim();
+      const b = String(p.branch || "").trim();
+      // Only count projections for branches that are part of a kit for this specific grade
+      if (validGradeBranches[g] && validGradeBranches[g].has(b)) {
+        projectionByGrade[g] = (projectionByGrade[g] || 0) + Number(p.total_projection || 0);
+      }
     });
 
     const summary = {};
