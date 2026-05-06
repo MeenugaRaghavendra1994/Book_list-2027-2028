@@ -1002,9 +1002,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (projectionsError) console.warn("❌ Projections fetch warning:", projectionsError.message);
 
     // Fetch order table data
-    let orderQuery = supabase.from('order_table').select('*');
+    let orderQuery = supabase.from('orders_table').select('*');
     if (zoneFilter) {
-      // Since order_table has branch_name, we need to filter by branches in that zone
+      // Since orders_table has branch_name, we need to filter by branches in that zone
       const zoneBranches = (branchList || []).filter(b => b.zone === zoneFilter).map(b => b.name);
       if (zoneBranches.length > 0) {
         orderQuery = orderQuery.in('branch_name', zoneBranches);
@@ -1223,8 +1223,8 @@ app.post("/run-dispatch-load", async (req, res) => {
     // BRANCHES to process (test with one first)
     const BRANCHES = [245];
     
-    // Clear existing data
-    await supabase.from('dispatch_tracker_2627').delete().neq('id', 0);
+    // Clear existing data in orders_table
+    await supabase.from('orders_table').delete().neq('id', 0);
     
     let allRows = [];
     
@@ -1232,29 +1232,15 @@ app.post("/run-dispatch-load", async (req, res) => {
     for (const branch of BRANCHES) {
       const result = await processBranch(branch, accessToken);
       if (result.rows) {
-        // Insert rows
-        const { error } = await supabase.from('dispatch_tracker_2627').insert(result.rows);
-        if (error) throw error;
         allRows.push(...result.rows);
-        console.log(`📥 inserted ${result.rows.length} rows for branch ${branch}`);
       }
     }
     
-    // Aggregate into order_table
-    console.log("📊 Aggregating data into order_table");
-    const { error: aggError } = await supabase.from('order_table').delete().neq('id', 0); // Clear existing
-    if (aggError) console.error("Clear error:", aggError);
-    
-    // Insert aggregated data
-    const { data: aggData, error: aggError2 } = await supabase
-      .from('dispatch_tracker_2627')
-      .select('branch_name, grade_name, item_sku, item_name, quantity')
-      .not('quantity', 'is', null);
-    
-    if (aggError2) throw aggError2;
-    
+    // Aggregate data by branch_name, grade_name, item_sku, item_name and sum quantities
+    console.log("📊 Aggregating data into orders_table");
     const aggregated = {};
-    aggData.forEach(row => {
+    allRows.forEach(row => {
+      if (!row.quantity || !row.branch_name || !row.grade_name || !row.item_sku || !row.item_name) return;
       const key = `${row.branch_name}||${row.grade_name}||${row.item_sku}||${row.item_name}`;
       aggregated[key] = {
         branch_name: row.branch_name,
@@ -1267,13 +1253,14 @@ app.post("/run-dispatch-load", async (req, res) => {
     
     const aggRows = Object.values(aggregated);
     if (aggRows.length > 0) {
-      const { error: insertError } = await supabase.from('order_table').insert(aggRows);
+      const { error: insertError } = await supabase.from('orders_table').insert(aggRows);
       if (insertError) throw insertError;
+      console.log(`📥 inserted ${aggRows.length} aggregated rows into orders_table`);
     }
     
     res.json({ 
       success: true, 
-      message: `Dispatch data loaded successfully. Processed ${allRows.length} rows.` 
+      message: `Dispatch data loaded successfully. Processed ${allRows.length} raw rows, aggregated into ${aggRows.length} records.` 
     });
     
   } catch (err) {
@@ -1288,7 +1275,7 @@ app.post("/run-dispatch-load", async (req, res) => {
 app.get("/order-table", async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('order_table')
+      .from('orders_table')
       .select('*')
       .order('branch_name', { ascending: true });
 
