@@ -187,6 +187,7 @@ function App() {
   const [showDataSection, setShowDataSection] = useState(false);
   const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "", material_name: "" });
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
 
@@ -195,6 +196,7 @@ function App() {
   };
 
   useEffect(() => {
+    setIsProcessing(true);
     axios.get(`${API_BASE_URL}/kits`)
       .then(res => {
         const normalized = res.data.map(kit => ({
@@ -250,20 +252,24 @@ function App() {
 
     axios.get(`${API_BASE_URL}/tables`)
       .then(res => setTables(res.data || []))
-      .catch(() => setTables([]));
+      .catch(() => setTables([]))
+      .finally(() => setIsProcessing(false));
   }, []);
 
   useEffect(() => {
     if (selectedTable && viewMode === "explorer") { // Add tableFilters to dependencies
+      setIsProcessing(true);
       axios.get(`${API_BASE_URL}/data/${selectedTable}`, { params: tableFilters })
         .then(res => setTableData(res.data || []))
-        .catch(() => setTableData([]));
+        .catch(() => setTableData([]))
+        .finally(() => setIsProcessing(false));
     }
   }, [selectedTable, viewMode, tableFilters]);
 
   useEffect(() => {
     if (viewMode === "dashboard") {
       setIsDashboardLoading(true);
+      setIsProcessing(true);
       axios.get(`${API_BASE_URL}/dashboard/item-wise-summary`, {
         params: {
           zone: dashboardFilters.zone,
@@ -274,13 +280,17 @@ function App() {
       })
         .then(res => setDashboardData(res.data || []))
         .catch(() => setDashboardData([]))
-        .finally(() => setIsDashboardLoading(false));
+        .finally(() => {
+          setIsDashboardLoading(false);
+          setIsProcessing(false);
+        });
     }
   }, [viewMode, dashboardFilters]);
 
   useEffect(() => {
     if (viewMode === "order-table") {
       setIsOrderTableLoading(true);
+      setIsProcessing(true);
       axios.get(`${API_BASE_URL}/order-table`, {
         params: {
           branch_name: orderTableFilters.branch_name,
@@ -291,7 +301,10 @@ function App() {
       })
         .then(res => setOrderTableData(res.data || []))
         .catch(() => setOrderTableData([]))
-        .finally(() => setIsOrderTableLoading(false));
+        .finally(() => {
+          setIsOrderTableLoading(false);
+          setIsProcessing(false);
+        });
     }
   }, [viewMode, orderTableFilters]);
 
@@ -501,6 +514,8 @@ function App() {
 
   const handleLogin = (event) => {
     event.preventDefault();
+    setIsProcessing(true);
+    setTimeout(() => {
     const foundUser = users.find(user =>
       user.username.trim().toLowerCase() === loginForm.username.trim().toLowerCase() &&
       user.password.trim() === loginForm.password.trim()
@@ -510,9 +525,12 @@ function App() {
       setIsAuthenticated(true);
       localStorage.setItem("school_book_erp_currentUser", JSON.stringify(foundUser));
       setLoginForm({ username: "", password: "" });
+      setIsProcessing(false);
       return;
     }
     alert("Invalid credentials. Please use a registered username and password.");
+    setIsProcessing(false);
+    }, 100);
   };
 
   const handleCreateUser = async () => {
@@ -535,6 +553,7 @@ function App() {
       role: newUser.role,
       rights: newUser.rights
     };
+    setIsProcessing(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/users`, payload);
       const savedUser = {
@@ -547,6 +566,8 @@ function App() {
       const fallback = { id: Date.now(), ...payload };
       setUsers(prev => [...prev, fallback]);
       alert(`User ${payload.username} created locally (database save failed).`);
+    } finally {
+      setIsProcessing(false);
     }
     setNewUser({ username: "", password: "", role: "Admin", rights: [] });
     setShowCreateUser(false);
@@ -580,6 +601,7 @@ function App() {
       role: manageUserForm.role,
       rights: manageUserForm.rights
     };
+    setIsProcessing(true);
     try {
       const res = await axios.put(`${API_BASE_URL}/users/${manageUserForm.id}`, updatePayload);
       const updatedUser = {
@@ -592,11 +614,14 @@ function App() {
       alert(`User ${updatedUser.username} updated successfully.`);
     } catch (err) {
       alert("Failed to update user in database.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleDeleteUser = async (id) => {
     if (!window.confirm("Delete this user permanently?")) return;
+    setIsProcessing(true);
     try {
       await axios.delete(`${API_BASE_URL}/users/${id}`);
       setUsers(prev => prev.filter(user => user.id !== id));
@@ -606,19 +631,24 @@ function App() {
       }
     } catch (err) {
       alert("Failed to delete user from database.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleView = async (id) => {
     const kit = books.find(item => item.id === id);
     if (!kit) return;
+    setIsProcessing(true);
     if (!kit.books || kit.books.length === 0) {
-      const res = await axios.get(`${API_BASE_URL}/kits/${id}`);
-      setSelectedBooks(res.data.books || []);
-      setActiveBook(res.data);
+      axios.get(`${API_BASE_URL}/kits/${id}`).then(res => {
+        setSelectedBooks(res.data.books || []);
+        setActiveBook(res.data);
+      }).finally(() => setIsProcessing(false));
     } else {
       setSelectedBooks(kit.books);
       setActiveBook(kit);
+      setIsProcessing(false);
     }
     setShowView(true);
     setShowEdit(false);
@@ -666,6 +696,7 @@ function App() {
       statusInfo: createForm.status || "Pending"
     };
 
+    setIsProcessing(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/kits`, payload);
       const createdKits = Array.isArray(res.data.kits) ? res.data.kits : (res.data.kit ? [res.data.kit] : []);
@@ -677,6 +708,8 @@ function App() {
       console.error("Failed to create kit:", err);
       alert("Could not create book list. Please check the name, zone, and existing records.");
       return;
+    } finally {
+      setIsProcessing(false);
     }
 
     setShowCreate(false);
@@ -690,12 +723,15 @@ function App() {
     }
     if (!window.confirm("Are you sure you want to delete this kit and all its books?")) return;
 
+    setIsProcessing(true);
     try {
       await axios.delete(`${API_BASE_URL}/kits/${id}`);
       setBooks(prev => prev.filter(kit => kit.id !== id));
       setFilteredBooks(prev => prev.filter(kit => kit.id !== id));
     } catch (err) {
       alert("Failed to delete kit: " + (err.response?.data || err.message));
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -740,6 +776,7 @@ function App() {
       return;
     }
 
+    setIsProcessing(true);
     const addedBooks = [];
     for (const row of bulkBookRows) {
       const bookItem = {
@@ -786,6 +823,7 @@ function App() {
     setBulkBookRows([]);
     setBulkBookFileName("");
     setBulkBookError("");
+    setIsProcessing(false);
   };
 
   const handleEditTableRow = (row) => {
@@ -804,6 +842,7 @@ function App() {
     }
     if (!window.confirm(`Are you sure you want to delete this record (ID: ${id}) from table "${table}"?`)) return;
 
+    setIsProcessing(true);
     try {
       const response = await axios.delete(`${API_BASE_URL}/${table}/${id}`);
       if (response.data.success) {
@@ -818,6 +857,8 @@ function App() {
     } catch (err) {
       console.error(`Delete failed for ${table} (ID: ${id}):`, err.response?.data || err.message);
       alert(`Could not delete record from ${table}: ` + (err.response?.data?.error || err.message || "Unknown error"));
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -828,6 +869,7 @@ function App() {
       return;
     }
 
+    setIsProcessing(true);
     try {
       const payload = { ...editingTableRow };
       // Remove id from payload as it's in the URL
@@ -848,6 +890,8 @@ function App() {
     } catch (err) {
       console.error(`Update failed for ${selectedTable} (ID: ${editingTableRow.id}):`, err.response?.data || err.message);
       alert(`Could not update record in ${selectedTable}: ` + (err.response?.data?.error || err.message || "Unknown error"));
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -862,6 +906,7 @@ function App() {
       return;
     }
 
+    setIsProcessing(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/branches`, {
         name: newBranchForm.name.trim(),
@@ -882,6 +927,8 @@ function App() {
     } catch (err) {
       console.error("Create branch failed:", err.response?.data || err.message);
       alert("Could not create branch: " + (err.response?.data?.error || err.message || "Unknown error"));
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -891,6 +938,7 @@ function App() {
       return;
     }
 
+    setIsProcessing(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/student_projections`, {
         grade: newProjectionForm.grade.trim(),
@@ -914,6 +962,8 @@ function App() {
     } catch (err) {
       console.error("Create projection failed:", err.response?.data || err.message);
       alert("Could not create projection: " + (err.response?.data?.error || err.message || "Unknown error"));
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -922,6 +972,7 @@ function App() {
       alert("No table selected or no data to export.");
       return;
     }
+    setIsProcessing(true);
     try {
       const response = await axios.get(`${API_BASE_URL}/export-table/${selectedTable}`, {
         responseType: 'blob', // Important for downloading files
@@ -936,6 +987,8 @@ function App() {
     } catch (error) {
       alert("Failed to export table data.");
       console.error("Export table data error:", error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -950,6 +1003,7 @@ function App() {
 
     if (item.id && isRealId) {
       if (!window.confirm(`Delete book item (ID: ${item.id}) from the database?`)) return;
+      setIsProcessing(true);
       try {
         const response = await axios.delete(`${API_BASE_URL}/books/${item.id}`);
         if (!response.data.success) {
@@ -969,6 +1023,8 @@ function App() {
         } else {
           alert("Could not delete book: " + (err.response?.data?.error || err.message || "Unknown error"));
         }
+      } finally {
+        setIsProcessing(false);
       }
     } else {
       const reason = !item.id ? "ID is missing/null" : "ID is a temporary local ID";
@@ -999,6 +1055,7 @@ function App() {
       branch: Array.isArray(editForm.branch) ? editForm.branch : String(editForm.branch || "").split(',').map(item => item.trim()).filter(Boolean)
     };
 
+    setIsProcessing(true);
     try {
       const response = await axios.put(`${API_BASE_URL}/kits/${activeBook.id}`, payload);
       const updatedKit = response.data.kit || { ...activeBook, ...payload, branch: Array.isArray(payload.branch) ? payload.branch.join(', ') : String(payload.branch) };
@@ -1009,6 +1066,8 @@ function App() {
     } catch (err) {
       console.error("Failed to update kit:", err);
       alert("Could not save kit changes. Please try again.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1076,6 +1135,7 @@ function App() {
     };
 
     let savedBookItem = bookItem;
+    setIsProcessing(true);
     try {
       if (bookItem.id) {
         const response = await axios.put(`${API_BASE_URL}/books/${bookItem.id}`, bookItem);
@@ -1102,6 +1162,8 @@ function App() {
       console.error("Book save failed:", err?.response?.data || err.message);
       alert("Database Error: Could not save the book. " + (err.response?.data || "Check console for details."));
       return; // Stop execution if DB save failed
+    } finally {
+      setIsProcessing(false);
     }
     setEditingBookIndex(null);
     setNewBookItem({
@@ -1192,6 +1254,7 @@ function App() {
 
   const handleExport = async () => {
     if (!filteredBooks.length) return;
+    setIsProcessing(true);
     try {
       // Fetch complete kit data with books for all filtered kits
       const kitsWithBooks = await Promise.all(
@@ -1206,11 +1269,14 @@ function App() {
     } catch (error) {
       console.error("Export error:", error);
       alert("Failed to export. Please try again.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleExportKit = async (kit) => {
     if (!kit) return;
+    setIsProcessing(true);
     try {
       // Fetch complete kit data with books
       const kitWithBooks = await axios.get(`${API_BASE_URL}/kits/${kit.id}`)
@@ -1221,6 +1287,8 @@ function App() {
     } catch (error) {
       console.error("Export error:", error);
       alert("Failed to export. Please try again.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -2549,6 +2617,19 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* GLOBAL PROCESSING OVERLAY */}
+      {isProcessing && (
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center bg-white bg-opacity-75" style={{ zIndex: 10000 }}>
+          <div className="text-center p-4 rounded shadow-sm bg-white border">
+            <div className="spinner-border text-danger mb-3" role="status" style={{ width: '3rem', height: '3rem' }}>
+              <span className="visually-hidden">Loading...</span>
+            </div>
+            <h5 className="text-danger fw-bold mb-0">Processing...</h5>
+            <small className="text-muted">Please wait a moment</small>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
