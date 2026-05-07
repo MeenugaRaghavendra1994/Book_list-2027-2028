@@ -1151,20 +1151,19 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       branches.forEach(b => {
         const normBranch = b.toLowerCase();
-        // Lookup zone from branch map, fallback to the kit's defined zone if branch lookup fails
-        let zone = branchToZoneMap[normBranch] || String(book.zone || "").trim();
-        
-        if (!zone) {
-            console.warn(`⚠️ Skipping branch "${b}": No zone mapping found in branches table or book record.`);
-            return;
-        }
 
+        // Resolve projection info from map (Grade + Branch mapping)
+        const projInfo = projMap[normGrade] && projMap[normGrade][normBranch];
+        const branchProjQty = projInfo ? projInfo.qty : 0;
+
+        // Resolve zone: Priority 1: Projection's Zone, Priority 2: Master Branch Map, Priority 3: Book's Zone
+        let zone = (projInfo && projInfo.zone) || branchToZoneMap[normBranch] || String(book.zone || "").trim();
+        
+        if (!zone || !allZones.includes(zone)) return;
         if (zoneFilter && zone !== zoneFilter) return;
         if (branchFilter && normBranch !== branchFilter.toLowerCase()) return;
 
-        // Projection fallback: allow raw projections even if Kit isn't explicitly mapped yet
-        const branchProj = (projMap[normGrade] && projMap[normGrade][normBranch]) || 0;
-        const projContribution = branchProj * qty;
+        const projContribution = branchProjQty * qty;
         summary[key].zone_data[zone].projection += projContribution;
         summary[key].total_projection += projContribution;
 
