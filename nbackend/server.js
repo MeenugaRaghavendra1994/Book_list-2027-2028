@@ -1066,13 +1066,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Fetch order table data
     let orderQuery = supabase.from('orders_table').select('*');
-    if (zoneFilter) {
-      // Since orders_table has branch_name, we need to filter by branches in that zone
-      const zoneBranches = (branchList || []).filter(b => b.zone === zoneFilter).map(b => b.name);
-      if (zoneBranches.length > 0) {
-        orderQuery = orderQuery.in('branch_name', zoneBranches);
-      }
-    }
     if (branchFilter) orderQuery = orderQuery.eq('branch_name', branchFilter);
     if (gradeFilter) orderQuery = orderQuery.eq('grade_name', gradeFilter);
 
@@ -1086,13 +1079,17 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     // Create a lookup map for BOM components
     const bomMap = {};
     (bomData || []).forEach(item => {
-      const cc = String(item.composite_code || "").trim();
+      const cc = String(item.composite_code || "").trim().toLowerCase();
       if (!bomMap[cc]) bomMap[cc] = [];
       bomMap[cc].push(item);
     });
 
     // Get all unique zones for column headers
-    const zonesSet = new Set((branchList || []).map(b => b.zone).filter(Boolean));
+    const zonesSet = new Set([
+      ...(branchList || []).map(b => b.zone),
+      ...(projectionsData || []).map(p => p.zone),
+      ...booksData.map(b => b.zone)
+    ].filter(Boolean));
     const allZones = Array.from(zonesSet).sort();
 
     // Create branch to zone map
@@ -1103,30 +1100,32 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const orderMap = {};
     (orderData || []).forEach(order => {
+      const branchName = String(order.branch_name || "").trim().toLowerCase();
+      const orderZone = branchToZoneMap[branchName];
+      // Filter orders by zone if a zone filter is active
+      if (zoneFilter && orderZone && orderZone !== zoneFilter) return;
+
       const g = String(order.grade_name || "").trim().toLowerCase();
-      const b = String(order.branch_name || "").trim().toLowerCase();
-      const sku = String(order.item_sku || "").trim();
+      const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
       if (!orderMap[g]) orderMap[g] = {};
-      if (!orderMap[g][b]) orderMap[g][b] = {};
+      if (!orderMap[g][branchName]) orderMap[g][branchName] = {};
 
       // Mapping logic: if SKU starts with 91, resolve components via sku_sap_bom
       if (sku.startsWith('91')) {
         const components = bomMap[sku];
         if (components && components.length > 0) {
           components.forEach(comp => {
-            const compCode = String(comp.component_code || "").trim();
+            const compCode = String(comp.component_code || "").trim().toLowerCase();
             const compQty = Number(comp.component_quantity) || 0;
-            orderMap[g][b][compCode] = (orderMap[g][b][compCode] || 0) + (qty * compQty);
+            orderMap[g][branchName][compCode] = (orderMap[g][branchName][compCode] || 0) + (qty * compQty);
           });
         } else {
-          // Fallback if 91 series mapping is missing in BOM table
-          orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + qty;
+          orderMap[g][branchName][sku] = (orderMap[g][branchName][sku] || 0) + qty;
         }
       } else {
-        // Standard SKU resolution
-        orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + qty;
+        orderMap[g][branchName][sku] = (orderMap[g][branchName][sku] || 0) + qty;
       }
     });
 
@@ -1144,7 +1143,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const summary = {}; // grouped by material_code
     (booksData || []).forEach(book => {
-      const materialCode = String(book.material_code || "").trim();
+      const materialCode = String(book.material_code || "").trim().toLowerCase();
       const materialName = String(book.material_name || "").trim();
       const grade = String(book.grade || "").trim();
       if (!materialCode) return;
@@ -1165,7 +1164,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       const qty = Number(book.quantity || 0);
       const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
-      const compositeCode = String(book.composite_code || "").trim();
+      const compositeCode = String(book.composite_code || "").trim().toLowerCase();
       const normGrade = grade.toLowerCase();
 
       branches.forEach(b => {
