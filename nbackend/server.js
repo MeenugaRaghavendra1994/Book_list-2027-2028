@@ -1060,15 +1060,46 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const { data: orderData, error: orderError } = await orderQuery;
     if (orderError) console.warn("❌ Order data fetch warning:", orderError.message);
 
-    // Map orders by Grade -> Branch -> SKU
+    // Fetch BOM data for 91 series resolution
+    const { data: bomData, error: bomError } = await supabase.from('sku_sap_bom').select('*');
+    if (bomError) console.warn("❌ BOM fetch warning:", bomError.message);
+
+    // Create a lookup map for BOM components
+    const bomMap = {};
+    (bomData || []).forEach(item => {
+      const cc = String(item.composite_code || "").trim();
+      if (!bomMap[cc]) bomMap[cc] = [];
+      bomMap[cc].push(item);
+    });
+
+    // Map orders by Grade -> Branch -> resolved Component SKU
     const orderMap = {};
     (orderData || []).forEach(order => {
       const g = String(order.grade_name || "").trim().toLowerCase();
       const b = String(order.branch_name || "").trim().toLowerCase();
       const sku = String(order.item_sku || "").trim();
+      const qty = Number(order.quantity) || 0;
+
       if (!orderMap[g]) orderMap[g] = {};
       if (!orderMap[g][b]) orderMap[g][b] = {};
-      orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + (Number(order.quantity) || 0);
+
+      // Mapping logic: if SKU starts with 91, resolve components via sku_sap_bom
+      if (sku.startsWith('91')) {
+        const components = bomMap[sku];
+        if (components && components.length > 0) {
+          components.forEach(comp => {
+            const compCode = String(comp.component_code || "").trim();
+            const compQty = Number(comp.component_quantity) || 0;
+            orderMap[g][b][compCode] = (orderMap[g][b][compCode] || 0) + (qty * compQty);
+          });
+        } else {
+          // Fallback if 91 series mapping is missing in BOM table
+          orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + qty;
+        }
+      } else {
+        // Standard SKU resolution
+        orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + qty;
+      }
     });
 
     // Map projections by Grade -> Branch
