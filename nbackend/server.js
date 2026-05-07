@@ -1126,6 +1126,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       } else {
         orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
       }
+      orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
     });
 
     // Map projections by Grade -> Branch
@@ -1215,8 +1216,10 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
             
             // 2. Handle Kit-level orders: if the kit SKU itself was ordered and not resolved by BOM
             // We add its contribution (Kit quantity * books per kit)
+            // 2. Handle Kit-level orders: if the kit SKU itself was ordered
             if (c && c !== mCode && !processedKits.has(`${g}||${c}`)) {
               materialZoneTotal += (orderMap[g][z][c] * q);
+              materialZoneTotal += ((orderMap[g][z][c] || 0) * q);
               processedKits.add(`${g}||${c}`);
             }
           }
