@@ -405,25 +405,12 @@ app.put("/kits/:id", async (req, res) => {
 
     if (!fetchBooksError && books) {
       for (const book of books) {
-        const currentBranches = book.branch_name 
-          ? book.branch_name.split(',').map(b => b.trim()).filter(Boolean) 
-          : [];
-        
-        let updatedBookBranches;
-        if (currentBranches.length === 0) {
-          // If book has no branches, it should inherit all branches from its parent kit
-          updatedBookBranches = branchValues;
-        } else {
-          // If book has branches, sync them with the kit (only keep branches that still exist in the kit)
-          updatedBookBranches = currentBranches.filter(b => branchValues.includes(b));
-        }
-
-        const updatedBranchString = updatedBookBranches.join(', ');
-
-        if (updatedBranchString !== (book.branch_name || "")) {
+        // When a kit's branch list is updated, synchronize all associated individual books 
+        // to ensure new branches are correctly added to the book records.
+        if (book.branch_name !== branchString) {
           await supabase
             .from('individual_books')
-            .update({ branch_name: updatedBranchString })
+            .update({ branch_name: branchString })
             .eq('id', book.id);
         }
       }
