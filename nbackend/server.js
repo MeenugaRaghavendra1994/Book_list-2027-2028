@@ -1374,7 +1374,7 @@ app.post("/run-dispatch-load", async (req, res) => {
     
     // ACTION REQUIRED: If testing is finished, uncomment the line below to fetch all branches
     // const allBranches = await getAllBranchIds();
-    const allBranches = [245, 20, 3, 13]; 
+    const allBranches = [245, 20, 3, 13,70,250,57,81,8]; 
     log(`Found ${allBranches.length} branches to process.`);
     
     // Clear existing data in orders_table
