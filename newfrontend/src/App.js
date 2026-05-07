@@ -2188,36 +2188,6 @@ function App() {
               <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
             </div>
 
-            {/* Dispatch Load Modal */}
-            {showDispatchLoadModal && (
-              <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
-                <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: '400px' }}>
-                  <div className="modal-content shadow-lg border-0">
-                    <div className="modal-header bg-primary text-white">
-                      <h5 className="modal-title">Running Dispatch Load</h5>
-                      <button type="button" className="btn-close btn-close-white" onClick={() => setShowDispatchLoadModal(false)} aria-label="Close"></button>
-                    </div>
-                    <div className="modal-body p-4 bg-light" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                      <div className="d-flex align-items-center mb-3">
-                        <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                        <span className="fw-bold text-primary">Processing...</span>
-                      </div>
-                      <div className="small text-muted">
-                        {dispatchLoadLogs.map((log, index) => (
-                          <div key={index}>{log}</div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="modal-footer bg-light">
-                      <button type="button" className="btn btn-secondary" onClick={() => setShowDispatchLoadModal(false)}>
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Order Table Filters */}
             <div className="card card-soft p-4 shadow-sm border-0 mb-4">
               <div className="mb-3">
@@ -2617,6 +2587,37 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Dispatch Load Modal (Moved to Global Scope) */}
+      {showDispatchLoadModal && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10050 }}>
+          <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: '500px' }}>
+            <div className="modal-content shadow-lg border-0" style={{ height: '500px' }}>
+              <div className="modal-header bg-primary text-white">
+                <h5 className="modal-title">🚀 Dispatch Data Load</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowDispatchLoadModal(false)} aria-label="Close"></button>
+              </div>
+              <div className="modal-body p-3 bg-dark text-light font-monospace" style={{ fontSize: '0.85rem', overflowY: 'auto' }}>
+                <div className="d-flex align-items-center mb-3 text-warning">
+                  <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                  <span>Process Running... Please do not close this window.</span>
+                </div>
+                <hr className="border-secondary" />
+                <div className="log-container">
+                  {dispatchLoadLogs.map((log, index) => (
+                    <div key={index} className="mb-1 border-start border-primary ps-2">
+                      <span className="text-secondary small">[{new Date().toLocaleTimeString()}]</span> {log}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="modal-footer bg-light">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowDispatchLoadModal(false)}>Close Logs</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* GLOBAL PROCESSING OVERLAY */}
       {isProcessing && (
