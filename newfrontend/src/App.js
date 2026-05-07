@@ -1419,7 +1419,7 @@ function App() {
               onClick={handleRunDispatchLoad}
               style={{ cursor: 'pointer', backgroundColor: '#fff3cd', border: '1px solid #ffeaa7' }}
             >
-              {isSidebarCollapsed ? "🚀" : "Run Dispatch Load"}
+              {isSidebarCollapsed ? "🚀" : "Run script Sales Order"}
             </div>
           )}
 

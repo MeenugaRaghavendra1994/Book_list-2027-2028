@@ -1066,6 +1066,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Fetch order table data
     let orderQuery = supabase.from('orders_table').select('*');
+    if (zoneFilter) orderQuery = orderQuery.eq('zone', zoneFilter);
     if (branchFilter) orderQuery = orderQuery.eq('branch_name', branchFilter);
     if (gradeFilter) orderQuery = orderQuery.eq('grade_name', gradeFilter);
 
@@ -1099,17 +1100,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     });
 
     const orderMap = {};
+    // Map structure: orderMap[grade][branch][sku] = total_ordered_quantity
     (orderData || []).forEach(order => {
       const g = String(order.grade_name || "").trim().toLowerCase();
-      const orderZone = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
-      
-      // Filter orders by zone if a zone filter is active
-      if (zoneFilter && orderZone && orderZone !== zoneFilter) return;
+      const b = String(order.branch_name || "").trim().toLowerCase();
+
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
       if (!orderMap[g]) orderMap[g] = {};
-      if (!orderMap[g][orderZone]) orderMap[g][orderZone] = {};
+      if (!orderMap[g][b]) orderMap[g][b] = {};
 
       // Mapping logic: if SKU starts with 91, resolve components via sku_sap_bom
       if (sku.startsWith('91')) {
@@ -1118,13 +1118,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           components.forEach(comp => {
             const compCode = String(comp.component_code || "").trim().toLowerCase();
             const compQty = Number(comp.component_quantity) || 0;
-            orderMap[g][orderZone][compCode] = (orderMap[g][orderZone][compCode] || 0) + (qty * compQty);
+            orderMap[g][b][compCode] = (orderMap[g][b][compCode] || 0) + (qty * compQty);
           });
         } else {
-          orderMap[g][orderZone][sku] = (orderMap[g][orderZone][sku] || 0) + qty;
+          orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + qty;
         }
       } else {
-        orderMap[g][orderZone][sku] = (orderMap[g][orderZone][sku] || 0) + qty;
+        orderMap[g][b][sku] = (orderMap[g][b][sku] || 0) + qty;
       }
     });
 
@@ -1186,34 +1186,47 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       });
     });
 
-    // Final zone-wide summation of Paid Quantities for each Material Code
+    // Final zone-wide summation of Paid Quantities for each Material Code.
+    // We calculate quantities by identifying which branches in the zone utilize this material.
     Object.keys(summary).forEach(mCode => {
       allZones.forEach(z => {
         let materialZoneTotal = 0;
-        // Filter book records associated with this specific material code
-        const materialInBooks = (booksData || []).filter(b => String(b.material_code).toLowerCase() === mCode);
         
-        // Track processed grade+kit combinations to avoid double-counting raw order records
-        const processedGradeKits = new Set();
-
-        materialInBooks.forEach(b => {
+        // Identify unique (Grade, Branch, Kit) combinations for this material/zone
+        const validEntries = new Set();
+        (booksData || []).forEach(b => {
+          if (String(b.material_code).toLowerCase() !== mCode) return;
+          
           const g = String(b.grade).toLowerCase();
-          const c = String(b.composite_code).toLowerCase();
-          const q = Number(b.quantity);
-          const comboKey = `${g}||${c}`;
+          const branches = String(b.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+          
+          branches.forEach(bn => {
+             const branchZone = branchToZoneMap[bn];
+             if (branchZone === z || (!branchZone && b.zone === z)) {
+               validEntries.add(`${g}||${bn}||${String(b.composite_code || "").toLowerCase()}||${Number(b.quantity) || 0}`);
+             }
+          });
+        });
 
-          if (processedGradeKits.has(comboKey)) return;
-          processedGradeKits.add(comboKey);
+        // processedBranchGrade prevents double-counting item quantities if the book appears in multiple kits for the same branch
+        const processedBranchGrade = new Set();
 
-          if (orderMap[g] && orderMap[g][z]) {
-            // Add individual item orders
-            materialZoneTotal += (orderMap[g][z][mCode] || 0);
-            // Add contribution from composite kit orders (if any)
-            if (c && c !== mCode && orderMap[g][z][c]) {
-              materialZoneTotal += (orderMap[g][z][c] * q);
+        validEntries.forEach(entry => {
+          const [g, bn, c, q] = entry.split('||');
+          if (orderMap[g] && orderMap[g][bn]) {
+            // Add aggregated quantities (direct orders + BOM resolutions) for this branch/grade
+            if (!processedBranchGrade.has(`${g}||${bn}`)) {
+              materialZoneTotal += (orderMap[g][bn][mCode] || 0);
+              processedBranchGrade.add(`${g}||${bn}`);
+            }
+            
+            // Handle fallback: add contribution if the material is part of a kit that wasn't in the BOM
+            if (c && c !== mCode && orderMap[g][bn][c]) {
+              materialZoneTotal += (orderMap[g][bn][c] * Number(q));
             }
           }
         });
+
         summary[mCode].zone_data[z].paid_quantity = materialZoneTotal;
         summary[mCode].total_paid_quantity += materialZoneTotal;
       });
