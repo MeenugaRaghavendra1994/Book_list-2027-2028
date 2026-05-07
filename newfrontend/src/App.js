@@ -179,7 +179,7 @@ function App() {
   const [tableData, setTableData] = useState([]);
   const [orderTableFilters, setOrderTableFilters] = useState({ branch_name: "", grade_name: "", item_sku: "", item_name: "" });
   const [orderTableData, setOrderTableData] = useState([]);
-  const [dashboardData, setDashboardData] = useState([]);
+  const [dashboardData, setDashboardData] = useState({ zones: [], data: [] });
   const [showDispatchLoadModal, setShowDispatchLoadModal] = useState(false);
   const [dispatchLoadLogs, setDispatchLoadLogs] = useState([]);
   const [isOrderTableLoading, setIsOrderTableLoading] = useState(false);
@@ -278,8 +278,8 @@ function App() {
           material_name: dashboardFilters.material_name
         }
       })
-        .then(res => setDashboardData(res.data || []))
-        .catch(() => setDashboardData([]))
+        .then(res => setDashboardData(res.data || { zones: [], data: [] }))
+        .catch(() => setDashboardData({ zones: [], data: [] }))
         .finally(() => {
           setIsDashboardLoading(false);
           setIsProcessing(false);
@@ -2124,51 +2124,78 @@ function App() {
               </div>
             </div>
 
-            {/* Dashboard Table */}
+            {/* Item Wise Summary Dashboard Table */}
             <div className="card card-soft p-4 shadow-sm border-0">
               <div className="table-responsive rounded-3 border">
-                <table className="table table-sm table-hover align-middle mb-0">
+                <table className="table table-sm table-bordered table-hover align-middle mb-0">
                   <thead className="table-light text-nowrap">
                     <tr>
-                      <th className="py-3 px-3">Grade</th>
-                      <th className="py-3 px-3">Material Code</th>
-                      <th className="py-3 px-3">Material Name</th>
-                      <th className="py-3 px-3">Projection</th>
-                      <th className="py-3 px-3">Paid quantity</th>
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Material Code</th>
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Material Name</th>
+                      {dashboardData.zones.map(zone => (
+                        <th key={zone} colSpan="2" className="text-center py-2">{zone}</th>
+                      ))}
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Total Projection</th>
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Total paid quantity</th>
+                    </tr>
+                    <tr>
+                      {dashboardData.zones.map(zone => (
+                        <React.Fragment key={`${zone}-sub`}>
+                          <th className="text-center py-2">projecting</th>
+                          <th className="text-center py-2">paid quantity</th>
+                        </React.Fragment>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
                     {isDashboardLoading ? (
                       <tr>
-                        <td colSpan="6" className="text-center py-5">
+                        <td colSpan={4 + (dashboardData.zones.length * 2)} className="text-center py-5">
                           <div className="spinner-border spinner-border-sm text-danger me-2" role="status"></div>
                           <span className="fw-bold text-danger">Fetching Summary Data...</span>
                         </td>
                       </tr>
-                    ) : dashboardData.length > 0 ? dashboardData.map((item, idx) => (
+                    ) : dashboardData.data.length > 0 ? dashboardData.data.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="px-3">{item.grade || "N/A"}</td>
                         <td className="px-3">{item.material_code || "N/A"}</td>
                         <td className="px-3">{item.material_name || "N/A"}</td>
-                        <td className="px-3 text-center">{item.projection || 0}</td>
-                        <td className="px-3 text-center">{item.paid_quantity || 0}</td>
+                        {dashboardData.zones.map(zone => (
+                          <React.Fragment key={`${item.material_code}-${zone}`}>
+                            <td className="px-3 text-center">{item.zone_data[zone]?.projection || 0}</td>
+                            <td className="px-3 text-center">{item.zone_data[zone]?.paid_quantity || 0}</td>
+                          </React.Fragment>
+                        ))}
+                        <td className="px-3 text-center fw-bold">{item.total_projection || 0}</td>
+                        <td className="px-3 text-center fw-bold">{item.total_paid_quantity || 0}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan="6" className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
+                      <tr><td colSpan={4 + (dashboardData.zones.length * 2)} className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
               <div className="mt-3 d-flex justify-content-between align-items-center">
-                <small className="text-muted">Total Items: <strong>{dashboardData.length}</strong></small>
+                <small className="text-muted">Total Items: <strong>{dashboardData.data.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
+                  const zoneHeaders = [];
+                  dashboardData.zones.forEach(z => {
+                    zoneHeaders.push(`${z} Projection`);
+                    zoneHeaders.push(`${z} Paid Qty`);
+                  });
+
                   const csvContent = [
-                    ['Grade', 'Material Code', 'Material Name', 'Projection', 'Paid quantity'],
-                    ...dashboardData.map(item => [
-                      item.grade, item.material_code, item.material_name, item.projection, item.paid_quantity
+                    ['Material Code', 'Material Name', ...zoneHeaders, 'Total Projection', 'Total Paid Quantity'],
+                    ...dashboardData.data.map(item => [
+                      item.material_code, 
+                      item.material_name,
+                      ...dashboardData.zones.flatMap(z => [
+                        item.zone_data[z]?.projection || 0,
+                        item.zone_data[z]?.paid_quantity || 0
+                      ]),
+                      item.total_projection,
+                      item.total_paid_quantity
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
-                  
                   const blob = new Blob([csvContent], { type: 'text/csv' });
                   const url = window.URL.createObjectURL(blob);
                   const link = document.createElement('a');

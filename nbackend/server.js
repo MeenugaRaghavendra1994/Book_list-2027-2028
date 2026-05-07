@@ -1072,7 +1072,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       bomMap[cc].push(item);
     });
 
-    // Map orders by Grade -> Branch -> resolved Component SKU
+    // Get all unique zones for column headers
+    const zonesSet = new Set((branchList || []).map(b => b.zone).filter(Boolean));
+    const allZones = Array.from(zonesSet).sort();
+
+    // Create branch to zone map
+    const branchToZoneMap = {};
+    (branchList || []).forEach(b => {
+      branchToZoneMap[String(b.name || "").trim().toLowerCase()] = b.zone;
+    });
+
     const orderMap = {};
     (orderData || []).forEach(order => {
       const g = String(order.grade_name || "").trim().toLowerCase();
@@ -1114,80 +1123,57 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       }
     });
 
-    const summary = {};
+    const summary = {}; // grouped by material_code
     (booksData || []).forEach(book => {
-      const grade = String(book.grade || "").trim();
       const materialCode = String(book.material_code || "").trim();
       const materialName = String(book.material_name || "").trim();
-      if (!grade || !materialCode) return;
-      const key = `${grade}||${materialCode}`;
+      const grade = String(book.grade || "").trim();
+      if (!materialCode) return;
+      const key = materialCode;
 
       if (!summary[key]) {
         summary[key] = {
-          grade,
           material_code: materialCode,
           material_name: materialName,
-          book_list_quantity: 0,
-          projection: 0,
-          paid_quantity: 0,
-          zones: new Set(),
-          branches: new Set()
+          zone_data: {},
+          total_projection: 0,
+          total_paid_quantity: 0
         };
+        allZones.forEach(z => {
+          summary[key].zone_data[z] = { projection: 0, paid_quantity: 0 };
+        });
       }
 
       const qty = Number(book.quantity || 0);
-      // Robustly split branch names, handling multiple delimiters or extra spaces
       const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
       const compositeCode = String(book.composite_code || "").trim();
       const normGrade = grade.toLowerCase();
-      const normalizedFilter = branchFilter ? branchFilter.toLowerCase() : null;
 
       branches.forEach(b => {
         const normBranch = b.toLowerCase();
+        const zone = branchToZoneMap[normBranch];
+        if (!zone) return;
+        if (zoneFilter && zone !== zoneFilter) return;
+        if (branchFilter && normBranch !== branchFilter.toLowerCase()) return;
 
-        // If a branch filter is applied, only aggregate data for that specific branch
-        if (normalizedFilter && normBranch !== normalizedFilter) return;
-
-        // Book List Quantity = Sum (Kit Quantity per assigned Branch)
-        summary[key].book_list_quantity += qty;
-
-        // Projection = Sum (Branch Projection * Kit Quantity)
         const branchProj = (projMap[normGrade] && projMap[normGrade][normBranch]) || 0;
-        summary[key].projection += (branchProj * qty);
+        const projContribution = branchProj * qty;
+        summary[key].zone_data[zone].projection += projContribution;
+        summary[key].total_projection += projContribution;
 
-        // Paid = Sum (Branch Paid Orders * Kit Quantity)
-        // Check both Composite Code and Material Code in the order table
         let branchPaid = 0;
-        
-        // MIRROR LOGIC: Only count orders if the branch is valid for this grade
-        const isValid = validGradeBranches[normGrade] && validGradeBranches[normGrade].has(normBranch);
-
-        if (isValid && orderMap[normGrade] && orderMap[normGrade][normBranch]) {
+        if (orderMap[normGrade] && orderMap[normGrade][normBranch]) {
           if (compositeCode && orderMap[normGrade][normBranch][compositeCode]) branchPaid += orderMap[normGrade][normBranch][compositeCode];
           if (materialCode && materialCode !== compositeCode && orderMap[normGrade][normBranch][materialCode]) branchPaid += orderMap[normGrade][normBranch][materialCode];
         }
-        summary[key].paid_quantity += (branchPaid * qty);
-        
-        summary[key].branches.add(b);
+        const paidContribution = branchPaid * qty;
+        summary[key].zone_data[zone].paid_quantity += paidContribution;
+        summary[key].total_paid_quantity += paidContribution;
       });
-
-      summary[key].zones.add(String(book.zone || "").trim());
     });
 
-    const result = Object.values(summary)
-      .map(item => ({
-          ...item,
-          zones: Array.from(item.zones).filter(Boolean),
-          branches: Array.from(item.branches).filter(Boolean)
-      }))
-      .sort((a, b) => {
-        if (a.grade === b.grade) {
-          return a.material_code.localeCompare(b.material_code);
-        }
-        return a.grade.localeCompare(b.grade);
-      });
-
-    res.json(result);
+    const result = Object.values(summary).sort((a, b) => a.material_code.localeCompare(b.material_code));
+    res.json({ zones: allZones, data: result });
   } catch (err) {
     console.error("❌ DASHBOARD FETCH ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
