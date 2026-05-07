@@ -68,7 +68,7 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
       </div>
 
       {isOpen && !disabled && (
-        <div className="position-absolute w-100 bg-white border rounded shadow-sm" style={{ maxHeight: 260, overflowY: 'auto', zIndex: 1050 }}>
+        <div className="position-absolute w-100 bg-white border rounded shadow-lg mt-1" style={{ maxHeight: 260, overflowY: 'auto', zIndex: 1050, border: '1px solid #ced4da' }}>
           {filteredOptions.length > 0 ? filteredOptions.map((option) => {
             const normalized = String(option || "").trim();
             const checked = normalizedValue.includes(normalized);
@@ -76,11 +76,12 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
               <button
                 key={normalized}
                 type="button"
-                className="dropdown-item d-flex align-items-center justify-content-between"
+                className="dropdown-item d-flex align-items-center justify-content-between py-2 px-3"
+                style={{ borderBottom: '1px solid #f8f9fa', fontSize: '0.9rem', fontWeight: '500' }}
                 onClick={() => toggleOption(normalized)}
               >
                 <span>{normalized}</span>
-                <span>{checked ? '✓' : ''}</span>
+                <span>{checked ? <i className="bi bi-check-circle-fill text-danger"></i> : ''}</span>
               </button>
             );
           }) : (
@@ -128,13 +129,27 @@ const SearchableSelect = ({ value, options = [], onChange, placeholder = "Search
         onFocus={() => { setSearchTerm(""); setIsOpen(true); }}
         disabled={disabled}
       />
-      {isOpen && options.length > 0 && (
-        <div className="position-absolute w-100 bg-white border rounded shadow-sm" style={{ maxHeight: 200, overflowY: 'auto', zIndex: 1050 }}>
+      {isOpen && (
+        <div className="position-absolute w-100 bg-white border rounded shadow-lg mt-1" 
+             style={{ maxHeight: 250, overflowY: 'auto', zIndex: 1050, border: '1px solid #ced4da' }}>
           {filteredOptions.length > 0 ? filteredOptions.map((opt, i) => (
-            <button key={i} type="button" className="dropdown-item text-start w-100" onClick={() => { onChange(opt); setIsOpen(false); }}>
+            <button 
+              key={i} 
+              type="button" 
+              className="dropdown-item text-start w-100 py-2 px-3" 
+              style={{ 
+                borderBottom: '1px solid #f8f9fa',
+                fontSize: '0.9rem', 
+                fontWeight: '500',
+                transition: 'background-color 0.2s'
+              }}
+              onClick={() => { onChange(opt); setIsOpen(false); }}
+            >
               {opt || "All"}
             </button>
-          )) : <div className="p-2 text-muted small">No suggestions</div>}
+          )) : (
+            <div className="p-3 text-muted small text-center bg-light">No suggestions found</div>
+          )}
         </div>
       )}
     </div>
