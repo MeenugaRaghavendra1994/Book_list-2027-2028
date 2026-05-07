@@ -1289,7 +1289,7 @@ const processBranch = async (branch, accessToken) => {
     const response = await axios.get(url, {
       headers: { "Authorization": `Bearer ${accessToken}` },
       responseType: 'arraybuffer',
-      timeout: 60000
+      timeout: 300000 // Increased to 5 minutes
     });
 
     const workbook = XLSX.read(response.data, { type: 'buffer' });
@@ -1383,19 +1383,19 @@ app.post("/run-dispatch-load", async (req, res) => {
     
     let allRows = [];
     
-    // Process branches in parallel using Promise.allSettled for robustness
-    const results = await Promise.allSettled(allBranches.map(branch => processBranch(branch, accessToken)));
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled' && result.value.rows) {
-        allRows.push(...result.value.rows);
-        log(`Successfully processed branch ID ${allBranches[index]}. Fetched ${result.value.rows.length} rows.`);
-      } else if (result.status === 'rejected') {
-        log(`❌ Failed to process branch ID ${allBranches[index]} due to unhandled error: ${result.reason}`);
-      } else if (result.status === 'fulfilled' && result.value.failed_branch) {
-        log(`❌ Failed to process branch ID ${result.value.failed_branch}: ${result.value.error}`);
+    // Process branches sequentially to avoid overwhelming the external API and hitting timeouts
+    for (const branchId of allBranches) {
+      log(`⏳ Processing branch ID ${branchId}...`);
+      const result = await processBranch(branchId, accessToken);
+      
+      if (result.rows) {
+        allRows.push(...result.rows);
+        log(`✅ Successfully processed branch ID ${branchId}. Fetched ${result.rows.length} rows.`);
+      } else {
+        log(`❌ Failed to process branch ID ${branchId}: ${result.error}`);
       }
-    });
+    }
+
     log(`Total raw rows fetched: ${allRows.length}.`);
     
     // Aggregate data by branch_name, grade_name, item_sku, item_name and sum quantities
