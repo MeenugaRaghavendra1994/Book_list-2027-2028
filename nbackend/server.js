@@ -215,7 +215,19 @@ app.post("/books", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
-    const branchName = String(d.branch || "").trim();
+    let branchName = String(d.branch || "").trim();
+
+    // If branch is missing but kit_id is present, inherit branches from the parent kit
+    if (!branchName && d.kit_id) {
+      const { data: kitData } = await supabase
+        .from('grade_wise_kits')
+        .select('branch')
+        .eq('id', d.kit_id)
+        .maybeSingle();
+      
+      if (kitData && kitData.branch) branchName = kitData.branch;
+    }
+
     const sku = String(d.material_code || "").trim();
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
@@ -393,18 +405,26 @@ app.put("/kits/:id", async (req, res) => {
 
     if (!fetchBooksError && books) {
       for (const book of books) {
-        if (book.branch_name) {
-          const bookBranches = book.branch_name.split(',').map(b => b.trim()).filter(Boolean);
-          // Only keep branches that are still present in the updated kit
-          const updatedBookBranches = bookBranches.filter(b => branchValues.includes(b));
-          const updatedBranchString = updatedBookBranches.join(', ');
+        const currentBranches = book.branch_name 
+          ? book.branch_name.split(',').map(b => b.trim()).filter(Boolean) 
+          : [];
+        
+        let updatedBookBranches;
+        if (currentBranches.length === 0) {
+          // If book has no branches, it should inherit all branches from its parent kit
+          updatedBookBranches = branchValues;
+        } else {
+          // If book has branches, sync them with the kit (only keep branches that still exist in the kit)
+          updatedBookBranches = currentBranches.filter(b => branchValues.includes(b));
+        }
 
-          if (updatedBranchString !== book.branch_name) {
-            await supabase
-              .from('individual_books')
-              .update({ branch_name: updatedBranchString })
-              .eq('id', book.id);
-          }
+        const updatedBranchString = updatedBookBranches.join(', ');
+
+        if (updatedBranchString !== (book.branch_name || "")) {
+          await supabase
+            .from('individual_books')
+            .update({ branch_name: updatedBranchString })
+            .eq('id', book.id);
         }
       }
     }
@@ -528,7 +548,19 @@ app.put("/books/:id", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
-    const branchName = String(d.branch || "").trim();
+    let branchName = String(d.branch || "").trim();
+
+    // If branch is missing but kit_id is present, inherit branches from the kit
+    if (!branchName && d.kit_id) {
+      const { data: kitData } = await supabase
+        .from('grade_wise_kits')
+        .select('branch')
+        .eq('id', d.kit_id)
+        .maybeSingle();
+      
+      if (kitData && kitData.branch) branchName = kitData.branch;
+    }
+
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
     const materialCode = String(d.material_code || "").trim();

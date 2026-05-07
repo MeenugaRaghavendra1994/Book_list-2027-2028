@@ -1899,9 +1899,12 @@ function App() {
                       </div>
                       <div className="col-12 col-md-4">
                         <label className="form-label">Branch</label>
-                        <select className="form-select" value={newBookItem.branch} onChange={e => setNewBookItem(prev => ({ ...prev, branch: e.target.value }))}>
-                          {bookBranchOptions.map(opt => <option key={opt} value={opt}>{opt || "Select Branch"}</option>)}
-                        </select>
+                        <BranchMultiSelect
+                          options={bookBranchOptions.filter(Boolean)}
+                          value={normalizeBranchArray(newBookItem.branch)}
+                          onChange={(selected) => setNewBookItem(prev => ({ ...prev, branch: selected }))}
+                          placeholder="Select branches"
+                        />
                       </div>
                       <div className="col-12 col-md-3">
                         <label className="form-label">Quantity</label>
