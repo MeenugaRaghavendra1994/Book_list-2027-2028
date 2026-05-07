@@ -380,7 +380,7 @@ function App() {
       const rect = previewRef.current.getBoundingClientRect();
       const popupWidth = Math.min(280, window.innerWidth - 40);
       const left = Math.max(20, Math.min(rect.left + window.scrollX, window.innerWidth - popupWidth - 20));
-      const top = rect.bottom + window.scrollY + 8;
+      const top = Math.min(rect.bottom + window.scrollY + 8, window.innerHeight - 260);
       return {
         position: 'fixed',
         left,
@@ -1343,7 +1343,8 @@ function App() {
           <button className="btn btn-sm btn-light border p-0"
                   onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                   style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}>
+                  title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
             {isSidebarCollapsed ? <i className="bi bi-arrow-right"></i> : <i className="bi bi-arrow-left"></i>}
           </button>
         </div>
@@ -1518,7 +1519,9 @@ function App() {
                 setCreateForm(prev => ({
                   ...prev,
                   zone: zoneValue,
-                  branch: Array.isArray(prev.branch) ? prev.branch.filter(branchName => branchList.some(branch => branch.name === branchName && branch.zone === zoneValue)) : []
+                  branch: Array.isArray(prev.branch)
+                    ? prev.branch.filter(branchName => branchList.some(branch => branch.name === branchName && branch.zone === zoneValue))
+                    : []
                 }));
               }}>
                 <option value="">Select Zone</option>
@@ -2115,7 +2118,7 @@ function App() {
                 </div>
                 <div className="col-12 col-md-12 d-flex justify-content-end mt-2">
                   <button 
-                    className="btn btn-outline-secondary btn-sm px-4" 
+                    className="btn btn-outline-secondary btn-sm" 
                     onClick={() => setDashboardFilters({ zone: "", branch: "", grade: "", material_name: "" })}
                   >
                     Clear Filters
@@ -2263,7 +2266,7 @@ function App() {
                 </div>
                 <div className="col-12 col-md-12 d-flex justify-content-end mt-2">
                   <button 
-                    className="btn btn-outline-secondary btn-sm px-4" 
+                    className="btn btn-outline-secondary btn-sm" 
                     onClick={() => setOrderTableFilters({ branch_name: "", grade_name: "", item_sku: "", item_name: "" })}
                   >
                     Clear Filters
@@ -2418,7 +2421,7 @@ function App() {
                   </div>
                   <div className="d-flex gap-2 flex-wrap align-items-center">
                     <div className="badge bg-secondary">{tableData.length} records shown</div>
-                    {selectedTable === 'branches' && userHasRight("Edit/Delete") && (
+                    {selectedTable === 'pricing' && userHasRight("Edit/Delete") && (
                       <button className="btn btn-danger btn-sm" onClick={handleAddBranch}>
                         + Add New Branch
                       </button>
