@@ -1161,12 +1161,21 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         summary[key].zone_data[zone].projection += projContribution;
         summary[key].total_projection += projContribution;
 
-        let branchPaid = 0;
+        let paidContribution = 0;
         if (orderMap[normGrade] && orderMap[normGrade][normBranch]) {
-          if (compositeCode && orderMap[normGrade][normBranch][compositeCode]) branchPaid += orderMap[normGrade][normBranch][compositeCode];
-          if (materialCode && materialCode !== compositeCode && orderMap[normGrade][normBranch][materialCode]) branchPaid += orderMap[normGrade][normBranch][materialCode];
+          // 1. Handle orders for individual books or resolved 91-series components.
+          // These are already stored as absolute book counts in orderMap.
+          if (materialCode && orderMap[normGrade][normBranch][materialCode]) {
+            paidContribution += orderMap[normGrade][normBranch][materialCode];
+          }
+          
+          // 2. Handle orders for composite items (bundles) that were NOT resolved in orderMap.
+          // These are stored as kit counts, so we multiply by 'qty' (books per kit).
+          if (compositeCode && compositeCode !== materialCode && orderMap[normGrade][normBranch][compositeCode]) {
+            paidContribution += (orderMap[normGrade][normBranch][compositeCode] * qty);
+          }
         }
-        const paidContribution = branchPaid * qty;
+
         summary[key].zone_data[zone].paid_quantity += paidContribution;
         summary[key].total_paid_quantity += paidContribution;
       });
