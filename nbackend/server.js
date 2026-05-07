@@ -1100,17 +1100,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const orderMap = {};
     (orderData || []).forEach(order => {
-      const branchName = String(order.branch_name || "").trim().toLowerCase();
-      const orderZone = branchToZoneMap[branchName];
+      const g = String(order.grade_name || "").trim().toLowerCase();
+      const orderZone = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
+      
       // Filter orders by zone if a zone filter is active
       if (zoneFilter && orderZone && orderZone !== zoneFilter) return;
-
-      const g = String(order.grade_name || "").trim().toLowerCase();
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
       if (!orderMap[g]) orderMap[g] = {};
-      if (!orderMap[g][branchName]) orderMap[g][branchName] = {};
+      if (!orderMap[g][orderZone]) orderMap[g][orderZone] = {};
 
       // Mapping logic: if SKU starts with 91, resolve components via sku_sap_bom
       if (sku.startsWith('91')) {
@@ -1119,13 +1118,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           components.forEach(comp => {
             const compCode = String(comp.component_code || "").trim().toLowerCase();
             const compQty = Number(comp.component_quantity) || 0;
-            orderMap[g][branchName][compCode] = (orderMap[g][branchName][compCode] || 0) + (qty * compQty);
+            orderMap[g][orderZone][compCode] = (orderMap[g][orderZone][compCode] || 0) + (qty * compQty);
           });
         } else {
-          orderMap[g][branchName][sku] = (orderMap[g][branchName][sku] || 0) + qty;
+          orderMap[g][orderZone][sku] = (orderMap[g][orderZone][sku] || 0) + qty;
         }
       } else {
-        orderMap[g][branchName][sku] = (orderMap[g][branchName][sku] || 0) + qty;
+        orderMap[g][orderZone][sku] = (orderMap[g][orderZone][sku] || 0) + qty;
       }
     });
 
@@ -1184,24 +1183,39 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         const projContribution = branchProjQty * qty;
         summary[key].zone_data[zone].projection += projContribution;
         summary[key].total_projection += projContribution;
+      });
+    });
 
-        let paidContribution = 0;
-        if (orderMap[normGrade] && orderMap[normGrade][normBranch]) {
-          // 1. Handle orders for individual books or resolved 91-series components.
-          // These are already stored as absolute book counts in orderMap.
-          if (materialCode && orderMap[normGrade][normBranch][materialCode]) {
-            paidContribution += orderMap[normGrade][normBranch][materialCode];
-          }
-          
-          // 2. Handle orders for composite items (bundles) that were NOT resolved in orderMap.
-          // These are stored as kit counts, so we multiply by 'qty' (books per kit).
-          if (compositeCode && compositeCode !== materialCode && orderMap[normGrade][normBranch][compositeCode]) {
-            paidContribution += (orderMap[normGrade][normBranch][compositeCode] * qty);
-          }
-        }
+    // Final zone-wide summation of Paid Quantities for each Material Code
+    Object.keys(summary).forEach(mCode => {
+      allZones.forEach(z => {
+        let materialZoneTotal = 0;
+        // Filter book records associated with this specific material code
+        const materialInBooks = (booksData || []).filter(b => String(b.material_code).toLowerCase() === mCode);
+        
+        // Track processed grade+kit combinations to avoid double-counting raw order records
+        const processedGradeKits = new Set();
 
-        summary[key].zone_data[zone].paid_quantity += paidContribution;
-        summary[key].total_paid_quantity += paidContribution;
+        materialInBooks.forEach(b => {
+          const g = String(b.grade).toLowerCase();
+          const c = String(b.composite_code).toLowerCase();
+          const q = Number(b.quantity);
+          const comboKey = `${g}||${c}`;
+
+          if (processedGradeKits.has(comboKey)) return;
+          processedGradeKits.add(comboKey);
+
+          if (orderMap[g] && orderMap[g][z]) {
+            // Add individual item orders
+            materialZoneTotal += (orderMap[g][z][mCode] || 0);
+            // Add contribution from composite kit orders (if any)
+            if (c && c !== mCode && orderMap[g][z][c]) {
+              materialZoneTotal += (orderMap[g][z][c] * q);
+            }
+          }
+        });
+        summary[mCode].zone_data[z].paid_quantity = materialZoneTotal;
+        summary[mCode].total_paid_quantity += materialZoneTotal;
       });
     });
 
@@ -1370,9 +1384,14 @@ app.post("/run-dispatch-load", async (req, res) => {
   try {
     log("Starting dispatch data load process...");
     const accessToken = await getAccessToken();
-    
-    // ACTION REQUIRED: If testing is finished, uncomment the line below to fetch all branches
-    // const allBranches = await getAllBranchIds();
+
+    // Get branch-to-zone mapping for aggregation into orders_table
+    const { data: branchMapping } = await supabase.from('branches').select('name, zone');
+    const branchToZoneMapInternal = {};
+    (branchMapping || []).forEach(b => {
+      branchToZoneMapInternal[String(b.name || "").trim().toLowerCase()] = b.zone;
+    });
+
     const allBranches = [245, 20, 3, 13,70,250,57,81,8]; 
     log(`Found ${allBranches.length} branches to process.`);
     
@@ -1402,8 +1421,11 @@ app.post("/run-dispatch-load", async (req, res) => {
     const aggregated = {};
     allRows.forEach(row => {
       if (!row.quantity || !row.branch_name || !row.grade_name || !row.item_sku || !row.item_name) return;
-      const key = `${row.branch_name}||${row.grade_name}||${row.item_sku}||${row.item_name}`;
+      const normBranch = String(row.branch_name).trim().toLowerCase();
+      const zone = branchToZoneMapInternal[normBranch] || row.zone_name || "Unknown";
+      const key = `${zone}||${row.branch_name}||${row.grade_name}||${row.item_sku}||${row.item_name}`;
       aggregated[key] = {
+        zone: zone,
         branch_name: row.branch_name,
         grade_name: row.grade_name,
         item_sku: row.item_sku,
