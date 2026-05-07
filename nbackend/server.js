@@ -1073,7 +1073,11 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     });
 
     // Get all unique zones for column headers
-    const zonesSet = new Set((branchList || []).map(b => b.zone).filter(Boolean));
+    const zonesSet = new Set([
+      ...(branchList || []).map(b => b.zone),
+      ...zonesFromProjections,
+      ...booksData.map(b => b.zone)
+    ].filter(Boolean));
     const allZones = Array.from(zonesSet).sort();
 
     // Create branch to zone map
@@ -1112,14 +1116,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     });
 
     // Map projections by Grade -> Branch
-    const projMap = {};
+    const projMap = {}; // Grade -> Branch -> { qty, zone }
     (projectionsData || []).forEach(p => {
       const g = String(p.grade || "").trim().toLowerCase();
       const b = String(p.branch || "").trim().toLowerCase();
+      const z = String(p.zone || "").trim();
       // Use normalized guard
       if (validGradeBranches[g] && validGradeBranches[g].has(b)) {
         if (!projMap[g]) projMap[g] = {};
-        projMap[g][b] = (projMap[g][b] || 0) + (Number(p.total_projection) || 0);
+        if (!projMap[g][b]) projMap[g][b] = { qty: 0, zone: z };
+        projMap[g][b].qty += (Number(p.total_projection) || 0);
       }
     });
 
