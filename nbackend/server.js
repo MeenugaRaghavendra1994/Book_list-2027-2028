@@ -1321,7 +1321,8 @@ app.post("/run-dispatch-load", async (req, res) => {
     log("Starting dispatch data load process...");
     const accessToken = await getAccessToken();
     
-    const allBranches = await getAllBranchIds();
+    // const allBranches = await getAllBranchIds();
+    const allBranches = [245, 20, 3, 13]; // Use specific branches for testing
     log(`Found ${allBranches.length} branches to process.`);
     
     // Clear existing data in orders_table
