@@ -92,6 +92,55 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
   );
 };
 
+const SearchableSelect = ({ value, options = [], onChange, placeholder = "Search...", disabled = false }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    return options.filter(opt => 
+      String(opt || "").toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [options, searchTerm]);
+
+  return (
+    <div className="position-relative" ref={containerRef}>
+      <input
+        type="text"
+        className="form-control"
+        placeholder={placeholder}
+        value={isOpen ? searchTerm : (value || "")}
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
+          setIsOpen(true);
+          onChange(e.target.value);
+        }}
+        onFocus={() => { setSearchTerm(""); setIsOpen(true); }}
+        disabled={disabled}
+      />
+      {isOpen && options.length > 0 && (
+        <div className="position-absolute w-100 bg-white border rounded shadow-sm" style={{ maxHeight: 200, overflowY: 'auto', zIndex: 1050 }}>
+          {filteredOptions.length > 0 ? filteredOptions.map((opt, i) => (
+            <button key={i} type="button" className="dropdown-item text-start w-100" onClick={() => { onChange(opt); setIsOpen(false); }}>
+              {opt || "All"}
+            </button>
+          )) : <div className="p-2 text-muted small">No suggestions</div>}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Ensure it defaults to /api for Vercel deployments if no env var is provided
 const API_BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname === "localhost" ? "http://localhost:5000" : "/api");
 
@@ -339,6 +388,14 @@ function App() {
   const statusOptions = ["", "Pending", "Approved", "Completed"];
   const mandatoryOptions = ["", "Mandatory", "Optional"];
   const volumeOptions = ["", "Volume 1", "Volume 2", "Volume 3", "Volume 4","Term 1","Term 2"];
+
+  // Suggestions for searchable filters based on current data
+  const orderTableBranchOptions = useMemo(() => Array.from(new Set(orderTableData.map(i => i.branch_name))).filter(Boolean).sort(), [orderTableData]);
+  const orderTableGradeOptions = useMemo(() => Array.from(new Set(orderTableData.map(i => i.grade_name))).filter(Boolean).sort(), [orderTableData]);
+  const orderTableSKUOptions = useMemo(() => Array.from(new Set(orderTableData.map(i => i.item_sku))).filter(Boolean).sort(), [orderTableData]);
+  const orderTableItemNameOptions = useMemo(() => Array.from(new Set(orderTableData.map(i => i.item_name))).filter(Boolean).sort(), [orderTableData]);
+  const dashboardMaterialOptions = useMemo(() => Array.from(new Set(dashboardData.data.map(i => i.material_name))).filter(Boolean).sort(), [dashboardData]);
+
   const yearOptions = ["", "2023-2024", "2024-2025", "2025-2026", "2026-2027", "2027-2028"];
 
   const normalizeBranchArray = (branchData) => {
@@ -1679,27 +1736,31 @@ function App() {
         <div className="row gy-3 gx-3 align-items-end">
           <div className="col-12 col-md-3">
             <label className="form-label">Select Zone</label>
-            <select className="form-select" value={filters.zone} onChange={e => handleFilterChange("zone", e.target.value)}>
-              {zones.map(zone => <option key={zone} value={zone}>{zone || "All Zones"}</option>)}
-            </select>
+            <SearchableSelect 
+              options={zones} value={filters.zone} placeholder="Search Zone..."
+              onChange={val => handleFilterChange("zone", val)} 
+            />
           </div>
           <div className="col-12 col-md-3">
             <label className="form-label">Select Branch</label>
-            <select className="form-select" value={filters.branch} onChange={e => handleFilterChange("branch", e.target.value)}>
-              {branchOptions.map(branch => <option key={branch} value={branch}>{branch || "All Branches"}</option>)}
-            </select>
+            <SearchableSelect 
+              options={branchOptions} value={filters.branch} placeholder="Search Branch..."
+              onChange={val => handleFilterChange("branch", val)} 
+            />
           </div>
           <div className="col-12 col-md-2">
             <label className="form-label">Select Grade</label>
-            <select className="form-select" value={filters.grade} onChange={e => handleFilterChange("grade", e.target.value)}>
-              {grades.map(grade => <option key={grade} value={grade}>{grade || "All Grades"}</option>)}
-            </select>
+            <SearchableSelect 
+              options={grades} value={filters.grade} placeholder="Search Grade..."
+              onChange={val => handleFilterChange("grade", val)} 
+            />
           </div>
           <div className="col-12 col-md-2">
             <label className="form-label">Select Status</label>
-            <select className="form-select" value={filters.status} onChange={e => handleFilterChange("status", e.target.value)}>
-              {statusOptions.map(option => <option key={option} value={option}>{option || "All Status"}</option>)}
-            </select>
+            <SearchableSelect 
+              options={statusOptions} value={filters.status} placeholder="Search Status..."
+              onChange={val => handleFilterChange("status", val)} 
+            />
           </div>
           <div className="col-12 col-md-2 d-flex gap-2">
             <button className="btn btn-outline-secondary w-100" onClick={handleClear}>Clear All</button>
@@ -2078,45 +2139,30 @@ function App() {
               <div className="row gx-3 gy-3">
                 <div className="col-12 col-md-3">
                   <label className="form-label">Zone</label>
-                  <select 
-                    className="form-select" 
-                    value={dashboardFilters.zone} 
-                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, zone: e.target.value, branch: "" }))}
-                  >
-                    <option value="">All Zones</option>
-                    {zones.map(zone => zone && <option key={zone} value={zone}>{zone}</option>)}
-                  </select>
+                  <SearchableSelect 
+                    options={zones} value={dashboardFilters.zone} placeholder="All Zones"
+                    onChange={(val) => setDashboardFilters(prev => ({ ...prev, zone: val, branch: "" }))}
+                  />
                 </div>
                 <div className="col-12 col-md-3">
                   <label className="form-label">Branch</label>
-                  <select 
-                    className="form-select" 
-                    value={dashboardFilters.branch} 
-                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, branch: e.target.value }))}
-                  >
-                    <option value="">All Branches</option>
-                    {dashboardBranchOptions.map(branch => branch && <option key={branch} value={branch}>{branch}</option>)}
-                  </select>
+                  <SearchableSelect 
+                    options={dashboardBranchOptions} value={dashboardFilters.branch} placeholder="All Branches"
+                    onChange={(val) => setDashboardFilters(prev => ({ ...prev, branch: val }))}
+                  />
                 </div>
                 <div className="col-12 col-md-3">
                   <label className="form-label">Grade</label>
-                  <select 
-                    className="form-select" 
-                    value={dashboardFilters.grade} 
-                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, grade: e.target.value }))}
-                  >
-                    <option value="">All Grades</option>
-                    {grades.map(grade => grade && <option key={grade} value={grade}>{grade}</option>)}
-                  </select>
+                  <SearchableSelect 
+                    options={grades} value={dashboardFilters.grade} placeholder="All Grades"
+                    onChange={(val) => setDashboardFilters(prev => ({ ...prev, grade: val }))}
+                  />
                 </div>
                 <div className="col-12 col-md-3">
                   <label className="form-label">Search Material Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search item name..."
-                    value={dashboardFilters.material_name}
-                    onChange={(e) => setDashboardFilters(prev => ({ ...prev, material_name: e.target.value }))}
+                  <SearchableSelect 
+                    options={dashboardMaterialOptions} value={dashboardFilters.material_name} placeholder="Search item name..."
+                    onChange={(val) => setDashboardFilters(prev => ({ ...prev, material_name: val }))}
                   />
                 </div>
                 <div className="col-12 col-md-12 d-flex justify-content-end mt-2">
@@ -2229,42 +2275,30 @@ function App() {
               <div className="row gx-3 gy-3">
                 <div className="col-12 col-md-3">
                   <label className="form-label">Branch Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search branch..."
-                    value={orderTableFilters.branch_name}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, branch_name: e.target.value }))}
+                  <SearchableSelect 
+                    options={orderTableBranchOptions} value={orderTableFilters.branch_name} placeholder="Search branch..."
+                    onChange={(val) => setOrderTableFilters(prev => ({ ...prev, branch_name: val }))}
                   />
                 </div>
                 <div className="col-12 col-md-3">
                   <label className="form-label">Grade Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search grade..."
-                    value={orderTableFilters.grade_name}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, grade_name: e.target.value }))}
+                  <SearchableSelect 
+                    options={orderTableGradeOptions} value={orderTableFilters.grade_name} placeholder="Search grade..."
+                    onChange={(val) => setOrderTableFilters(prev => ({ ...prev, grade_name: val }))}
                   />
                 </div>
                 <div className="col-12 col-md-3">
                   <label className="form-label">Item SKU</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search SKU..."
-                    value={orderTableFilters.item_sku}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, item_sku: e.target.value }))}
+                  <SearchableSelect 
+                    options={orderTableSKUOptions} value={orderTableFilters.item_sku} placeholder="Search SKU..."
+                    onChange={(val) => setOrderTableFilters(prev => ({ ...prev, item_sku: val }))}
                   />
                 </div>
                 <div className="col-12 col-md-3">
                   <label className="form-label">Item Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search item name..."
-                    value={orderTableFilters.item_name}
-                    onChange={(e) => setOrderTableFilters(prev => ({ ...prev, item_name: e.target.value }))}
+                  <SearchableSelect 
+                    options={orderTableItemNameOptions} value={orderTableFilters.item_name} placeholder="Search item name..."
+                    onChange={(val) => setOrderTableFilters(prev => ({ ...prev, item_name: val }))}
                   />
                 </div>
                 <div className="col-12 col-md-12 d-flex justify-content-end mt-2">
@@ -2392,24 +2426,24 @@ function App() {
                       <>
                         <div className="col-md-4">
                           <label className="form-label">Grade</label>
-                          <select className="form-select" value={tableFilters.grade || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, grade: e.target.value }))}>
-                            <option value="">All Grades</option>
-                            {grades.map(grade => <option key={grade} value={grade}>{grade}</option>)}
-                          </select>
+                          <SearchableSelect 
+                            options={grades} value={tableFilters.grade} placeholder="All Grades"
+                            onChange={(val) => setTableFilters(prev => ({ ...prev, grade: val }))}
+                          />
                         </div>
                         <div className="col-md-4">
                           <label className="form-label">Branch</label>
-                          <select className="form-select" value={tableFilters.branch || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, branch: e.target.value }))}>
-                            <option value="">All Branches</option>
-                            {tableExplorerBranchOptions.map(branch => <option key={branch} value={branch}>{branch}</option>)}
-                          </select>
+                          <SearchableSelect 
+                            options={tableExplorerBranchOptions} value={tableFilters.branch} placeholder="All Branches"
+                            onChange={(val) => setTableFilters(prev => ({ ...prev, branch: val }))}
+                          />
                         </div>
                         <div className="col-md-4">
                           <label className="form-label">Zone</label>
-                          <select className="form-select" value={tableFilters.zone || ''} onChange={(e) => setTableFilters(prev => ({ ...prev, zone: e.target.value }))}>
-                            <option value="">All Zones</option>
-                            {zones.map(zone => <option key={zone} value={zone}>{zone || 'All Zones'}</option>)}
-                          </select>
+                          <SearchableSelect 
+                            options={zones} value={tableFilters.zone} placeholder="All Zones"
+                            onChange={(val) => setTableFilters(prev => ({ ...prev, zone: val }))}
+                          />
                         </div>
                       </>
                     )}
