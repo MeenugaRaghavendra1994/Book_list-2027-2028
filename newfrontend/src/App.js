@@ -265,7 +265,7 @@ function App() {
       .then(res => {
         const normalized = res.data.map(kit => ({
           ...kit,
-          createdBy: kit.created_by || kit.createdBy || "Meenuga Raghavendra - 20240001178_OIS",
+          createdBy: kit.created_by || kit.createdBy || currentUser?.username,
           createdAt: kit.created_at || kit.createdAt || new Date().toLocaleString('en-GB', { 
             day: '2-digit', month: 'short', year: '2-digit', 
             hour: '2-digit', minute: '2-digit', hour12: true 
@@ -762,8 +762,8 @@ function App() {
     }
 
     const payload = {
-      ...createForm,
-      createdBy: "Meenga Raghavendra - 20240001178_OIS",
+      ...createForm, // Keep existing form data
+      createdBy: currentUser?.username, // Use current user's username
       createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).replace(/,/g, ''),
       statusInfo: createForm.status || "Pending"
     };
