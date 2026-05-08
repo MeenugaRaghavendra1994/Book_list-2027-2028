@@ -156,6 +156,28 @@ const SearchableSelect = ({ value, options = [], onChange, placeholder = "Search
   );
 };
 
+const WelcomePage = ({ username }) => (
+  <div className="welcome-container d-flex flex-column align-items-center justify-content-center text-center p-4 animate-fade-in" 
+       style={{ minHeight: '100%', background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 100%)' }}>
+    <div className="welcome-banner mb-5 shadow-lg rounded-4 overflow-hidden position-relative border border-white border-4" style={{ maxWidth: '900px', width: '100%' }}>
+      <div style={{ height: '350px', background: 'url("https://images.unsplash.com/photo-1523050853063-bd8012fbb72a?auto=format&fit=crop&q=80&w=1000") center/cover no-repeat', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* Overlay for the banner text */}
+        <div className="position-absolute bottom-0 start-0 w-100 p-4 bg-dark bg-opacity-60 text-white text-center">
+           <h1 className="fw-bold m-0 display-5" style={{ letterSpacing: '1px' }}>Orchids International School</h1>
+        </div>
+      </div>
+    </div>
+    <div className="welcome-text-area px-3">
+      <h2 className="display-4 fw-bold mb-2" style={{ color: '#dc3545' }}>
+        Orchids International Schools Welcomes You
+      </h2>
+      <h3 className="display-6 text-dark opacity-75 fw-light italic mb-4">{username}</h3>
+      <div className="mx-auto bg-danger" style={{ height: '4px', width: '80px', borderRadius: '2px' }}></div>
+      <p className="mt-4 text-muted lead">Manage your book lists, inventory, and school projections efficiently from your unified dashboard.</p>
+    </div>
+  </div>
+);
+
 // Ensure it defaults to /api for Vercel deployments if no env var is provided
 const API_BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname === "localhost" ? "http://localhost:5000" : "/api");
 
@@ -206,7 +228,7 @@ function App() {
   });
 
   // Missing state declarations for Table Explorer & Sidebar
-  const [viewMode, setViewMode] = useState("kits");
+  const [viewMode, setViewMode] = useState("welcome");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showReportsSection, setShowReportsSection] = useState(false);
   const [tableFilters, setTableFilters] = useState({});
@@ -1405,9 +1427,8 @@ function App() {
            style={{ width: isSidebarCollapsed ? '70px' : '250px', position: 'sticky', top: 0, height: '100vh', transition: 'width 0.3s ease, min-width 0.3s ease', minWidth: isSidebarCollapsed ? '70px' : '250px' }}>
         <div className="p-3 border-bottom d-flex align-items-center justify-content-between" style={{ minHeight: '60px' }}>
           {!isSidebarCollapsed && (
-            <div>
+            <div onClick={() => setViewMode('welcome')} style={{ cursor: 'pointer' }}>
               <h5 className="fw-bold text-primary mb-0">Orchids International School</h5>
-
             </div>
           )}
           <button className="btn btn-sm btn-light border p-0"
@@ -1421,6 +1442,12 @@ function App() {
         
         <div className="px-3 mb-4">
           {!isSidebarCollapsed && <div className="small text-uppercase text-muted fw-bold mb-2 px-2 mt-3" style={{ fontSize: '0.7rem' }}>MAIN</div>}
+          <div 
+            className={`table-item px-3 py-2 ${viewMode === 'welcome' ? 'active' : ''}`}
+            onClick={() => { setViewMode('welcome'); setSelectedTable(null); }}
+          >
+            {isSidebarCollapsed ? <i className="bi bi-house-door-fill"></i> : "Home"}
+          </div>
           <div 
             className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
             onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
@@ -1524,7 +1551,9 @@ function App() {
 
       {/* MAIN CONTENT AREA */}
       <div className="flex-grow-1 overflow-auto">
-        {viewMode === 'kits' ? (
+        {viewMode === 'welcome' ? (
+          <WelcomePage username={currentUser?.username} />
+        ) : viewMode === 'kits' ? (
           <div className="page-wrapper py-4 px-4">
       <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 gap-3">
         <div>
