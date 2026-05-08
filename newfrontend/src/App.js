@@ -257,7 +257,6 @@ function App() {
   });
   const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(window.localStorage.getItem("school_book_erp_currentUser")));
   const [showCreateUser, setShowCreateUser] = useState(false);
-  const [showManageUsers, setShowManageUsers] = useState(false);
   const [newUser, setNewUser] = useState({ username: "", password: "", role: "Admin", rights: [] });
   const [editingUser, setEditingUser] = useState(null);
   const [manageUserForm, setManageUserForm] = useState({ id: null, username: "", password: "", role: "Admin", rights: [] });
