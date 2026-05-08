@@ -1370,7 +1370,7 @@ function App() {
     return (
       <div className="page-wrapper py-4 px-4 d-flex justify-content-center align-items-center">
         <div className="card card-soft login-card p-4 shadow-sm">
-          <h4 className="mb-3">Admin Login</h4>
+          <h4 className="mb-3">User Login</h4>
           <div className="mb-3">
             <label className="form-label">Username</label>
             <input
