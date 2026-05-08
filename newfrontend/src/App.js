@@ -1531,11 +1531,7 @@ function App() {
           <h2 className="page-title">Orchids Book List</h2>
         </div>
         <div className="d-flex gap-2 flex-wrap align-items-center">
-          {currentUser && (
-            <div className="text-muted small">
-              Logged in as: <strong>{currentUser.username}</strong>
-            </div>
-          )}
+          
           {userHasRight("Edit/Delete") && (
             <button className="btn btn-danger btn-sm px-4" onClick={handleCreate}>+ Create Kit</button>
           )}
