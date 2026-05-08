@@ -162,9 +162,7 @@ const WelcomePage = ({ username }) => (
     <div className="welcome-banner mb-5 shadow-lg rounded-4 overflow-hidden position-relative border border-white border-4" style={{ maxWidth: '900px', width: '100%' }}>
       <div style={{ height: '350px', background: 'url("https://www.justdial.com/Bangalore/Orchids-The-International-School-Btm-Layout-3rd-Stage/080PXX80-XX80-140323220939-D4A4_BZDET/photos") center/cover no-repeat', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {/* Overlay for the banner text */}
-        <div className="position-absolute bottom-0 start-0 w-100 p-4 bg-dark bg-opacity-60 text-white text-center">
-           <h1 className="fw-bold m-0 display-5" style={{ letterSpacing: '1px' }}>Orchids International School</h1>
-        </div>
+
       </div>
     </div>
     <div className="welcome-text-area px-3">
