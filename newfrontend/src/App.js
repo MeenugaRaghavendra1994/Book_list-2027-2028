@@ -159,12 +159,16 @@ const SearchableSelect = ({ value, options = [], onChange, placeholder = "Search
 const WelcomePage = ({ username }) => (
   <div className="welcome-container d-flex flex-column align-items-center justify-content-center text-center p-4 animate-fade-in" 
        style={{ minHeight: '100%', background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 100%)' }}>
-    <div className="welcome-banner mb-5 shadow-lg rounded-4 overflow-hidden position-relative border border-white border-4" style={{ maxWidth: '900px', width: '100%' }}>
-      <div style={{ height: '350px', background: 'url("https://images.unsplash.com/photo-1523050853063-bd8012fbb72a?auto=format&fit=crop&q=80&w=1000") center/cover no-repeat', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {/* Overlay for the banner text */}
-        <div className="position-absolute bottom-0 start-0 w-100 p-4 bg-dark bg-opacity-50 text-white text-center">
-           <h1 className="fw-bold m-0 display-5" style={{ letterSpacing: '1px' }}>Orchids International School</h1>
-        </div>
+    <div className="welcome-banner mb-5 shadow-lg rounded-4 overflow-hidden position-relative border border-white border-4" style={{ maxWidth: '900px', width: '100%', height: '350px' }}>
+      <img 
+        src="https://images.unsplash.com/photo-1523050853063-bd8012fbb72a?auto=format&fit=crop&q=80&w=1000" 
+        alt="Orchids International School" 
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        onError={(e) => { e.target.src = 'https://via.placeholder.com/900x350?text=Orchids+International+School'; }}
+      />
+      {/* Overlay for the banner text */}
+      <div className="position-absolute bottom-0 start-0 w-100 p-4 bg-dark bg-opacity-50 text-white text-center">
+         <h1 className="fw-bold m-0 display-5" style={{ letterSpacing: '1px' }}>Orchids International School</h1>
       </div>
     </div>
     <div className="welcome-text-area px-3">
@@ -1459,14 +1463,12 @@ function App() {
         <div className="px-3 flex-grow-1 overflow-auto">
           {!isSidebarCollapsed && (
             <div
-              className="d-flex align-items-center justify-content-between table-item px-2 py-2"
+              className={`table-item px-3 py-2 d-flex align-items-center justify-content-between ${showReportsSection ? 'active' : ''}`}
               style={{ cursor: 'pointer' }}
               onClick={() => setShowReportsSection(prev => !prev)}
             >
-              <div className="small text-uppercase text-muted fw-bold" style={{ fontSize: '0.7rem' }}>
-                Reports & Masters
-              </div>
-              <div className="text-muted">
+              <span className="fw-bold">Reports & Masters</span>
+              <div>
                 {showReportsSection ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>}
               </div>
             </div>
@@ -1498,14 +1500,12 @@ function App() {
 
           {!isSidebarCollapsed && currentUser?.role === 'Admin' && (
             <div
-              className="d-flex align-items-center justify-content-between table-item px-2 py-2 mt-3"
+              className={`table-item px-3 py-2 d-flex align-items-center justify-content-between mt-3 ${showDataSection ? 'active' : ''}`}
               style={{ cursor: 'pointer' }}
               onClick={() => setShowDataSection(prev => !prev)}
             >
-              <div className="small text-uppercase text-muted fw-bold" style={{ fontSize: '0.7rem' }}>
-                Data Management
-              </div>
-              <div className="text-muted">
+              <span className="fw-bold">Data Management</span>
+              <div>
                 {showDataSection ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>}
               </div>
             </div>
@@ -1522,14 +1522,12 @@ function App() {
 
           {!isSidebarCollapsed && (
             <div
-              className="d-flex align-items-center justify-content-between table-item px-2 py-2 mt-3"
+              className={`table-item px-3 py-2 d-flex align-items-center justify-content-between mt-3 ${showDashboardSection ? 'active' : ''}`}
               style={{ cursor: 'pointer' }}
               onClick={() => setShowDashboardSection(prev => !prev)}
             >
-              <div className="small text-uppercase text-muted fw-bold" style={{ fontSize: '0.7rem' }}>
-                Dashboard
-              </div>
-              <div className="text-muted">
+              <span className="fw-bold">Dashboard</span>
+              <div>
                 {showDashboardSection ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>}
               </div>
             </div>
