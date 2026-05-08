@@ -318,7 +318,7 @@ function App() {
       .then(res => setTables(res.data || []))
       .catch(() => setTables([]))
       .finally(() => setIsProcessing(false));
-  }, []);
+  }, [currentUser?.username]);
 
   useEffect(() => {
     if (selectedTable && viewMode === "explorer") { // Add tableFilters to dependencies
