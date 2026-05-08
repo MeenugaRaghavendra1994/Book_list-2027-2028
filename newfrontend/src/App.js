@@ -1450,6 +1450,12 @@ function App() {
           >
             {isSidebarCollapsed ? <i className="bi bi-house-door-fill"></i> : "Home"}
           </div>
+          <div 
+            className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
+            onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
+          >
+            {isSidebarCollapsed ? "📚" : "View/Create Book List"}
+          </div>
           {currentUser?.role === 'Admin' && (
             <div 
               className={`table-item px-3 py-2 ${viewMode === 'users' ? 'active' : ''}`}
