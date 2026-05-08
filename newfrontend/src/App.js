@@ -1530,12 +1530,7 @@ function App() {
           <div className="page-wrapper py-4 px-4">
       <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 gap-3">
         <div>
-          <nav className="breadcrumb bg-transparent p-0 mb-2">
-            <span className="breadcrumb-item">Home</span>
-            <span className="breadcrumb-item">Store</span>
-            <span className="breadcrumb-item active">Book List</span>
-          </nav>
-          <h2 className="page-title">Book List</h2>
+          <h2 className="page-title">Orcids Book List</h2>
         </div>
         <div className="d-flex gap-2 flex-wrap align-items-center">
           {currentUser && (
