@@ -1408,7 +1408,7 @@ function App() {
         <div className="p-3 border-bottom d-flex align-items-center justify-content-between" style={{ minHeight: '60px' }}>
           {!isSidebarCollapsed && (
             <div>
-              <h5 className="fw-bold text-primary mb-0">Book ERP</h5>
+              <h5 className="fw-bold text-primary mb-0">Orchids International School</h5>
               <small className="text-muted">Console</small>
             </div>
           )}
