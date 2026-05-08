@@ -679,7 +679,6 @@ function App() {
       role: user.role || "Admin",
       rights: user.rights || []
     });
-    setShowManageUsers(true);
     setShowCreateUser(false);
   };
 
