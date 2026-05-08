@@ -1378,7 +1378,7 @@ function App() {
               className="form-control"
               value={loginForm.username}
               onChange={e => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
-              placeholder="Enter admin username"
+              placeholder="Enter username"
             />
           </div>
           <div className="mb-3">
@@ -1388,7 +1388,7 @@ function App() {
               className="form-control"
               value={loginForm.password}
               onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-              placeholder="Enter admin password"
+              placeholder="Enter password"
             />
           </div>
           <button className="btn btn-danger w-100" onClick={handleLogin}>Login</button>
