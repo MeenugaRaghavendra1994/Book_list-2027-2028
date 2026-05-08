@@ -161,7 +161,7 @@ const WelcomePage = ({ username }) => (
        style={{ minHeight: '100%', background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 100%)' }}>
     <div className="welcome-banner mb-5 shadow-lg rounded-4 overflow-hidden position-relative border border-white border-4" style={{ maxWidth: '900px', width: '100%', height: '350px' }}>
       <img 
-        src="https://images.unsplash.com/photo-1523050853063-bd8012fbb72a?auto=format&fit=crop&q=80&w=1000" 
+        src="https://images.unsplash.com/photo-1541339907198-e087566f97a4?q=80&w=2070" 
         alt="Orchids International School" 
         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         onError={(e) => { e.target.src = 'https://via.placeholder.com/900x350?text=Orchids+International+School'; }}
