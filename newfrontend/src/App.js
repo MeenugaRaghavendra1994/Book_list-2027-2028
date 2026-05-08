@@ -1530,7 +1530,7 @@ function App() {
           <div className="page-wrapper py-4 px-4">
       <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 gap-3">
         <div>
-          <h2 className="page-title">Orcids Book List</h2>
+          <h2 className="page-title">Orchids Book List</h2>
         </div>
         <div className="d-flex gap-2 flex-wrap align-items-center">
           {currentUser && (
