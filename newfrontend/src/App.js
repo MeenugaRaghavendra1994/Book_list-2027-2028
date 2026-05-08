@@ -1452,12 +1452,14 @@ function App() {
           >
             {isSidebarCollapsed ? <i className="bi bi-house-door-fill"></i> : "Home"}
           </div>
-          <div 
-            className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
-            onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
-          >
-            {isSidebarCollapsed ? "📚" : "View/Create Book List"}
-          </div>
+          {currentUser?.role === 'Admin' && (
+            <div 
+              className={`table-item px-3 py-2 ${viewMode === 'users' ? 'active' : ''}`}
+              onClick={() => { setViewMode('users'); setSelectedTable(null); }}
+            >
+              {isSidebarCollapsed ? <i className="bi bi-people-fill"></i> : "User Management"}
+            </div>
+          )}
         </div>
 
         <div className="px-3 flex-grow-1 overflow-auto">
@@ -1551,6 +1553,138 @@ function App() {
       <div className="flex-grow-1 overflow-auto">
         {viewMode === 'welcome' ? (
           <WelcomePage username={currentUser?.username} />
+        ) : viewMode === 'users' ? (
+          <div className="page-wrapper py-4 px-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h2 className="page-title">User Management</h2>
+              <div className="d-flex gap-2">
+                <button className="btn btn-danger btn-sm px-4" onClick={() => setShowCreateUser(!showCreateUser)}>
+                  {showCreateUser ? "Cancel" : "+ Create User"}
+                </button>
+                <button className="btn btn-secondary btn-sm px-4" onClick={handleLogout}>Logout</button>
+              </div>
+            </div>
+
+            {showCreateUser && (
+              <div className="card card-soft mb-4 p-4 shadow-sm">
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div>
+                    <h5 className="mb-1">Create Admin User</h5>
+                    <div className="text-muted">Only admin users can create new admin users with rights.</div>
+                  </div>
+                </div>
+                <div className="row gx-3 gy-3">
+                  <div className="col-12 col-md-4">
+                    <label className="form-label">Username</label>
+                    <input type="text" className="form-control" value={newUser.username} onChange={e => setNewUser(prev => ({ ...prev, username: e.target.value }))} />
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label">Password</label>
+                    <input type="password" className="form-control" value={newUser.password} onChange={e => setNewUser(prev => ({ ...prev, password: e.target.value }))} />
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label">Role</label>
+                    <select className="form-select" value={newUser.role} onChange={e => setNewUser(prev => ({ ...prev, role: e.target.value }))}>
+                      {roleOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label">Rights</label>
+                    <select className="form-select" multiple value={newUser.rights} onChange={e => {
+                      const selected = Array.from(e.target.selectedOptions).map(option => option.value);
+                      setNewUser(prev => ({ ...prev, rights: selected }));
+                    }}>
+                      {rightsOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                    <div className="form-text">Hold Ctrl/Cmd to select multiple rights.</div>
+                  </div>
+                </div>
+                <div className="mt-4 d-flex gap-2">
+                  <button className="btn btn-danger" onClick={handleCreateUser}>Add Admin User</button>
+                  <button className="btn btn-outline-secondary" onClick={() => setShowCreateUser(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            <div className="card card-soft p-4 shadow-sm">
+              <div className="mb-3">
+                <h5 className="mb-1">System Users</h5>
+                <div className="text-muted">Edit roles, passwords, or delete users.</div>
+              </div>
+              <div className="table-responsive mb-3">
+                <table className="table table-hover align-middle mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Username</th>
+                      <th>Role</th>
+                      <th>Rights</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.length ? users.map(user => (
+                      <tr key={user.id}>
+                        <td>{user.username}</td>
+                        <td>{user.role}</td>
+                        <td>{(user.rights || []).join(", ")}</td>
+                        <td>
+                          <div className="d-flex gap-2 flex-wrap">
+                            <button className="btn btn-outline-primary btn-sm" onClick={() => handleEditUser(user)}>Edit</button>
+                            <button className="btn btn-outline-danger btn-sm" onClick={() => handleDeleteUser(user.id)}>Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="4" className="text-center py-4 text-muted">No users found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {editingUser && (
+                <div className="card card-soft p-3 border border-info">
+                  <div className="mb-3">
+                    <strong>Edit User: {editingUser.username}</strong>
+                  </div>
+                  <div className="row gx-3 gy-3">
+                    <div className="col-12 col-md-3">
+                      <label className="form-label">Username</label>
+                      <input className="form-control" value={manageUserForm.username} onChange={e => handleManageUserChange("username", e.target.value)} />
+                    </div>
+                    <div className="col-12 col-md-3">
+                      <label className="form-label">Password</label>
+                      <input type="password" className="form-control" value={manageUserForm.password} onChange={e => handleManageUserChange("password", e.target.value)} />
+                    </div>
+                    <div className="col-12 col-md-3">
+                      <label className="form-label">Role</label>
+                      <select className="form-select" value={manageUserForm.role} onChange={e => handleManageUserChange("role", e.target.value)}>
+                        {roleOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-12 col-md-3">
+                      <label className="form-label">Rights</label>
+                      <select className="form-select" multiple value={manageUserForm.rights} onChange={e => {
+                        const selected = Array.from(e.target.selectedOptions).map(option => option.value);
+                        handleManageUserChange("rights", selected);
+                      }}>
+                        {rightsOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                      <div className="form-text">Hold Ctrl/Cmd to select multiple rights.</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 d-flex gap-2">
+                    <button className="btn btn-danger btn-sm" onClick={handleUpdateUser}>Save Changes</button>
+                    <button className="btn btn-outline-secondary btn-sm" onClick={() => {
+                      setEditingUser(null);
+                      setManageUserForm({ id: null, username: "", password: "", role: "Admin", rights: [] });
+                    }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         ) : viewMode === 'kits' ? (
           <div className="page-wrapper py-4 px-4">
       <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 gap-3">
@@ -1561,16 +1695,6 @@ function App() {
           
           {userHasRight("Edit/Delete") && (
             <button className="btn btn-danger btn-sm px-4" onClick={handleCreate}>+ Create Kit</button>
-          )}
-          {currentUser?.role === "Admin" && (
-            <button className="btn btn-outline-primary btn-sm px-4" onClick={() => setShowCreateUser(prev => !prev)}>
-              {showCreateUser ? "Cancel User" : "Create User"}
-            </button>
-          )}
-          {currentUser?.role === "Admin" && (
-            <button className="btn btn-outline-secondary btn-sm px-4" onClick={() => setShowManageUsers(prev => !prev)}>
-              {showManageUsers ? "Close Manage" : "Manage Users"}
-            </button>
           )}
           <button className="btn btn-secondary btn-sm px-4" onClick={handleLogout}>Logout</button>
         </div>
@@ -1634,132 +1758,6 @@ function App() {
             <button className="btn btn-danger" onClick={handleCreateSave}>Save Kit</button>
             <button className="btn btn-outline-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
           </div>
-        </div>
-      )}
-
-      {showCreateUser && currentUser?.role === "Admin" && (
-        <div className="card card-soft mb-4 p-4 shadow-sm">
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div>
-              <h5 className="mb-1">Create Admin User</h5>
-              <div className="text-muted">Only admin users can create new admin users with rights.</div>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowCreateUser(false)}>Cancel</button>
-          </div>
-          <div className="row gx-3 gy-3">
-            <div className="col-12 col-md-4">
-              <label className="form-label">Username</label>
-              <input type="text" className="form-control" value={newUser.username} onChange={e => setNewUser(prev => ({ ...prev, username: e.target.value }))} />
-            </div>
-            <div className="col-12 col-md-4">
-              <label className="form-label">Password</label>
-              <input type="password" className="form-control" value={newUser.password} onChange={e => setNewUser(prev => ({ ...prev, password: e.target.value }))} />
-            </div>
-            <div className="col-12 col-md-4">
-              <label className="form-label">Role</label>
-              <select className="form-select" value={newUser.role} onChange={e => setNewUser(prev => ({ ...prev, role: e.target.value }))}>
-                {roleOptions.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-            </div>
-            <div className="col-12 col-md-4">
-              <label className="form-label">Rights</label>
-              <select className="form-select" multiple value={newUser.rights} onChange={e => {
-                const selected = Array.from(e.target.selectedOptions).map(option => option.value);
-                setNewUser(prev => ({ ...prev, rights: selected }));
-              }}>
-                {rightsOptions.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-              <div className="form-text">Hold Ctrl/Cmd to select multiple rights.</div>
-            </div>
-          </div>
-          <div className="mt-4 d-flex gap-2">
-            <button className="btn btn-danger" onClick={handleCreateUser}>Add Admin User</button>
-            <button className="btn btn-outline-secondary" onClick={() => setShowCreateUser(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {showManageUsers && currentUser?.role === "Admin" && (
-        <div className="card card-soft mb-4 p-4 shadow-sm">
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div>
-              <h5 className="mb-1">Manage Users</h5>
-              <div className="text-muted">Edit roles, passwords, or delete users.</div>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowManageUsers(false)}>Close</button>
-          </div>
-          <div className="table-responsive mb-3">
-            <table className="table table-hover align-middle mb-0">
-              <thead className="table-light">
-                <tr>
-                  <th>Username</th>
-                  <th>Role</th>
-                  <th>Rights</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.length ? users.map(user => (
-                  <tr key={user.id}>
-                    <td>{user.username}</td>
-                    <td>{user.role}</td>
-                    <td>{(user.rights || []).join(", ")}</td>
-                    <td>
-                      <div className="d-flex gap-2 flex-wrap">
-                        <button className="btn btn-outline-primary btn-sm" onClick={() => handleEditUser(user)}>Edit</button>
-                        <button className="btn btn-outline-danger btn-sm" onClick={() => handleDeleteUser(user.id)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan="4" className="text-center py-4 text-muted">No users found</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {editingUser && (
-            <div className="card card-soft p-3 border border-info">
-              <div className="mb-3">
-                <strong>Edit User: {editingUser.username}</strong>
-              </div>
-              <div className="row gx-3 gy-3">
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Username</label>
-                  <input className="form-control" value={manageUserForm.username} onChange={e => handleManageUserChange("username", e.target.value)} />
-                </div>
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Password</label>
-                  <input type="password" className="form-control" value={manageUserForm.password} onChange={e => handleManageUserChange("password", e.target.value)} />
-                </div>
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Role</label>
-                  <select className="form-select" value={manageUserForm.role} onChange={e => handleManageUserChange("role", e.target.value)}>
-                    {roleOptions.map(option => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </div>
-                <div className="col-12 col-md-3">
-                  <label className="form-label">Rights</label>
-                  <select className="form-select" multiple value={manageUserForm.rights} onChange={e => {
-                    const selected = Array.from(e.target.selectedOptions).map(option => option.value);
-                    handleManageUserChange("rights", selected);
-                  }}>
-                    {rightsOptions.map(option => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                  <div className="form-text">Hold Ctrl/Cmd to select multiple rights.</div>
-                </div>
-              </div>
-              <div className="mt-3 d-flex gap-2">
-                <button className="btn btn-danger btn-sm" onClick={handleUpdateUser}>Save Changes</button>
-                <button className="btn btn-outline-secondary btn-sm" onClick={() => {
-                  setEditingUser(null);
-                  setManageUserForm({ id: null, username: "", password: "", role: "Admin", rights: [] });
-                }}>Cancel</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
