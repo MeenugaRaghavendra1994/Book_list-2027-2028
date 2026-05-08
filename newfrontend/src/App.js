@@ -1409,7 +1409,7 @@ function App() {
           {!isSidebarCollapsed && (
             <div>
               <h5 className="fw-bold text-primary mb-0">Orchids International School</h5>
-              <small className="text-muted">Console</small>
+
             </div>
           )}
           <button className="btn btn-sm btn-light border p-0"
