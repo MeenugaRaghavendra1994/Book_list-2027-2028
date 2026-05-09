@@ -1077,6 +1077,15 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const { data: bomData, error: bomError } = await supabase.from('sku_sap_bom').select('*');
     if (bomError) console.warn("❌ BOM fetch warning:", bomError.message);
 
+    // Fetch Purchase Orders for "Already Ordered Quantity" logic
+    const { data: poData, error: poError } = await supabase.from('purchase_orders').select('sku, quantity');
+    if (poError) console.warn("❌ Purchase Orders fetch warning:", poError.message);
+    const poMap = {};
+    (poData || []).forEach(po => {
+      const sku = String(po.sku || "").trim().toLowerCase();
+      poMap[sku] = (poMap[sku] || 0) + (Number(po.quantity) || 0);
+    });
+
     // Create a lookup map for BOM components
     const bomMap = {};
     (bomData || []).forEach(item => {
@@ -1227,6 +1236,11 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         summary[mCode].zone_data[z].paid_quantity = materialZoneTotal;
         summary[mCode].total_paid_quantity += materialZoneTotal;
       });
+
+      // Logic 1, 2, and 3: Requirements and Ordered quantities
+      summary[mCode].total_requirement = Math.max(summary[mCode].total_projection, summary[mCode].total_paid_quantity);
+      summary[mCode].already_ordered_quantity = poMap[mCode] || 0;
+      summary[mCode].final_requirement = summary[mCode].total_requirement - summary[mCode].already_ordered_quantity;
     });
 
     const result = Object.values(summary).sort((a, b) => a.material_code.localeCompare(b.material_code));

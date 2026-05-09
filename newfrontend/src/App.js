@@ -2222,6 +2222,9 @@ function App() {
                       ))}
                       <th rowSpan="2" className="py-3 px-3 align-middle">Total Projection</th>
                       <th rowSpan="2" className="py-3 px-3 align-middle">Total paid quantity</th>
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Total Requirement</th>
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Already Ordered Quantity</th>
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Final requirement</th>
                     </tr>
                     <tr>
                       {dashboardData.zones.map(zone => (
@@ -2252,6 +2255,9 @@ function App() {
                         ))}
                         <td className="px-3 text-center fw-bold">{item.total_projection || 0}</td>
                         <td className="px-3 text-center fw-bold">{item.total_paid_quantity || 0}</td>
+                        <td className="px-3 text-center fw-bold bg-light">{item.total_requirement || 0}</td>
+                        <td className="px-3 text-center fw-bold bg-light">{item.already_ordered_quantity || 0}</td>
+                        <td className="px-3 text-center fw-bold bg-light text-danger">{item.final_requirement || 0}</td>
                       </tr>
                     )) : (
                       <tr><td colSpan={4 + (dashboardData.zones.length * 2)} className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
@@ -2269,7 +2275,7 @@ function App() {
                   });
 
                   const csvContent = [
-                    ['Material Code', 'Material Name', ...zoneHeaders, 'Total Projection', 'Total Paid Quantity'],
+                    ['Material Code', 'Material Name', ...zoneHeaders, 'Total Projection', 'Total Paid Quantity', 'Total Requirement', 'Already Ordered Quantity', 'Final Requirement'],
                     ...dashboardData.data.map(item => [
                       item.material_code, 
                       item.material_name,
@@ -2278,7 +2284,10 @@ function App() {
                         item.zone_data[z]?.paid_quantity || 0
                       ]),
                       item.total_projection,
-                      item.total_paid_quantity
+                      item.total_paid_quantity,
+                      item.total_requirement,
+                      item.already_ordered_quantity,
+                      item.final_requirement
                     ])
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   const blob = new Blob([csvContent], { type: 'text/csv' });
