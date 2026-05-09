@@ -1314,6 +1314,77 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 });
 
 /* ============================
+   🔍 DASHBOARD SOURCE DRILL-DOWN
+============================ */
+app.get("/dashboard/projection-source", async (req, res) => {
+  try {
+    const { material_code, zone } = req.query;
+    if (!material_code) return res.status(400).json({ error: "Material code required" });
+
+    // Fetch individual books (kits) containing this material
+    const { data: booksData } = await supabase
+      .from('individual_books')
+      .select('*')
+      .eq('material_code', material_code);
+
+    if (!booksData || booksData.length === 0) return res.json([]);
+
+    // Fetch projections
+    let projQuery = supabase.from('student_projections').select('*');
+    if (zone) projQuery = projQuery.eq('zone', zone);
+    const { data: projData } = await projQuery;
+
+    // Fetch branches for zone resolution
+    const { data: branchList } = await supabase.from('branches').select('name, zone');
+    const branchToZoneMap = {};
+    (branchList || []).forEach(b => branchToZoneMap[String(b.name).toLowerCase().trim()] = b.zone);
+
+    const details = [];
+    booksData.forEach(book => {
+      const kitName = book.composite_name || "N/A";
+      const qtyInKit = Number(book.quantity) || 0;
+      const grade = String(book.grade).toLowerCase().trim();
+      const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+
+      branches.forEach(bName => {
+        const normBranch = bName.toLowerCase();
+        const bZone = branchToZoneMap[normBranch] || book.zone;
+
+        // Filter by zone if requested
+        if (zone && bZone !== zone) return;
+
+        // Find projection for this Grade + Branch
+        const projection = (projData || []).find(p => 
+          String(p.grade).toLowerCase().trim() === grade && 
+          String(p.branch).toLowerCase().trim() === normBranch
+        );
+
+        if (projection) {
+          const studentCount = Number(projection.total_projection) || 0;
+          const contribution = studentCount * qtyInKit;
+          if (contribution > 0) {
+            details.push({
+              kit_name: kitName,
+              grade: book.grade,
+              branch: bName,
+              zone: bZone,
+              students: studentCount,
+              qty_per_kit: qtyInKit,
+              contribution: contribution
+            });
+          }
+        }
+      });
+    });
+
+    res.json(details);
+  } catch (err) {
+    console.error("Projection source error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ============================
    �📥 DOWNLOAD
 ============================ */
 app.get("/download", async (req, res) => {
@@ -1548,6 +1619,7 @@ app.get("/order-table", async (req, res) => {
     const gradeNameFilter = String(req.query.grade_name || "").trim();
     const itemSkuFilter = String(req.query.item_sku || "").trim();
     const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
 
     let query = supabase.from('orders_table').select('*');
 
@@ -1555,6 +1627,7 @@ app.get("/order-table", async (req, res) => {
     if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
     if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
     if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
 
     query = query.order('branch_name', { ascending: true });
 

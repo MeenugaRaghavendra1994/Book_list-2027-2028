@@ -249,6 +249,11 @@ function App() {
   const [newPOForm, setNewPOForm] = useState({ zone: "", sku: "", name: "", quantity: "" });
   const [bulkPOFileName, setBulkPOFileName] = useState("");
   const [bulkPORows, setBulkPORows] = useState([]);
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [sourceModalTitle, setSourceModalTitle] = useState("");
+  const [sourceModalData, setSourceModalData] = useState([]);
+  const [sourceModalCols, setSourceModalCols] = useState([]);
+  const [isSourceLoading, setIsSourceLoading] = useState(false);
 
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
@@ -1152,6 +1157,48 @@ function App() {
       setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b !== item) } : book));
       setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => b !== item) }));
     }
+  };
+
+  const handleShowProjectionSource = async (item, zone) => {
+    setSourceModalTitle(`Projection Source: ${item.material_code} (${zone})`);
+    setSourceModalCols(['Kit Name', 'Grade', 'Branch', 'Students', 'Qty/Kit', 'Contribution']);
+    setIsSourceLoading(true);
+    setShowSourceModal(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/dashboard/projection-source`, { 
+        params: { material_code: item.material_code, zone } 
+      });
+      setSourceModalData(res.data || []);
+    } catch (err) { setSourceModalData([]); }
+    setIsSourceLoading(false);
+  };
+
+  const handleShowPaidQtySource = async (item, zone) => {
+    setSourceModalTitle(`Paid Quantity Source: ${item.material_code} (${zone})`);
+    setSourceModalCols(['Branch Name', 'Grade Name', 'Item SKU', 'Item Name', 'Quantity']);
+    setIsSourceLoading(true);
+    setShowSourceModal(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/order-table`, { 
+        params: { item_sku: item.material_code, zone } 
+      });
+      setSourceModalData(res.data || []);
+    } catch (err) { setSourceModalData([]); }
+    setIsSourceLoading(false);
+  };
+
+  const handleShowOrderedSource = async (item) => {
+    setSourceModalTitle(`Already Ordered Source: ${item.material_code}`);
+    setSourceModalCols(['Zone', 'SKU', 'Name', 'Quantity']);
+    setIsSourceLoading(true);
+    setShowSourceModal(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/data/purchase_orders`, { 
+        params: { sku: item.material_code } 
+      });
+      setSourceModalData(res.data || []);
+    } catch (err) { setSourceModalData([]); }
+    setIsSourceLoading(false);
   };
 
   const handleBulkPOFileChange = async (event) => {
@@ -2414,7 +2461,7 @@ function App() {
                     <tr>
                       {dashboardData.zones.map(zone => (
                         <React.Fragment key={`${zone}-sub`}>
-                          <th className="text-center py-2">projecting</th>
+                          <th className="text-center py-2">Projection</th>
                           <th className="text-center py-2">paid quantity</th>
                         </React.Fragment>
                       ))}
@@ -2434,14 +2481,26 @@ function App() {
                         <td className="px-3">{item.material_name || "N/A"}</td>
                         {dashboardData.zones.map(zone => (
                           <React.Fragment key={`${item.material_code}-${zone}`}>
-                            <td className="px-3 text-center">{item.zone_data[zone]?.projection || 0}</td>
-                            <td className="px-3 text-center">{item.zone_data[zone]?.paid_quantity || 0}</td>
+                            <td className="px-3 text-center">
+                              <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowProjectionSource(item, zone)}>
+                                {item.zone_data[zone]?.projection || 0}
+                              </span>
+                            </td>
+                            <td className="px-3 text-center">
+                              <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowPaidQtySource(item, zone)}>
+                                {item.zone_data[zone]?.paid_quantity || 0}
+                              </span>
+                            </td>
                           </React.Fragment>
                         ))}
                         <td className="px-3 text-center fw-bold">{item.total_projection || 0}</td>
                         <td className="px-3 text-center fw-bold">{item.total_paid_quantity || 0}</td>
                         <td className="px-3 text-center fw-bold bg-light">{item.total_requirement || 0}</td>
-                        <td className="px-3 text-center fw-bold bg-light">{item.already_ordered_quantity || 0}</td>
+                        <td className="px-3 text-center fw-bold bg-light">
+                          <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowOrderedSource(item)}>
+                            {item.already_ordered_quantity || 0}
+                          </span>
+                        </td>
                         <td className="px-3 text-center fw-bold bg-light text-danger">{item.final_requirement || 0}</td>
                       </tr>
                     )) : (
@@ -2484,6 +2543,50 @@ function App() {
                   link.click();
                   link.remove();
                 }}>Export to CSV</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Source Data Modal */}
+        {showSourceModal && (
+          <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1100 }}>
+            <div className="modal-dialog modal-xl modal-dialog-centered">
+              <div className="modal-content shadow-lg">
+                <div className="modal-header bg-dark text-white">
+                  <h5 className="modal-title">{sourceModalTitle}</h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowSourceModal(false)}></button>
+                </div>
+                <div className="modal-body p-0" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  {isSourceLoading ? (
+                    <div className="p-5 text-center"><div className="spinner-border text-danger"></div></div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-hover table-striped mb-0">
+                        <thead className="table-light sticky-top">
+                          <tr>
+                            {sourceModalCols.map(c => <th key={c} className="px-3">{c}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sourceModalData.length > 0 ? sourceModalData.map((row, i) => (
+                            <tr key={i}>
+                              {sourceModalCols.map(col => {
+                                const key = col.toLowerCase().replace(/ /g, '_').replace(/\//g, '_');
+                                return <td key={col} className="px-3 small">{row[key] || row[col] || 0}</td>;
+                              })}
+                            </tr>
+                          )) : (
+                            <tr><td colSpan={sourceModalCols.length} className="text-center py-4 text-muted">No source records found.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-secondary" onClick={() => setShowSourceModal(false)}>Close</button>
+                </div>
               </div>
             </div>
           </div>
