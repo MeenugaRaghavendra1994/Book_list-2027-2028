@@ -2546,50 +2546,6 @@ function App() {
               </div>
             </div>
           </div>
-        ) : null}
-
-        {/* Source Data Modal */}
-        {showSourceModal && (
-          <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1100 }}>
-            <div className="modal-dialog modal-xl modal-dialog-centered">
-              <div className="modal-content shadow-lg">
-                <div className="modal-header bg-dark text-white">
-                  <h5 className="modal-title">{sourceModalTitle}</h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowSourceModal(false)}></button>
-                </div>
-                <div className="modal-body p-0" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                  {isSourceLoading ? (
-                    <div className="p-5 text-center"><div className="spinner-border text-danger"></div></div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-hover table-striped mb-0">
-                        <thead className="table-light sticky-top">
-                          <tr>
-                            {sourceModalCols.map(c => <th key={c} className="px-3">{c}</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sourceModalData.length > 0 ? sourceModalData.map((row, i) => (
-                            <tr key={i}>
-                              {sourceModalCols.map(col => {
-                                const key = col.toLowerCase().replace(/ /g, '_').replace(/\//g, '_');
-                                return <td key={col} className="px-3 small">{row[key] || row[col] || 0}</td>;
-                              })}
-                            </tr>
-                          )) : (
-                            <tr><td colSpan={sourceModalCols.length} className="text-center py-4 text-muted">No source records found.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-                <div className="modal-footer">
-                  <button className="btn btn-secondary" onClick={() => setShowSourceModal(false)}>Close</button>
-                </div>
-              </div>
-            </div>
-          </div>
         ) : viewMode === 'order-table' ? (
           <div className="page-wrapper py-4 px-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
@@ -2981,6 +2937,50 @@ function App() {
               </div>
             )}
             </>
+          </div>
+        )}
+
+        {/* Source Data Modal */}
+        {showSourceModal && (
+          <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1100 }}>
+            <div className="modal-dialog modal-xl modal-dialog-centered">
+              <div className="modal-content shadow-lg">
+                <div className="modal-header bg-dark text-white">
+                  <h5 className="modal-title">{sourceModalTitle}</h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowSourceModal(false)}></button>
+                </div>
+                <div className="modal-body p-0" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  {isSourceLoading ? (
+                    <div className="p-5 text-center"><div className="spinner-border text-danger"></div></div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-hover table-striped mb-0">
+                        <thead className="table-light sticky-top">
+                          <tr>
+                            {sourceModalCols.map(c => <th key={c} className="px-3">{c}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sourceModalData.length > 0 ? sourceModalData.map((row, i) => (
+                            <tr key={i}>
+                              {sourceModalCols.map(col => {
+                                const key = col.toLowerCase().replace(/ /g, '_').replace(/\//g, '_');
+                                return <td key={col} className="px-3 small">{row[key] || row[col] || 0}</td>;
+                              })}
+                            </tr>
+                          )) : (
+                            <tr><td colSpan={sourceModalCols.length} className="text-center py-4 text-muted">No source records found.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-secondary" onClick={() => setShowSourceModal(false)}>Close</button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
