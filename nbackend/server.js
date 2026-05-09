@@ -1091,16 +1091,28 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const { data: branchList, error: branchError } = await supabase.from('branches').select('*');
     if (branchError) console.warn("❌ Branches fetch warning:", branchError.message);
 
-    let booksQuery = supabase.from('individual_books').select('*');
-    if (zoneFilter) booksQuery = booksQuery.eq('zone', zoneFilter);
-    if (branchFilter) booksQuery = booksQuery.ilike('branch_name', `%${branchFilter}%`);
-    if (gradeFilter) booksQuery = booksQuery.eq('grade', gradeFilter);
-    if (materialNameFilter) booksQuery = booksQuery.ilike('material_name', `%${materialNameFilter}%`);
+    // 1. Fetch all individual books that match zone, grade, and material name filters.
+    // We don't filter by branch at the DB level yet so we can see ALL active branches for an item.
+    let allBooksQuery = supabase.from('individual_books').select('*');
+    if (zoneFilter) allBooksQuery = allBooksQuery.eq('zone', zoneFilter);
+    if (gradeFilter) allBooksQuery = allBooksQuery.eq('grade', gradeFilter);
+    if (materialNameFilter) allBooksQuery = allBooksQuery.ilike('material_name', `%${materialNameFilter}%`);
 
-    const { data: booksData, error: booksError } = await booksQuery;
+    const { data: allBooksData, error: booksError } = await allBooksQuery;
     if (booksError) throw booksError;
-    if (!booksData || booksData.length === 0) {
-      return res.json([]);
+
+    // 2. Filter these books in-memory for the summary display based on branchFilter.
+    let booksDataForSummary = (allBooksData || []);
+    if (branchFilter) {
+      const normBranchFilter = normalize(branchFilter);
+      booksDataForSummary = booksDataForSummary.filter(book => {
+        const bookBranches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+        return bookBranches.includes(normBranchFilter);
+      });
+    }
+
+    if (booksDataForSummary.length === 0) {
+      return res.json({ zones: [], data: [] });
     }
 
     // Fetch kits to identify valid branch-grade combinations for projections
@@ -1132,7 +1144,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     // Fetch order table data
     let orderQuery = supabase.from('orders_table').select('*');
     if (zoneFilter) orderQuery = orderQuery.eq('zone', zoneFilter);
-    if (branchFilter) orderQuery = orderQuery.eq('branch_name', branchFilter);
     if (gradeFilter) orderQuery = orderQuery.eq('grade_name', gradeFilter);
 
     const { data: orderData, error: orderError } = await orderQuery;
@@ -1183,7 +1194,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const allPotentialZones = new Set();
     (branchList || []).forEach(b => { if (b.zone) allPotentialZones.add(b.zone); });
     (projectionsData || []).forEach(p => { if (p.zone) allPotentialZones.add(p.zone); });
-    (booksData || []).forEach(b => { if (b.zone) allPotentialZones.add(b.zone); });
+    (allBooksData || []).forEach(b => { if (b.zone) allPotentialZones.add(b.zone); });
     (orderData || []).forEach(o => {
         const brNorm = normalize(o.branch_name);
         const derivedZone = String(o.zone || branchToZoneMapNormalized[brNorm] || "").trim();
@@ -1209,43 +1220,46 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const projMap = {}; // Grade -> Branch -> { qty, zone }
     (projectionsData || []).forEach(p => {
       const g = String(p.grade || "").trim().toLowerCase();
-      const b = normalize(p.branch);
+      const bNorm = normalize(p.branch);
       const z = String(p.zone || "").trim();
-      
+
       if (!projMap[g]) projMap[g] = {};
-      if (!projMap[g][b]) projMap[g][b] = { qty: 0, zone: z };
-      projMap[g][b].qty += (Number(p.total_projection) || 0);
+      if (!projMap[g][bNorm]) projMap[g][bNorm] = { qty: 0, zone: z };
+      projMap[g][bNorm].qty += (Number(p.total_projection) || 0);
     });
 
     const summary = {}; // grouped by material_code
-    const materialBranchMap = {}; // material_code -> Set of active branches
+    const materialBranchMap = {}; // material_code -> Set of ALL branches associated with this item
 
-    // Pass 1: Initialize summary and map active branches per material
-    booksData.forEach(book => {
+    // Pass 1: Build materialBranchMap from ALL matching books
+    (allBooksData || []).forEach(book => {
       const materialCode = String(book.material_code || "").trim().toLowerCase();
-      const materialName = String(book.material_name || "").trim();
       if (!materialCode) return;
-
-      if (!summary[materialCode]) {
-        summary[materialCode] = {
-          material_code: materialCode,
-          material_name: materialName,
-          zone_data: {},
-          total_projection: 0,
-          total_paid_quantity: 0
-        };
-        allZones.forEach(z => {
-          summary[materialCode].zone_data[z] = { projection: 0, paid_quantity: 0 };
-        });
-      }
-
       if (!materialBranchMap[materialCode]) materialBranchMap[materialCode] = new Set();
       const kitBranches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
       kitBranches.forEach(bNorm => materialBranchMap[materialCode].add(bNorm));
     });
 
-    // Pass 2: Calculate projections
-    booksData.forEach(book => {
+    // Pass 2: Initialize summary for only displayed materials
+    booksDataForSummary.forEach(book => {
+      const materialCode = String(book.material_code || "").trim().toLowerCase();
+      const materialName = String(book.material_name || "").trim();
+      if (!materialCode || summary[materialCode]) return;
+
+      summary[materialCode] = {
+        material_code: materialCode,
+        material_name: materialName,
+        zone_data: {},
+        total_projection: 0,
+        total_paid_quantity: 0
+      };
+      allZones.forEach(z => {
+        summary[materialCode].zone_data[z] = { projection: 0, paid_quantity: 0 };
+      });
+    });
+
+    // Pass 3: Calculate projections (only for displayed materials)
+    booksDataForSummary.forEach(book => {
       const materialCode = String(book.material_code || "").trim().toLowerCase();
       if (!materialCode) return;
 
@@ -1257,10 +1271,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         const branchNorm = normalize(b);
         const projInfo = projMap[grade] && projMap[grade][branchNorm];
         const branchProjQty = projInfo ? projInfo.qty : 0;
-        let zone = (projInfo && projInfo.zone) || branchToZoneMapNormalized[branchNorm] || String(book.zone || "").trim();
+        const zone = (projInfo && projInfo.zone) || branchToZoneMapNormalized[branchNorm] || String(book.zone || "").trim();
         
         if (!zone || !allZones.includes(zone)) return;
         if (zoneFilter && zone !== zoneFilter) return;
+        
+        // If dashboard filter is set to a specific branch, only count that branch's projection
         if (branchFilter && branchNorm !== normalize(branchFilter)) return;
 
         const projContribution = branchProjQty * qty;
