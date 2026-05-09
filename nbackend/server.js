@@ -1210,6 +1210,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     (projectionsData || []).forEach(p => {
       const g = String(p.grade || "").trim().toLowerCase();
       const b = String(p.branch || "").trim().toLowerCase();
+      const b = normalize(p.branch);
       const z = String(p.zone || "").trim();
       
       if (!projMap[g]) projMap[g] = {};
