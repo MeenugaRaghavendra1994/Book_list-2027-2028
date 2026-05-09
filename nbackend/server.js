@@ -1330,9 +1330,9 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     const { data: booksData } = await supabase.from('individual_books').select('*');
     const { data: branchList } = await supabase.from('branches').select('name, zone');
 
-    // Create zone mapping
-    const branchToZoneMap = {};
-    (branchList || []).forEach(b => branchToZoneMap[String(b.name || "").toLowerCase().trim()] = b.zone);
+    // Create normalized zone mapping
+    const branchToZoneMapNorm = {};
+    (branchList || []).forEach(b => branchToZoneMapNorm[normalize(b.name)] = b.zone);
 
     // Identify active branches for this material and Setup Lookups for kit materials
     const kitMap = {}; 
@@ -1340,8 +1340,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (booksData || []).forEach(b => {
       const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
-        const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-        brs.forEach(br => activeBranches.add(br));
+        const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+        brs.forEach(brNorm => activeBranches.add(brNorm));
 
         const compCode = String(b.composite_code || "").toLowerCase().trim();
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
@@ -1356,21 +1356,18 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       }
     });
 
-    // Filter and calculate contributions
+    // Filter and calculate
     const details = [];
     
     (orderData || []).forEach(order => {
-      // Resolve zone from branch if not set in order
-      const orderZone = String(order.zone || branchToZoneMap[String(order.branch_name || "").toLowerCase().trim()] || "Unknown").trim();
+      const brNorm = normalize(order.branch_name);
+      const orderZone = String(order.zone || branchToZoneMapNorm[brNorm] || "Unknown").trim();
       
-      // Only process if zone matches
       if (orderZone !== zone) return;
-      
       const sku = String(order.item_sku || "").toLowerCase().trim();
-      const branch = String(order.branch_name || "").toLowerCase().trim();
 
       // Filter: Only include orders from branches where this material is active
-      if (!activeBranches.has(branch)) return;
+      if (!activeBranches.has(brNorm)) return;
 
       let contribution = 0;
       let source = "";
@@ -1401,63 +1398,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
 
     res.json(details);
   } catch (err) {
-    console.error("❌ Paid Qty source error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/dashboard/total-projection-source", async (req, res) => {
-  try {
-    const { material_code } = req.query;
-    if (!material_code) return res.status(400).json({ error: "Material code required" });
-
-    const { data: booksData } = await supabase.from('individual_books').select('*');
-    const relevantBooks = (booksData || []).filter(b => 
-      String(b.material_code || "").toLowerCase().trim() === material_code.toLowerCase().trim()
-    );
-
-    if (!relevantBooks || relevantBooks.length === 0) return res.json([]);
-
-    const { data: projData } = await supabase.from('student_projections').select('*');
-    const { data: branchList } = await supabase.from('branches').select('name, zone');
-    const branchToZoneMap = {};
-    (branchList || []).forEach(b => branchToZoneMap[String(b.name).toLowerCase().trim()] = b.zone);
-
-    const details = [];
-    relevantBooks.forEach(book => {
-      const kitName = book.composite_name || "N/A";
-      const qtyInKit = Number(book.quantity) || 0;
-      const grade = String(book.grade || "").toLowerCase().trim();
-      const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
-
-      branches.forEach(bName => {
-        const normBranch = bName.toLowerCase();
-        const bZone = branchToZoneMap[normBranch] || book.zone;
-
-        const projection = (projData || []).find(p => 
-          String(p.grade || "").toLowerCase().trim() === grade && 
-          String(p.branch || "").toLowerCase().trim() === normBranch
-        );
-
-        if (projection) {
-          const studentCount = Number(projection.total_projection) || 0;
-          const contribution = studentCount * qtyInKit;
-          if (contribution > 0) {
-            details.push({
-              kit_name: kitName,
-              grade: book.grade,
-              branch: bName,
-              zone: bZone,
-              students: studentCount,
-              qty_kit: qtyInKit,
-              contribution: contribution
-            });
-          }
-        }
-      });
-    });
-    res.json(details);
-  } catch (err) {
+    console.error("Paid Qty source error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1472,13 +1413,15 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
     const { data: booksData } = await supabase.from('individual_books').select('*');
 
+    const normalize = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+
     const kitMap = {};
-    const activeBranches = new Set();
+    const activeBranchesNorm = new Set();
     (booksData || []).forEach(b => {
       const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
-        const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-        brs.forEach(br => activeBranches.add(br));
+        const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+        brs.forEach(brNorm => activeBranchesNorm.add(brNorm));
         const compCode = String(b.composite_code || "").toLowerCase().trim();
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
@@ -1494,8 +1437,8 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     const details = [];
     (orderData || []).forEach(order => {
       const sku = String(order.item_sku || "").toLowerCase().trim();
-      const branch = String(order.branch_name || "").toLowerCase().trim();
-      if (!activeBranches.has(branch)) return;
+      const brNorm = normalize(order.branch_name);
+      if (!activeBranchesNorm.has(brNorm)) return;
 
       let contribution = 0;
       let source = "";
