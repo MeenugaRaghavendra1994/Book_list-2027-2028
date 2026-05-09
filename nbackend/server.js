@@ -1172,14 +1172,23 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Map to store raw paid quantities per Zone per SKU
     const paidMap = {}; // paidMap[zone][sku] = total_qty
+    // Map to store paid quantities grouped by Grade/Zone/SKU
+    const orderMap = {}; // orderMap[grade][zone][sku] = total_qty
 
     (orderData || []).forEach(order => {
       const z = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
+      const g = String(order.grade_name || "").trim().toLowerCase();
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
+      // Populate paidMap
       if (!paidMap[z]) paidMap[z] = {};
       paidMap[z][sku] = (paidMap[z][sku] || 0) + qty;
+
+      // Populate orderMap grouped by grade/zone/sku
+      if (!orderMap[g]) orderMap[g] = {};
+      if (!orderMap[g][z]) orderMap[g][z] = {};
+      orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
     });
 
     // Create a reverse BOM map: Component -> List of Composites containing it
