@@ -617,7 +617,10 @@ function App() {
     try {
       const response = await axios.post(`${API_BASE_URL}/run-dispatch-load`, { user: currentUser });
       setDispatchLoadLogs(prev => [...prev, ...response.data.logs, "Dispatch data loaded successfully!"]);
-      
+      if (response.data.failedBranches && response.data.failedBranches.length > 0) {
+        setDispatchLoadLogs(prev => [...prev, `⚠️ Some branches failed to load after retries: ${response.data.failedBranches.join(', ')}`]);
+      }
+
       if (viewMode === 'order-table') {
         axios.get(`${API_BASE_URL}/order-table`)
           .then(res => setOrderTableData(res.data || []))
@@ -625,7 +628,7 @@ function App() {
       }
     } catch (error) {
       const errorMessage = "Error running dispatch load: " + (error.response?.data?.error || error.message);
-      setDispatchLoadLogs(prev => [...prev, errorMessage]);
+      setDispatchLoadLogs(prev => [...prev, errorMessage, ...(error.response?.data?.logs || [])]);
     }
     // Keep modal open until user closes it, or for a few seconds
     // For now, user will close manually.

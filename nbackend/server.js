@@ -1625,7 +1625,7 @@ const processBranch = async (branch, accessToken) => {
     for (const row of jsonData) {
       try {
         rows.push({
-          zone_id: clean(row['Zone ID']),
+          zone_id: clean(row['Zone ID']), // Ensure column names match the Excel sheet exactly
           zone_name: clean(row['Zone Name']),
           branch_id: clean(row['Branch ID']),
           branch_name: clean(row['Branch Name']),
@@ -1657,7 +1657,7 @@ const processBranch = async (branch, accessToken) => {
           packed_datetime: cleanDatetime(row['Packed Datetime'])
         });
       } catch (e) {
-        console.error(`Failed to process row for branch ${branch}:`, e.message);
+        console.error(`Failed to process row for branch ${branch} (row data: ${JSON.stringify(row)}):`, e.message);
       }
     }
 
@@ -1669,7 +1669,7 @@ const processBranch = async (branch, accessToken) => {
   }
 };
 
-// Helper to get all branch IDs from the database
+// Helper to get all branch IDs from the database (currently not used, hardcoded list is used)
 const getAllBranchIds = async () => {
   const { data, error } = await supabase.from('branches').select('id');
   if (error) {
@@ -1703,7 +1703,8 @@ app.post("/run-dispatch-load", async (req, res) => {
       branchToZoneMapInternal[String(b.name || "").trim().toLowerCase()] = b.zone;
     });
 
-    const allBranches = [245, 20, 3, 13,70,250,57,81,8]; 
+    // Use a hardcoded list for now, but in a real scenario, this would come from the database
+    const allBranches = [245, 20, 3, 13, 70, 250, 57, 81, 8]; 
     log(`Found ${allBranches.length} branches to process.`);
     
     // Clear existing data in orders_table
@@ -1711,17 +1712,31 @@ app.post("/run-dispatch-load", async (req, res) => {
     log("Cleared existing data from orders_table.");
     
     let allRows = [];
+    const failedBranches = []; // To store branches that failed all retries
     
-    // Process branches sequentially to avoid overwhelming the external API and hitting timeouts
+    // Process branches sequentially with retry logic
     for (const branchId of allBranches) {
-      log(`⏳ Processing branch ID ${branchId}...`);
-      const result = await processBranch(branchId, accessToken);
-      
-      if (result.rows) {
-        allRows.push(...result.rows);
-        log(`✅ Successfully processed branch ID ${branchId}. Fetched ${result.rows.length} rows.`);
-      } else {
-        log(`❌ Failed to process branch ID ${branchId}: ${result.error}`);
+      let success = false;
+      const MAX_RETRIES = 3; // Define max retries
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        log(`⏳ Processing branch ID ${branchId}, attempt ${attempt}/${MAX_RETRIES}...`);
+        const result = await processBranch(branchId, accessToken);
+        
+        if (result.rows) {
+          allRows.push(...result.rows);
+          log(`✅ Successfully processed branch ID ${branchId}. Fetched ${result.rows.length} rows.`);
+          success = true;
+          break; // Break retry loop on success
+        } else {
+          log(`❌ Attempt ${attempt} failed for branch ID ${branchId}: ${result.error}`);
+          if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+          }
+        }
+      }
+      if (!success) {
+        failedBranches.push(branchId);
+        log(`🔴 Branch ID ${branchId} failed after ${MAX_RETRIES} attempts.`);
       }
     }
 
@@ -1747,11 +1762,14 @@ app.post("/run-dispatch-load", async (req, res) => {
     
     const aggRows = Object.values(aggregated);
     if (aggRows.length > 0) {
-      log(`Aggregated ${aggRows.length} unique records.`);
+      log(`Aggregated ${aggRows.length} unique records. Inserting into orders_table...`);
       const { error: insertError } = await supabase.from('orders_table').insert(aggRows);
       if (insertError) throw insertError;
       log(`Successfully inserted ${aggRows.length} aggregated records into orders_table.`);
     }
+    
+    log("Dispatch data load process completed.");
+
     
     res.json({ 
       success: true, 
@@ -1759,7 +1777,7 @@ app.post("/run-dispatch-load", async (req, res) => {
     });
     
   } catch (err) {
-    console.error("❌ DISPATCH LOAD ERROR:", err.message);
+    console.error("❌ DISPATCH LOAD ERROR (Caught in /run-dispatch-load):", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
