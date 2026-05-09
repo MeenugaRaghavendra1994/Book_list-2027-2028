@@ -1170,33 +1170,30 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       branchToZoneMap[String(b.name || "").trim().toLowerCase()] = b.zone;
     });
 
-    const orderMap = {};
-    // Map structure: orderMap[grade][zone][sku] = total_ordered_quantity
-    (orderData || []).forEach(order => {
-      const g = String(order.grade_name || "").trim().toLowerCase();
-      const z = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
+    // Map to store raw paid quantities per Zone per SKU
+    const paidMap = {}; // paidMap[zone][sku] = total_qty
 
+    (orderData || []).forEach(order => {
+      const z = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
-      if (!orderMap[g]) orderMap[g] = {};
-      if (!orderMap[g][z]) orderMap[g][z] = {};
+      if (!paidMap[z]) paidMap[z] = {};
+      paidMap[z][sku] = (paidMap[z][sku] || 0) + qty;
+    });
 
-      // Mapping logic: if SKU starts with 91, resolve components via sku_sap_bom
-      if (sku.startsWith('91')) {
-        const components = bomMap[sku];
-        if (components && components.length > 0) {
-          components.forEach(comp => {
-            const compCode = String(comp.component_code || "").trim().toLowerCase();
-            const compQty = Number(comp.component_quantity) || 0;
-            orderMap[g][z][compCode] = (orderMap[g][z][compCode] || 0) + (qty * compQty);
-          });
-        } else {
-          orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
-        }
-      } else {
-        orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
-      }
+    // Create a reverse BOM map: Component -> List of Composites containing it
+    const componentToCompositeMap = {};
+    (bomData || []).forEach(bom => {
+      const compCode = String(bom.component_code || "").trim().toLowerCase();
+      const compositeCode = String(bom.composite_code || "").trim().toLowerCase();
+      const compQty = Number(bom.component_quantity) || 1;
+
+      if (!componentToCompositeMap[compCode]) componentToCompositeMap[compCode] = [];
+      componentToCompositeMap[compCode].push({
+        composite_code: compositeCode,
+        multiplier: compQty
+      });
     });
 
     // Map projections by Grade -> Branch
@@ -1318,36 +1315,29 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
   try {
     const { material_code, zone } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
-    if (!zone) return res.status(400).json({ error: "Zone required" });
+    const normMaterialCode = material_code.toLowerCase().trim();
 
     // 1. Fetch relevant data
-    let orderQuery = supabase.from('orders_table').select('*').eq('zone', zone);
+    let orderQuery = supabase.from('orders_table').select('*');
+    if (zone) orderQuery = orderQuery.eq('zone', zone);
+    
     const { data: orderData } = await orderQuery;
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
-    const { data: booksData } = await supabase.from('individual_books').select('*');
 
-    // 2. Setup Lookups
-    const kitMap = {}; // kitCode -> qtyPerKit (for finding materials in kits)
-    (booksData || []).forEach(b => {
-      const matCode = String(b.material_code || "").toLowerCase().trim();
-      const compCode = String(b.composite_code || "").toLowerCase().trim();
-      if (matCode && compCode && matCode === material_code.toLowerCase().trim()) {
-        kitMap[compCode] = Number(b.quantity) || 0;
-      }
-    });
-
+    // 2. Identify composites containing this material
     const bomParents = {}; // parentCode -> qtyPerParent
     (bomData || []).forEach(b => {
-      if (String(b.component_code).toLowerCase().trim() === material_code.toLowerCase().trim()) {
+      if (String(b.component_code).toLowerCase().trim() === normMaterialCode) {
         bomParents[String(b.composite_code).toLowerCase().trim()] = Number(b.component_quantity) || 0;
       }
     });
 
     // 3. Filter and calculate contributions
     const details = [];
-    const normMaterialCode = material_code.toLowerCase().trim();
-
+    
     (orderData || []).forEach(order => {
+      if (zone && order.zone !== zone) return;
+      
       const sku = String(order.item_sku || "").toLowerCase().trim();
       let contribution = 0;
       let source = "";
@@ -1358,13 +1348,11 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       } else if (bomParents[sku]) {
         contribution = (Number(order.quantity) || 0) * bomParents[sku];
         source = `BOM Parent (${order.item_sku})`;
-      } else if (kitMap[sku]) {
-        contribution = (Number(order.quantity) || 0) * kitMap[sku];
-        source = `Kit Order (${order.item_sku})`;
       }
 
       if (contribution > 0) {
         details.push({
+          zone: order.zone,
           branch_name: order.branch_name,
           grade_name: order.grade_name,
           ordered_sku: order.item_sku,
@@ -1452,33 +1440,22 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
   try {
     const { material_code } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
+    const normMaterialCode = material_code.toLowerCase().trim();
 
     // 1. Fetch relevant data
     const { data: orderData } = await supabase.from('orders_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
-    const { data: booksData } = await supabase.from('individual_books').select('*');
 
-    // 2. Setup Lookups
-    const kitMap = {}; // kitCode -> qtyPerKit
-    (booksData || []).forEach(b => {
-      const matCode = String(b.material_code || "").toLowerCase().trim();
-      const compCode = String(b.composite_code || "").toLowerCase().trim();
-      if (matCode && compCode && matCode === material_code.toLowerCase().trim()) {
-        kitMap[compCode] = Number(b.quantity) || 0;
-      }
-    });
-
+    // 2. Identify composites containing this material
     const bomParents = {}; // parentCode -> qtyPerParent
     (bomData || []).forEach(b => {
-      if (String(b.component_code || "").toLowerCase().trim() === material_code.toLowerCase().trim()) {
+      if (String(b.component_code || "").toLowerCase().trim() === normMaterialCode) {
         bomParents[String(b.composite_code || "").toLowerCase().trim()] = Number(b.component_quantity) || 0;
       }
     });
 
     // 3. Filter and calculate contributions
     const details = [];
-    const normMaterialCode = material_code.toLowerCase().trim();
-
     (orderData || []).forEach(order => {
       const sku = String(order.item_sku || "").toLowerCase().trim();
       let contribution = 0;
@@ -1490,9 +1467,6 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
       } else if (bomParents[sku]) {
         contribution = (Number(order.quantity) || 0) * bomParents[sku];
         source = `BOM Parent (${order.item_sku})`;
-      } else if (kitMap[sku]) {
-        contribution = (Number(order.quantity) || 0) * kitMap[sku];
-        source = `Kit Order (${order.item_sku})`;
       }
 
       if (contribution > 0) {
