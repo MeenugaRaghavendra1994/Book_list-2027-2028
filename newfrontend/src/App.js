@@ -242,6 +242,13 @@ function App() {
   const [newBranchForm, setNewBranchForm] = useState({ name: "", zone: "" });
   const [showAddProjectionModal, setShowAddProjectionModal] = useState(false);
   const [newProjectionForm, setNewProjectionForm] = useState({ grade: "", branch: "", zone: "", new_admissions: "", existing_admissions: "", total_projection: "" });
+  const [poFilters, setPoFilters] = useState({ zone: "", sku: "", name: "" });
+  const [poData, setPoData] = useState([]);
+  const [isPoLoading, setIsPoLoading] = useState(false);
+  const [showAddPOModal, setShowAddPOModal] = useState(false);
+  const [newPOForm, setNewPOForm] = useState({ zone: "", sku: "", name: "", quantity: "" });
+  const [bulkPOFileName, setBulkPOFileName] = useState("");
+  const [bulkPORows, setBulkPORows] = useState([]);
 
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [users, setUsers] = useState([
@@ -396,6 +403,20 @@ function App() {
         });
     }
   }, [viewMode, orderTableFilters]);
+
+  useEffect(() => {
+    if (viewMode === "purchase-orders") {
+      setIsPoLoading(true);
+      setIsProcessing(true);
+      axios.get(`${API_BASE_URL}/data/purchase_orders`, { params: poFilters })
+        .then(res => setPoData(res.data || []))
+        .catch(() => setPoData([]))
+        .finally(() => {
+          setIsPoLoading(false);
+          setIsProcessing(false);
+        });
+    }
+  }, [viewMode, poFilters]);
 
   const zones = useMemo(() => ["", ...zonesList.filter(Boolean)], [zonesList]);
   const branchOptions = useMemo(() => {
@@ -1133,6 +1154,53 @@ function App() {
     }
   };
 
+  const handleBulkPOFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setBulkPOFileName(file.name);
+    try {
+      const content = await file.text();
+      const rows = parseCsv(content);
+      setBulkPORows(rows);
+    } catch (error) {
+      alert("Unable to read CSV file.");
+    }
+  };
+
+  const handleBulkPOUpload = async () => {
+    if (!bulkPORows.length) return;
+    setIsProcessing(true);
+    let count = 0;
+    for (const row of bulkPORows) {
+      try {
+        await axios.post(`${API_BASE_URL}/purchase_orders`, {
+          zone: row.zone || row.Zone || "",
+          sku: row.sku || row.SKU || "",
+          name: row.name || row.Name || "",
+          quantity: row.quantity || row.Quantity || 0
+        });
+        count++;
+      } catch (err) { console.error("PO upload row failed", err); }
+    }
+    alert(`Successfully uploaded ${count} Purchase Orders.`);
+    setBulkPORows([]);
+    setBulkPOFileName("");
+    setIsProcessing(false);
+    // Refresh data
+    axios.get(`${API_BASE_URL}/data/purchase_orders`, { params: poFilters }).then(res => setPoData(res.data || []));
+  };
+
+  const handleSaveNewPO = async () => {
+    setIsProcessing(true);
+    try {
+      await axios.post(`${API_BASE_URL}/purchase_orders`, newPOForm);
+      setShowAddPOModal(false);
+      setNewPOForm({ zone: "", sku: "", name: "", quantity: "" });
+      axios.get(`${API_BASE_URL}/data/purchase_orders`, { params: poFilters }).then(res => setPoData(res.data || []));
+    } catch (err) { alert("Failed to save PO"); }
+    setIsProcessing(false);
+  };
+
   const handleSave = async () => {
     if (!activeBook) return;
     if (!editForm.name.trim() || !editForm.zone.trim() || !editForm.grade.trim()) {
@@ -1525,6 +1593,14 @@ function App() {
               {isSidebarCollapsed ? "🚀" : "Run Sales Orders Data"}
             </div>
           )}
+          {showDataSection && (
+            <div
+              className={`table-item px-3 py-2 ${viewMode === 'purchase-orders' ? 'active' : ''}`}
+              onClick={() => { setViewMode('purchase-orders'); setSelectedTable(null); }}
+            >
+              {isSidebarCollapsed ? "🛒" : "Purchase Order"}
+            </div>
+          )}
 
           {!isSidebarCollapsed && (
             <div
@@ -1688,6 +1764,108 @@ function App() {
                 </div>
               )}
             </div>
+          </div>
+        ) : viewMode === 'purchase-orders' ? (
+          <div className="page-wrapper py-4 px-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h2 className="page-title">🛒 Purchase Order Management</h2>
+              <div className="d-flex gap-2">
+                <button className="btn btn-danger btn-sm" onClick={() => setShowAddPOModal(true)}>+ Add PO</button>
+                <button className="btn btn-outline-secondary btn-sm" onClick={() => document.getElementById('bulk-po-input').click()}>Bulk Upload</button>
+                <input id="bulk-po-input" type="file" className="d-none" accept=".csv" onChange={handleBulkPOFileChange} />
+              </div>
+            </div>
+
+            {bulkPOFileName && (
+              <div className="alert alert-warning d-flex justify-content-between align-items-center">
+                <span>Ready to upload: <strong>{bulkPOFileName}</strong> ({bulkPORows.length} rows)</span>
+                <button className="btn btn-success btn-sm" onClick={handleBulkPOUpload}>Confirm Upload</button>
+              </div>
+            )}
+
+            <div className="card card-soft p-4 shadow-sm border-0 mb-4">
+              <div className="row g-3">
+                <div className="col-md-4">
+                  <label className="form-label">Zone</label>
+                  <input type="text" className="form-control" placeholder="Filter Zone" value={poFilters.zone} onChange={e => setPoFilters(p => ({...p, zone: e.target.value}))} />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label">SKU</label>
+                  <input type="text" className="form-control" placeholder="Filter SKU" value={poFilters.sku} onChange={e => setPoFilters(p => ({...p, sku: e.target.value}))} />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label">Name</label>
+                  <input type="text" className="form-control" placeholder="Filter Name" value={poFilters.name} onChange={e => setPoFilters(p => ({...p, name: e.target.value}))} />
+                </div>
+              </div>
+            </div>
+
+            <div className="card card-soft p-4 shadow-sm border-0">
+              <div className="table-responsive rounded-3 border">
+                <table className="table table-hover align-middle mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Zone</th>
+                      <th>SKU</th>
+                      <th>Name</th>
+                      <th>Quantity</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {poData.length > 0 ? poData.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.zone}</td>
+                        <td>{row.sku}</td>
+                        <td>{row.name}</td>
+                        <td>{row.quantity}</td>
+                        <td>
+                          <div className="d-flex gap-2">
+                            <button className="btn btn-outline-warning btn-sm" onClick={() => { setEditingTableRow(row); setSelectedTable('purchase_orders'); setShowEditTableModal(true); }}>Edit</button>
+                            <button className="btn btn-outline-danger btn-sm" onClick={() => handleDeleteTableRow('purchase_orders', row.id)}>Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : <tr><td colSpan="5" className="text-center py-5 text-muted">No data found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {showAddPOModal && (
+              <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+                <div className="modal-dialog modal-md">
+                  <div className="modal-content">
+                    <div className="modal-header bg-danger text-white">
+                      <h5 className="modal-title">Add Purchase Order</h5>
+                      <button type="button" className="btn-close btn-close-white" onClick={() => setShowAddPOModal(false)}></button>
+                    </div>
+                    <div className="modal-body p-4">
+                      <div className="mb-3">
+                        <label className="form-label">Zone</label>
+                        <input type="text" className="form-control" value={newPOForm.zone} onChange={e => setNewPOForm(p => ({...p, zone: e.target.value}))} />
+                      </div>
+                      <div className="mb-3">
+                        <label className="form-label">SKU</label>
+                        <input type="text" className="form-control" value={newPOForm.sku} onChange={e => setNewPOForm(p => ({...p, sku: e.target.value}))} />
+                      </div>
+                      <div className="mb-3">
+                        <label className="form-label">Name</label>
+                        <input type="text" className="form-control" value={newPOForm.name} onChange={e => setNewPOForm(p => ({...p, name: e.target.value}))} />
+                      </div>
+                      <div className="mb-3">
+                        <label className="form-label">Quantity</label>
+                        <input type="number" className="form-control" value={newPOForm.quantity} onChange={e => setNewPOForm(p => ({...p, quantity: e.target.value}))} />
+                      </div>
+                    </div>
+                    <div className="modal-footer">
+                      <button className="btn btn-danger" onClick={handleSaveNewPO}>Save</button>
+                      <button className="btn btn-secondary" onClick={() => setShowAddPOModal(false)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : viewMode === 'kits' ? (
           <div className="page-wrapper py-4 px-4">

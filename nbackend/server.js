@@ -901,7 +901,8 @@ app.get("/tables", async (req, res) => {
     { table_name: "branches" },
     { table_name: "grades" },
     { table_name: "student_projections" },
-    { table_name: "book_list_users" }
+    { table_name: "book_list_users" },
+    { table_name: "purchase_orders" }
   ];
   res.json(tables);
 });
@@ -909,7 +910,7 @@ app.get("/tables", async (req, res) => {
 // GET /data/:table - Get data for a specific table with optional filters
 app.get("/data/:table", async (req, res) => {
   const { table } = req.params;
-  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "student_projections", "book_list_users"];
+  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "student_projections", "book_list_users", "purchase_orders"];
   
   if (!allowedTables.includes(table)) {
     return res.status(403).json({ success: false, error: "Access denied to requested table." });
@@ -943,6 +944,13 @@ app.get("/data/:table", async (req, res) => {
     // For now, we'll just allow filtering if the frontend sends it
     const usernameFilter = req.query.username;
     if (usernameFilter) query = query.ilike('username', `%${usernameFilter}%`);
+  } else if (table === 'purchase_orders') {
+    const zoneFilter = req.query.zone;
+    const skuFilter = req.query.sku;
+    const nameFilter = req.query.name;
+    if (zoneFilter) query = query.ilike('zone', `%${zoneFilter}%`);
+    if (skuFilter) query = query.ilike('sku', `%${skuFilter}%`);
+    if (nameFilter) query = query.ilike('name', `%${nameFilter}%`);
   }
 
   try {
@@ -959,7 +967,7 @@ app.get("/data/:table", async (req, res) => {
 // GET /export-table/:table - Export data from a specific table as XLSX
 app.get("/export-table/:table", async (req, res) => {
   const { table } = req.params;
-  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "student_projections", "book_list_users"];
+  const allowedTables = ["individual_books", "grade_wise_kits", "pricing", "branches", "grades", "student_projections", "book_list_users", "purchase_orders"];
 
   if (!allowedTables.includes(table)) {
     return res.status(403).json({ success: false, error: "Access denied to requested table." });
@@ -1007,6 +1015,60 @@ app.delete("/users/:id", async (req, res) => {
   } catch (err) {
     console.error("❌ USER DELETE ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
+  }
+});
+
+/* ============================
+   📦 PURCHASE ORDERS CRUD
+============================ */
+app.post("/purchase_orders", async (req, res) => {
+  try {
+    const { zone, sku, name, quantity } = req.body;
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .insert([{ 
+        zone: String(zone || "").trim(), 
+        sku: String(sku || "").trim(), 
+        name: String(name || "").trim(), 
+        quantity: Number(quantity) || 0 
+      }])
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ success: true, record: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put("/purchase_orders/:id", async (req, res) => {
+  try {
+    const { zone, sku, name, quantity } = req.body;
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({ 
+        zone: String(zone || "").trim(), 
+        sku: String(sku || "").trim(), 
+        name: String(name || "").trim(), 
+        quantity: Number(quantity) || 0 
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ success: true, record: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/purchase_orders/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.from('purchase_orders').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
