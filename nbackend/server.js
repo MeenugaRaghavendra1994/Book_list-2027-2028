@@ -1267,8 +1267,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     Object.keys(summary).forEach(mCode => {
       allZones.forEach(z => {
         let materialZoneTotal = 0;
-        const processedGrades = new Set();
-        const processedKits = new Set();
+        const addedDirectOrders = new Set(); // Track which grade's direct orders we've added
+        const processedKits = new Set(); // Track which kits we've counted
 
         // Identify which kits in this zone contain the material
         (booksData || []).forEach(b => {
@@ -1283,19 +1283,24 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           if (!hasBranchInZone) return;
 
           if (orderMap[g] && orderMap[g][z]) {
-            // 1. Add direct orders or BOM-resolved quantities for the specific material in this zone/grade
-            // We use processedGrades to ensure we only add the aggregated base material count once per grade
-            if (!processedGrades.has(g)) {
-              materialZoneTotal += (orderMap[g][z][mCode] || 0);
-              processedGrades.add(g);
+            // 1. Add direct orders for the specific material in this zone/grade
+            // orderMap[g][z][mCode] is already SUM of ALL branches, so add it only once per grade
+            if (!addedDirectOrders.has(g)) {
+              const directOrders = orderMap[g][z][mCode] || 0;
+              materialZoneTotal += directOrders;
+              addedDirectOrders.add(g);
             }
             
-            // 2. Handle Kit-level orders: if the kit SKU itself was ordered and not resolved by BOM
-            // We add its contribution (Kit quantity * books per kit)
             // 2. Handle Kit-level orders: if the kit SKU itself was ordered
-            if (c && c !== mCode && !processedKits.has(`${g}||${c}`)) {
-              materialZoneTotal += ((orderMap[g][z][c] || 0) * q);
-              processedKits.add(`${g}||${c}`);
+            // Add contribution for each unique kit per grade (Kit quantity * books per kit)
+            if (c && c !== mCode) {
+              const kitKey = `${g}||${c}`;
+              if (!processedKits.has(kitKey)) {
+                const kitOrders = orderMap[g][z][c] || 0;
+                const kitContribution = kitOrders * q;
+                materialZoneTotal += kitContribution;
+                processedKits.add(kitKey);
+              }
             }
           }
         });
