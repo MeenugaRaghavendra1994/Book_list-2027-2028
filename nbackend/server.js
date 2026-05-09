@@ -1159,14 +1159,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       bomMap[cc].push(item);
     });
 
-    // Get all unique zones for column headers
-    const zonesSet = new Set([
-      ...(branchList || []).map(b => b.zone),
-      ...(projectionsData || []).map(p => p.zone),
-      ...booksData.map(b => b.zone)
-    ].filter(Boolean));
-    const allZones = Array.from(zonesSet).sort();
-
     // Create branch to zone map
     const branchToZoneMapNormalized = {};
     (branchList || []).forEach(b => {
@@ -1708,8 +1700,14 @@ app.post("/run-dispatch-load", async (req, res) => {
     log(`Found ${allBranches.length} branches to process.`);
     
     // Clear existing data in orders_table
-    await supabase.from('orders_table').delete().neq('id', 0); // Delete all records
-    log("Cleared existing data from orders_table.");
+    log("Clearing existing data from orders_table...");
+    const { error: deleteError } = await supabase.from('orders_table').delete().neq('id', 0); 
+    
+    if (deleteError) {
+      log(`❌ Failed to clear orders_table: ${deleteError.message}`);
+      throw new Error(`Database Error (Delete): ${deleteError.message}`);
+    }
+    log("✅ Cleared existing data.");
     
     let allRows = [];
     const failedBranches = []; // To store branches that failed all retries
@@ -1764,21 +1762,24 @@ app.post("/run-dispatch-load", async (req, res) => {
     if (aggRows.length > 0) {
       log(`Aggregated ${aggRows.length} unique records. Inserting into orders_table...`);
       const { error: insertError } = await supabase.from('orders_table').insert(aggRows);
-      if (insertError) throw insertError;
+      if (insertError) {
+        log(`❌ Insert failed: ${insertError.message}`);
+        throw insertError;
+      }
       log(`Successfully inserted ${aggRows.length} aggregated records into orders_table.`);
+    } else {
+      log("⚠️ No data was aggregated to insert.");
     }
     
     log("Dispatch data load process completed.");
-
-    
     res.json({ 
       success: true, 
       message: `Dispatch data loaded successfully. Processed ${allRows.length} raw rows, aggregated into ${aggRows.length} records.`, logs 
     });
     
   } catch (err) {
-    console.error("❌ DISPATCH LOAD ERROR (Caught in /run-dispatch-load):", err.message);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("❌ DISPATCH LOAD CRITICAL ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message, logs });
   }
 });
 
