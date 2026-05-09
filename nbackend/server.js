@@ -1318,16 +1318,22 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
   try {
     const { material_code, zone } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
+    if (!zone) return res.status(400).json({ error: "Zone required" });
 
     // 1. Fetch relevant data
-    const { data: orderData } = await supabase.from('orders_table').select('*').eq('zone', zone);
+    let orderQuery = supabase.from('orders_table').select('*').eq('zone', zone);
+    const { data: orderData } = await orderQuery;
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
-    const { data: booksData } = await supabase.from('individual_books').select('*').eq('material_code', material_code);
+    const { data: booksData } = await supabase.from('individual_books').select('*');
 
     // 2. Setup Lookups
-    const kitMap = {}; // kitCode -> qtyPerKit
+    const kitMap = {}; // kitCode -> qtyPerKit (for finding materials in kits)
     (booksData || []).forEach(b => {
-       if (b.composite_code) kitMap[String(b.composite_code).toLowerCase().trim()] = Number(b.quantity) || 0;
+      const matCode = String(b.material_code || "").toLowerCase().trim();
+      const compCode = String(b.composite_code || "").toLowerCase().trim();
+      if (matCode && compCode && matCode === material_code.toLowerCase().trim()) {
+        kitMap[compCode] = Number(b.quantity) || 0;
+      }
     });
 
     const bomParents = {}; // parentCode -> qtyPerParent
@@ -1373,6 +1379,139 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     res.json(details);
   } catch (err) {
     console.error("Paid Qty source error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/dashboard/total-projection-source", async (req, res) => {
+  try {
+    const { material_code } = req.query;
+    if (!material_code) return res.status(400).json({ error: "Material code required" });
+
+    // Fetch individual books (kits) containing this material
+    const { data: booksData } = await supabase.from('individual_books').select('*');
+    
+    // Filter for books containing this material
+    const relevantBooks = (booksData || []).filter(b => 
+      String(b.material_code || "").toLowerCase().trim() === material_code.toLowerCase().trim()
+    );
+
+    if (!relevantBooks || relevantBooks.length === 0) return res.json([]);
+
+    // Fetch projections
+    const { data: projData } = await supabase.from('student_projections').select('*');
+
+    // Fetch branches for zone resolution
+    const { data: branchList } = await supabase.from('branches').select('name, zone');
+    const branchToZoneMap = {};
+    (branchList || []).forEach(b => branchToZoneMap[String(b.name).toLowerCase().trim()] = b.zone);
+
+    const details = [];
+    relevantBooks.forEach(book => {
+      const kitName = book.composite_name || "N/A";
+      const qtyInKit = Number(book.quantity) || 0;
+      const grade = String(book.grade || "").toLowerCase().trim();
+      const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+
+      branches.forEach(bName => {
+        const normBranch = bName.toLowerCase();
+        const bZone = branchToZoneMap[normBranch] || book.zone;
+
+        // Find projection for this Grade + Branch
+        const projection = (projData || []).find(p => 
+          String(p.grade || "").toLowerCase().trim() === grade && 
+          String(p.branch || "").toLowerCase().trim() === normBranch
+        );
+
+        if (projection) {
+          const studentCount = Number(projection.total_projection) || 0;
+          const contribution = studentCount * qtyInKit;
+          if (contribution > 0) {
+            details.push({
+              kit_name: kitName,
+              grade: book.grade,
+              branch: bName,
+              zone: bZone,
+              students: studentCount,
+              qty_per_kit: qtyInKit,
+              contribution: contribution
+            });
+          }
+        }
+      });
+    });
+
+    res.json(details);
+  } catch (err) {
+    console.error("Total Projection source error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
+  try {
+    const { material_code } = req.query;
+    if (!material_code) return res.status(400).json({ error: "Material code required" });
+
+    // 1. Fetch relevant data
+    const { data: orderData } = await supabase.from('orders_table').select('*');
+    const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
+    const { data: booksData } = await supabase.from('individual_books').select('*');
+
+    // 2. Setup Lookups
+    const kitMap = {}; // kitCode -> qtyPerKit
+    (booksData || []).forEach(b => {
+      const matCode = String(b.material_code || "").toLowerCase().trim();
+      const compCode = String(b.composite_code || "").toLowerCase().trim();
+      if (matCode && compCode && matCode === material_code.toLowerCase().trim()) {
+        kitMap[compCode] = Number(b.quantity) || 0;
+      }
+    });
+
+    const bomParents = {}; // parentCode -> qtyPerParent
+    (bomData || []).forEach(b => {
+      if (String(b.component_code || "").toLowerCase().trim() === material_code.toLowerCase().trim()) {
+        bomParents[String(b.composite_code || "").toLowerCase().trim()] = Number(b.component_quantity) || 0;
+      }
+    });
+
+    // 3. Filter and calculate contributions
+    const details = [];
+    const normMaterialCode = material_code.toLowerCase().trim();
+
+    (orderData || []).forEach(order => {
+      const sku = String(order.item_sku || "").toLowerCase().trim();
+      let contribution = 0;
+      let source = "";
+
+      if (sku === normMaterialCode) {
+        contribution = Number(order.quantity) || 0;
+        source = "Direct Order";
+      } else if (bomParents[sku]) {
+        contribution = (Number(order.quantity) || 0) * bomParents[sku];
+        source = `BOM Parent (${order.item_sku})`;
+      } else if (kitMap[sku]) {
+        contribution = (Number(order.quantity) || 0) * kitMap[sku];
+        source = `Kit Order (${order.item_sku})`;
+      }
+
+      if (contribution > 0) {
+        details.push({
+          zone: order.zone,
+          branch_name: order.branch_name,
+          grade_name: order.grade_name,
+          ordered_sku: order.item_sku,
+          item_name: order.item_name,
+          ordered_qty: order.quantity,
+          source: source,
+          contribution: contribution
+        });
+      }
+    });
+
+    res.json(details);
+  } catch (err) {
+    console.error("Total Paid Qty source error:", err);
     res.status(500).json({ error: err.message });
   }
 });

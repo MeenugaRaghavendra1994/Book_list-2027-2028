@@ -1183,7 +1183,44 @@ function App() {
         params: { material_code: item.material_code, zone } 
       });
       setSourceModalData(res.data || []);
-    } catch (err) { setSourceModalData([]); }
+    } catch (err) { 
+      console.error("Paid Qty Source Error:", err);
+      setSourceModalData([]); 
+    }
+    setIsSourceLoading(false);
+  };
+
+  const handleShowTotalProjectionSource = async (item) => {
+    setSourceModalTitle(`Total Projection Source: ${item.material_code}`);
+    setSourceModalCols(['Kit Name', 'Grade', 'Branch', 'Zone', 'Students', 'Qty/Kit', 'Contribution']);
+    setIsSourceLoading(true);
+    setShowSourceModal(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/dashboard/total-projection-source`, { 
+        params: { material_code: item.material_code } 
+      });
+      setSourceModalData(res.data || []);
+    } catch (err) { 
+      console.error("Total Projection Source Error:", err);
+      setSourceModalData([]); 
+    }
+    setIsSourceLoading(false);
+  };
+
+  const handleShowTotalPaidQtySource = async (item) => {
+    setSourceModalTitle(`Total Paid Quantity Source: ${item.material_code}`);
+    setSourceModalCols(['Zone', 'Branch Name', 'Grade Name', 'Ordered SKU', 'Item Name', 'Ordered Qty', 'Source', 'Contribution']);
+    setIsSourceLoading(true);
+    setShowSourceModal(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/dashboard/total-paid-quantity-source`, { 
+        params: { material_code: item.material_code } 
+      });
+      setSourceModalData(res.data || []);
+    } catch (err) { 
+      console.error("Total Paid Qty Source Error:", err);
+      setSourceModalData([]); 
+    }
     setIsSourceLoading(false);
   };
 
@@ -2493,8 +2530,16 @@ function App() {
                             </td>
                           </React.Fragment>
                         ))}
-                        <td className="px-3 text-center fw-bold">{item.total_projection || 0}</td>
-                        <td className="px-3 text-center fw-bold">{item.total_paid_quantity || 0}</td>
+                        <td className="px-3 text-center">
+                          <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalProjectionSource(item)}>
+                            {item.total_projection || 0}
+                          </span>
+                        </td>
+                        <td className="px-3 text-center">
+                          <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalPaidQtySource(item)}>
+                            {item.total_paid_quantity || 0}
+                          </span>
+                        </td>
                         <td className="px-3 text-center fw-bold bg-light">{item.total_requirement || 0}</td>
                         <td className="px-3 text-center fw-bold bg-light">
                           <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowOrderedSource(item)}>
