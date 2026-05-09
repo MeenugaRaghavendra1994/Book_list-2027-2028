@@ -1180,7 +1180,7 @@ function App() {
     setShowSourceModal(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/dashboard/paid-quantity-source`, { 
-        params: { item_sku: item.material_code, zone } 
+        params: { material_code: item.material_code, zone } 
       });
       setSourceModalData(res.data || []);
     } catch (err) { setSourceModalData([]); }
