@@ -1437,7 +1437,7 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
               branch: bName,
               zone: bZone,
               students: studentCount,
-              qty_per_kit: qtyInKit,
+              qty_kit: qtyInKit,
               contribution: contribution
             });
           }
@@ -1577,7 +1577,7 @@ app.get("/dashboard/projection-source", async (req, res) => {
               branch: bName,
               zone: bZone,
               students: studentCount,
-              qty_per_kit: qtyInKit,
+              qty_kit: qtyInKit,
               contribution: contribution
             });
           }
