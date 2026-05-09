@@ -1813,7 +1813,14 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {poData.length > 0 ? poData.map((row) => (
+                    {isPoLoading ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-5">
+                          <div className="spinner-border spinner-border-sm text-danger me-2" role="status"></div>
+                          <span className="fw-bold text-danger">Fetching Purchase Orders...</span>
+                        </td>
+                      </tr>
+                    ) : poData.length > 0 ? poData.map((row) => (
                       <tr key={row.id}>
                         <td>{row.zone}</td>
                         <td>{row.sku}</td>
