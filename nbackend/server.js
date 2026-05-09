@@ -164,16 +164,27 @@ app.get("/books/:id", async (req, res) => {
 ============================ */
 app.get("/kits", async (req, res) => {
   try {
+    console.log("GET /kits called");
+    if (!supabase) {
+      console.error("GET KITS ERROR: Supabase client not initialized");
+      return res.status(503).json({ success: false, error: "Supabase client not initialized" });
+    }
+
     const { data, error } = await supabase
       .from('grade_wise_kits')
       .select('*')
       .order('id', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error("GET KITS ERROR: Supabase query failed", error.message, error.details, error.hint);
+      return res.status(500).json({ success: false, error: error.message, details: error.details || null });
+    }
+
+    console.log(`GET /kits succeeded: ${Array.isArray(data) ? data.length : 0} records`);
     res.json(data);
   } catch (err) {
-    console.error("GET KITS ERROR:", err.message, err.details, err.hint);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("GET KITS ERROR:", err.message, err.stack || err);
+    res.status(500).json({ success: false, error: err.message, stack: err.stack ? err.stack.split('\n').slice(0,3) : null });
   }
 });
 
