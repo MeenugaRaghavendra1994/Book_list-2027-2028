@@ -1091,6 +1091,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const { data: branchList, error: branchError } = await supabase.from('branches').select('*');
     if (branchError) console.warn("❌ Branches fetch warning:", branchError.message);
 
+    // Create branch to zone map (needed early for consistent zone derivation)
+    const branchToZoneMapNormalized = {};
+    (branchList || []).forEach(b => {
+      branchToZoneMapNormalized[normalize(b.name)] = b.zone;
+    });
+
     let booksQuery = supabase.from('individual_books').select('*');
     if (zoneFilter) booksQuery = booksQuery.eq('zone', zoneFilter);
     if (branchFilter) booksQuery = booksQuery.ilike('branch_name', `%${branchFilter}%`);
@@ -1186,6 +1192,18 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       if (!paidMap[z][sku]) paidMap[z][sku] = {};
       paidMap[z][sku][brNorm] = (paidMap[z][sku][brNorm] || 0) + qty;
     });
+
+    // Get all unique zones for column headers
+    const allPotentialZones = new Set();
+    (branchList || []).forEach(b => { if (b.zone) allPotentialZones.add(b.zone); });
+    (projectionsData || []).forEach(p => { if (p.zone) allPotentialZones.add(p.zone); });
+    (booksData || []).forEach(b => { if (b.zone) allPotentialZones.add(b.zone); });
+    (orderData || []).forEach(o => {
+        const brNorm = normalize(o.branch_name);
+        const derivedZone = String(o.zone || branchToZoneMapNormalized[brNorm] || "").trim();
+        if (derivedZone) allPotentialZones.add(derivedZone);
+    });
+    const allZones = Array.from(allPotentialZones).sort();
 
     // Create a reverse BOM map: Component -> List of Composites containing it
     const componentToCompositeMap = {};
