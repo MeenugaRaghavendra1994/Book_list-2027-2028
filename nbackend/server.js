@@ -1263,62 +1263,25 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       });
     });
 
-    // Final zone-wide summation of Paid Quantities for each Material Code
     // Final zone-wide summation of Paid Quantities
     Object.keys(summary).forEach(mCode => {
       const normMCode = mCode.toLowerCase().trim();
       allZones.forEach(z => {
-        let materialZoneTotal = 0;
-        const addedDirectOrders = new Set(); // Track which grade's direct orders we've added
-        const processedKits = new Set(); // Track which kits we've counted
         let totalPaidInZone = 0;
+        
         if (paidMap[z]) {
           // 1. Direct SKU orders
           totalPaidInZone += (paidMap[z][normMCode] || 0);
 
-        // Identify which kits in this zone contain the material
-        (booksData || []).forEach(b => {
-          if (String(b.material_code).toLowerCase() !== mCode) return;
-          
-          const g = String(b.grade).toLowerCase();
-          const c = String(b.composite_code || "").toLowerCase();
-          const q = Number(b.quantity) || 0;
-          const branches = String(b.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-          
-          const hasBranchInZone = branches.some(bn => (branchToZoneMap[bn] || b.zone) === z);
-          if (!hasBranchInZone) return;
-
-          if (orderMap[g] && orderMap[g][z]) {
-            // 1. Add direct orders for the specific material in this zone/grade
-            // orderMap[g][z][mCode] is already SUM of ALL branches, so add it only once per grade
-            if (!addedDirectOrders.has(g)) {
-              const directOrders = orderMap[g][z][mCode] || 0;
-              materialZoneTotal += directOrders;
-              addedDirectOrders.add(g);
           // 2. Orders from 91-series composites (via BOM)
           const composites = componentToCompositeMap[normMCode] || [];
           composites.forEach(comp => {
             if (paidMap[z][comp.composite_code]) {
               totalPaidInZone += (paidMap[z][comp.composite_code] * comp.multiplier);
             }
-            
-            // 2. Handle Kit-level orders: if the kit SKU itself was ordered
-            // Add contribution for each unique kit per grade (Kit quantity * books per kit)
-            if (c && c !== mCode) {
-              const kitKey = `${g}||${c}`;
-              if (!processedKits.has(kitKey)) {
-                const kitOrders = orderMap[g][z][c] || 0;
-                const kitContribution = kitOrders * q;
-                materialZoneTotal += kitContribution;
-                processedKits.add(kitKey);
-              }
-            }
-          }
-        });
-        summary[mCode].zone_data[z].paid_quantity = materialZoneTotal;
-        summary[mCode].total_paid_quantity += materialZoneTotal;
           });
         }
+
         summary[mCode].zone_data[z].paid_quantity = totalPaidInZone;
         summary[mCode].total_paid_quantity += totalPaidInZone;
       });
