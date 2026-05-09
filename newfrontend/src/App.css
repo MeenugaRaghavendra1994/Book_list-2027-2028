@@ -9,6 +9,10 @@
   box-sizing: border-box;
 }
 
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
 .page-title {
   font-size: 1.85rem;
   font-weight: 700;

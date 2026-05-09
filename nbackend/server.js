@@ -1324,28 +1324,49 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
   try {
     const { material_code, zone } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
+    if (!zone) return res.status(400).json({ error: "Zone required" });
+
     const normMaterialCode = material_code.toLowerCase().trim();
 
-    // 1. Fetch relevant data
-    let orderQuery = supabase.from('orders_table').select('*');
-    if (zone) orderQuery = orderQuery.eq('zone', zone);
-    
-    const { data: orderData } = await orderQuery;
+    // Fetch all relevant data
+    const { data: orderData } = await supabase.from('orders_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
+    const { data: booksData } = await supabase.from('individual_books').select('*');
+    const { data: branchList } = await supabase.from('branches').select('name, zone');
 
-    // 2. Identify composites containing this material
-    const bomParents = {}; // parentCode -> qtyPerParent
-    (bomData || []).forEach(b => {
-      if (String(b.component_code).toLowerCase().trim() === normMaterialCode) {
-        bomParents[String(b.composite_code).toLowerCase().trim()] = Number(b.component_quantity) || 0;
+    // Create zone mapping
+    const branchToZoneMap = {};
+    (branchList || []).forEach(b => {
+      branchToZoneMap[String(b.name || "").toLowerCase().trim()] = b.zone;
+    });
+
+    // Setup Lookups for kit materials
+    const kitMap = {}; // kitCode -> qtyPerKit
+    (booksData || []).forEach(b => {
+      const matCode = String(b.material_code || "").toLowerCase().trim();
+      const compCode = String(b.composite_code || "").toLowerCase().trim();
+      if (matCode === normMaterialCode && compCode) {
+        kitMap[compCode] = Number(b.quantity) || 0;
       }
     });
 
-    // 3. Filter and calculate contributions
+    // Setup BOM lookups
+    const bomParents = {}; // parentCode -> qtyPerParent
+    (bomData || []).forEach(b => {
+      if (String(b.component_code || "").toLowerCase().trim() === normMaterialCode) {
+        bomParents[String(b.composite_code || "").toLowerCase().trim()] = Number(b.component_quantity) || 0;
+      }
+    });
+
+    // Filter and calculate contributions
     const details = [];
     
     (orderData || []).forEach(order => {
-      if (zone && order.zone !== zone) return;
+      // Resolve zone from branch if not set in order
+      const orderZone = String(order.zone || branchToZoneMap[String(order.branch_name || "").toLowerCase().trim()] || "Unknown").trim();
+      
+      // Only process if zone matches
+      if (orderZone !== zone) return;
       
       const sku = String(order.item_sku || "").toLowerCase().trim();
       let contribution = 0;
@@ -1357,25 +1378,28 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       } else if (bomParents[sku]) {
         contribution = (Number(order.quantity) || 0) * bomParents[sku];
         source = `BOM Parent (${order.item_sku})`;
+      } else if (kitMap[sku]) {
+        contribution = (Number(order.quantity) || 0) * kitMap[sku];
+        source = `Kit Order (${order.item_sku})`;
       }
 
       if (contribution > 0) {
         details.push({
-          zone: order.zone,
-          branch_name: order.branch_name,
-          grade_name: order.grade_name,
-          ordered_sku: order.item_sku,
-          item_name: order.item_name,
-          ordered_qty: order.quantity,
+          branch_name: order.branch_name || "N/A",
+          grade_name: order.grade_name || "N/A",
+          ordered_sku: order.item_sku || "N/A",
+          item_name: order.item_name || "N/A",
+          ordered_qty: order.quantity || 0,
           source: source,
           contribution: contribution
         });
       }
     });
 
+    console.log(`✅ Paid-quantity-source: Found ${details.length} records for ${material_code} in zone ${zone}`);
     res.json(details);
   } catch (err) {
-    console.error("Paid Qty source error:", err);
+    console.error("❌ Paid Qty source error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1451,11 +1475,22 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     if (!material_code) return res.status(400).json({ error: "Material code required" });
     const normMaterialCode = material_code.toLowerCase().trim();
 
-    // 1. Fetch relevant data
+    // Fetch all relevant data
     const { data: orderData } = await supabase.from('orders_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
+    const { data: booksData } = await supabase.from('individual_books').select('*');
 
-    // 2. Identify composites containing this material
+    // Setup Lookups for kit materials
+    const kitMap = {}; // kitCode -> qtyPerKit
+    (booksData || []).forEach(b => {
+      const matCode = String(b.material_code || "").toLowerCase().trim();
+      const compCode = String(b.composite_code || "").toLowerCase().trim();
+      if (matCode === normMaterialCode && compCode) {
+        kitMap[compCode] = Number(b.quantity) || 0;
+      }
+    });
+
+    // Setup BOM lookups
     const bomParents = {}; // parentCode -> qtyPerParent
     (bomData || []).forEach(b => {
       if (String(b.component_code || "").toLowerCase().trim() === normMaterialCode) {
@@ -1463,7 +1498,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
       }
     });
 
-    // 3. Filter and calculate contributions
+    // Filter and calculate contributions
     const details = [];
     (orderData || []).forEach(order => {
       const sku = String(order.item_sku || "").toLowerCase().trim();
@@ -1476,25 +1511,29 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
       } else if (bomParents[sku]) {
         contribution = (Number(order.quantity) || 0) * bomParents[sku];
         source = `BOM Parent (${order.item_sku})`;
+      } else if (kitMap[sku]) {
+        contribution = (Number(order.quantity) || 0) * kitMap[sku];
+        source = `Kit Order (${order.item_sku})`;
       }
 
       if (contribution > 0) {
         details.push({
-          zone: order.zone,
-          branch_name: order.branch_name,
-          grade_name: order.grade_name,
-          ordered_sku: order.item_sku,
-          item_name: order.item_name,
-          ordered_qty: order.quantity,
+          zone: order.zone || "N/A",
+          branch_name: order.branch_name || "N/A",
+          grade_name: order.grade_name || "N/A",
+          ordered_sku: order.item_sku || "N/A",
+          item_name: order.item_name || "N/A",
+          ordered_qty: order.quantity || 0,
           source: source,
           contribution: contribution
         });
       }
     });
 
+    console.log(`✅ Total-paid-quantity-source: Found ${details.length} records for ${material_code}`);
     res.json(details);
   } catch (err) {
-    console.error("Total Paid Qty source error:", err);
+    console.error("❌ Total Paid Qty source error:", err);
     res.status(500).json({ error: err.message });
   }
 });
