@@ -1168,10 +1168,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const allZones = Array.from(zonesSet).sort();
 
     // Create branch to zone map
-    const branchToZoneMap = {};
     const branchToZoneMapNormalized = {};
     (branchList || []).forEach(b => {
-      branchToZoneMap[String(b.name || "").trim().toLowerCase()] = b.zone;
       branchToZoneMapNormalized[normalize(b.name)] = b.zone;
     });
 
@@ -1179,8 +1177,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const paidMap = {};
 
     (orderData || []).forEach(order => {
-      const z = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
-      const br = String(order.branch_name || "").trim().toLowerCase();
       const brNorm = normalize(order.branch_name);
       const z = String(order.zone || branchToZoneMapNormalized[brNorm] || "Unknown").trim();
       const sku = String(order.item_sku || "").trim().toLowerCase();
@@ -1188,7 +1184,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       if (!paidMap[z]) paidMap[z] = {};
       if (!paidMap[z][sku]) paidMap[z][sku] = {};
-      paidMap[z][sku][br] = (paidMap[z][sku][br] || 0) + qty;
       paidMap[z][sku][brNorm] = (paidMap[z][sku][brNorm] || 0) + qty;
     });
 
@@ -1262,7 +1257,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         
         if (!zone || !allZones.includes(zone)) return;
         if (zoneFilter && zone !== zoneFilter) return;
-        if (branchFilter && normBranch !== branchFilter.toLowerCase()) return;
         if (branchFilter && branchNorm !== normalize(branchFilter)) return;
 
         const projContribution = branchProjQty * qty;
