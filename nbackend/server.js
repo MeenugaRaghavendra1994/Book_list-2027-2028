@@ -13,6 +13,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Robust normalization helper for branch matching
+const normalize = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+
 // Middleware to strip /api prefix from Vercel requests so they match our routes
 app.use((req, res, next) => {
   if (req.url.startsWith('/api')) {
@@ -164,27 +167,16 @@ app.get("/books/:id", async (req, res) => {
 ============================ */
 app.get("/kits", async (req, res) => {
   try {
-    console.log("GET /kits called");
-    if (!supabase) {
-      console.error("GET KITS ERROR: Supabase client not initialized");
-      return res.status(503).json({ success: false, error: "Supabase client not initialized" });
-    }
-
     const { data, error } = await supabase
       .from('grade_wise_kits')
       .select('*')
       .order('id', { ascending: false });
 
-    if (error) {
-      console.error("GET KITS ERROR: Supabase query failed", error.message, error.details, error.hint);
-      return res.status(500).json({ success: false, error: error.message, details: error.details || null });
-    }
-
-    console.log(`GET /kits succeeded: ${Array.isArray(data) ? data.length : 0} records`);
+    if (error) throw error;
     res.json(data);
   } catch (err) {
-    console.error("GET KITS ERROR:", err.message, err.stack || err);
-    res.status(500).json({ success: false, error: err.message, stack: err.stack ? err.stack.split('\n').slice(0,3) : null });
+    console.error("GET KITS ERROR:", err.message, err.details, err.hint);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1095,18 +1087,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const gradeFilter = String(req.query.grade || "").trim();
     const materialNameFilter = String(req.query.material_name || "").trim();
 
-    // Robust normalization helper for branch matching
-    const normalize = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-
     // Fetch branches for filtering
     const { data: branchList, error: branchError } = await supabase.from('branches').select('*');
     if (branchError) console.warn("❌ Branches fetch warning:", branchError.message);
-
-    // Create branch to zone map (needed early for consistent zone derivation)
-    const branchToZoneMapNormalized = {};
-    (branchList || []).forEach(b => {
-      branchToZoneMapNormalized[normalize(b.name)] = b.zone;
-    });
 
     let booksQuery = supabase.from('individual_books').select('*');
     if (zoneFilter) booksQuery = booksQuery.eq('zone', zoneFilter);
@@ -1299,17 +1282,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const normMCode = mCode.toLowerCase().trim();
       const activeBranches = materialBranchMap[normMCode] || new Set();
 
-      // Build kit contributions from individual_books for this material
-      const kitContributions = {};
-      (booksData || []).forEach(book => {
-        if (String(book.material_code || "").toLowerCase().trim() !== normMCode) return;
-        const compCode = String(book.composite_code || "").toLowerCase().trim();
-        const qtyPerKit = Number(book.quantity) || 0;
-        if (compCode && qtyPerKit > 0) {
-          kitContributions[compCode] = Math.max(kitContributions[compCode] || 0, qtyPerKit);
-        }
-      });
-
       allZones.forEach(z => {
         let totalPaidInZone = 0;
         
@@ -1328,17 +1300,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
               Object.keys(paidMap[z][comp.composite_code]).forEach(brNorm => {
                 if (activeBranches.has(brNorm)) {
                   totalPaidInZone += (paidMap[z][comp.composite_code][brNorm] * comp.multiplier);
-                }
-              });
-            }
-          });
-
-          // 3. Orders from kits that contain this material
-          Object.entries(kitContributions).forEach(([kitSku, qtyPerKit]) => {
-            if (paidMap[z][kitSku]) {
-              Object.keys(paidMap[z][kitSku]).forEach(brNorm => {
-                if (activeBranches.has(brNorm)) {
-                  totalPaidInZone += (paidMap[z][kitSku][brNorm] * qtyPerKit);
                 }
               });
             }
@@ -1463,8 +1424,6 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     const { data: orderData } = await supabase.from('orders_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
     const { data: booksData } = await supabase.from('individual_books').select('*');
-
-    const normalize = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 
     const kitMap = {};
     const activeBranchesNorm = new Set();
