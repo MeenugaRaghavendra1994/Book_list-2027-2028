@@ -1169,8 +1169,10 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Create branch to zone map
     const branchToZoneMap = {};
+    const branchToZoneMapNormalized = {};
     (branchList || []).forEach(b => {
       branchToZoneMap[String(b.name || "").trim().toLowerCase()] = b.zone;
+      branchToZoneMapNormalized[normalize(b.name)] = b.zone;
     });
 
     // Map structure: paidMap[zone][sku][branch] = total_qty
@@ -1179,12 +1181,15 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     (orderData || []).forEach(order => {
       const z = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
       const br = String(order.branch_name || "").trim().toLowerCase();
+      const brNorm = normalize(order.branch_name);
+      const z = String(order.zone || branchToZoneMapNormalized[brNorm] || "Unknown").trim();
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
       if (!paidMap[z]) paidMap[z] = {};
       if (!paidMap[z][sku]) paidMap[z][sku] = {};
       paidMap[z][sku][br] = (paidMap[z][sku][br] || 0) + qty;
+      paidMap[z][sku][brNorm] = (paidMap[z][sku][brNorm] || 0) + qty;
     });
 
     // Create a reverse BOM map: Component -> List of Composites containing it
@@ -1258,6 +1263,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         if (!zone || !allZones.includes(zone)) return;
         if (zoneFilter && zone !== zoneFilter) return;
         if (branchFilter && normBranch !== branchFilter.toLowerCase()) return;
+        if (branchFilter && branchNorm !== normalize(branchFilter)) return;
 
         const projContribution = branchProjQty * qty;
         summary[materialCode].zone_data[zone].projection += projContribution;
