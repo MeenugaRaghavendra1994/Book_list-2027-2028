@@ -1084,6 +1084,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const gradeFilter = String(req.query.grade || "").trim();
     const materialNameFilter = String(req.query.material_name || "").trim();
 
+    // Robust normalization helper for branch matching
+    const normalize = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+
     // Fetch branches for filtering
     const { data: branchList, error: branchError } = await supabase.from('branches').select('*');
     if (branchError) console.warn("❌ Branches fetch warning:", branchError.message);
@@ -1233,8 +1236,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       }
 
       if (!materialBranchMap[materialCode]) materialBranchMap[materialCode] = new Set();
-      const kitBranches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-      kitBranches.forEach(b => materialBranchMap[materialCode].add(b));
+      const kitBranches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+      kitBranches.forEach(bNorm => materialBranchMap[materialCode].add(bNorm));
     });
 
     // Pass 2: Calculate projections
@@ -1247,10 +1250,10 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
 
       branches.forEach(b => {
-        const normBranch = b.toLowerCase();
-        const projInfo = projMap[grade] && projMap[grade][normBranch];
+        const branchNorm = normalize(b);
+        const projInfo = projMap[grade] && projMap[grade][branchNorm];
         const branchProjQty = projInfo ? projInfo.qty : 0;
-        let zone = (projInfo && projInfo.zone) || branchToZoneMap[normBranch] || String(book.zone || "").trim();
+        let zone = (projInfo && projInfo.zone) || branchToZoneMapNormalized[branchNorm] || String(book.zone || "").trim();
         
         if (!zone || !allZones.includes(zone)) return;
         if (zoneFilter && zone !== zoneFilter) return;
@@ -1273,8 +1276,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         if (paidMap[z]) {
           // 1. Direct SKU orders
           if (paidMap[z][normMCode]) {
-            Object.keys(paidMap[z][normMCode]).forEach(br => {
-              if (activeBranches.has(br)) totalPaidInZone += paidMap[z][normMCode][br];
+            Object.keys(paidMap[z][normMCode]).forEach(brNorm => {
+              if (activeBranches.has(brNorm)) totalPaidInZone += paidMap[z][normMCode][brNorm];
             });
           }
 
@@ -1282,9 +1285,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           const composites = componentToCompositeMap[normMCode] || [];
           composites.forEach(comp => {
             if (paidMap[z][comp.composite_code]) {
-              Object.keys(paidMap[z][comp.composite_code]).forEach(br => {
-                if (activeBranches.has(br)) {
-                  totalPaidInZone += (paidMap[z][comp.composite_code][br] * comp.multiplier);
+              Object.keys(paidMap[z][comp.composite_code]).forEach(brNorm => {
+                if (activeBranches.has(brNorm)) {
+                  totalPaidInZone += (paidMap[z][comp.composite_code][brNorm] * comp.multiplier);
                 }
               });
             }
