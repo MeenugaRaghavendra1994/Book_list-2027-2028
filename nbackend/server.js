@@ -1343,6 +1343,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     if (!zone) return res.status(400).json({ error: "Zone required" });
 
     const normMaterialCode = material_code.toLowerCase().trim();
+    const targetZone = String(zone).trim().toLowerCase();
 
     // Fetch all relevant data
     const { data: orderData } = await supabase.from('orders_table').select('*');
@@ -1360,7 +1361,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (booksData || []).forEach(b => {
       const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
-        const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+        // Support multiple delimiters for branch list in individual_books
+        const brs = String(b.branch_name || b.branch || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
         brs.forEach(brNorm => activeBranches.add(brNorm));
 
         const compCode = String(b.composite_code || "").toLowerCase().trim();
@@ -1381,9 +1383,10 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     
     (orderData || []).forEach(order => {
       const brNorm = normalize(order.branch_name);
-      const orderZone = String(order.zone || branchToZoneMapNorm[brNorm] || "Unknown").trim();
+      const orderZone = String(order.zone || branchToZoneMapNorm[brNorm] || "Unknown").trim().toLowerCase();
       
-      if (orderZone !== zone) return;
+      // Case-insensitive comparison ensures Bangalore matches bangalore
+      if (orderZone !== targetZone) return;
       const sku = String(order.item_sku || "").toLowerCase().trim();
 
       // Filter: Only include orders from branches where this material is active
@@ -1438,7 +1441,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     (booksData || []).forEach(b => {
       const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
-        const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+        const brs = String(b.branch_name || b.branch || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
         brs.forEach(brNorm => activeBranchesNorm.add(brNorm));
         const compCode = String(b.composite_code || "").toLowerCase().trim();
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
