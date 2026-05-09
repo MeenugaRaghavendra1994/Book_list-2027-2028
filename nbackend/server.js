@@ -1180,19 +1180,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     (orderData || []).forEach(order => {
       const z = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
       const br = String(order.branch_name || "").trim().toLowerCase();
-      const qt= String(order.grade_name || "").trim().toLowerCase();
+      const g = String(order.grade_name || "").trim().toLowerCase();
       const sku = String(order.item_sku || "").trim().toLowerCase();
-      const br = String(order.branch_name || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
-      if (!paidMap[z[sku]
-      paidMap[z][sku][br] = (paidMap[z][sku][br] || 0) + qty;// Populate paidMap
 
+      // Populate paidMap: paidMap[zone][sku][branch]
       if (!paidMap[z]) paidMap[z] = {};
-      ifi(!orderMap[g]) orderMap[g] = {};
       if (!paidMap[z][sku]) paidMap[z][sku] = {};
       paidMap[z][sku][br] = (paidMap[z][sku][br] || 0) + qty;
 
-      // Populate orderMap grouped by grade/zone/sku
+      // Populate orderMap: orderMap[grade][zone][sku]
       if (!orderMap[g]) orderMap[g] = {};
       if (!orderMap[g][z]) orderMap[g][z] = {};
       orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
