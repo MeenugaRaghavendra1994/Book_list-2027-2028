@@ -1197,7 +1197,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       } else {
         orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
       }
-      orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
     });
 
     // Map projections by Grade -> Branch
@@ -1289,7 +1288,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
             // We add its contribution (Kit quantity * books per kit)
             // 2. Handle Kit-level orders: if the kit SKU itself was ordered
             if (c && c !== mCode && !processedKits.has(`${g}||${c}`)) {
-              materialZoneTotal += (orderMap[g][z][c] * q);
               materialZoneTotal += ((orderMap[g][z][c] || 0) * q);
               processedKits.add(`${g}||${c}`);
             }
@@ -1310,6 +1308,72 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
   } catch (err) {
     console.error("❌ DASHBOARD FETCH ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🔍 DASHBOARD SOURCE DRILL-DOWN (PAID QTY)
+============================ */
+app.get("/dashboard/paid-quantity-source", async (req, res) => {
+  try {
+    const { material_code, zone } = req.query;
+    if (!material_code) return res.status(400).json({ error: "Material code required" });
+
+    // 1. Fetch relevant data
+    const { data: orderData } = await supabase.from('orders_table').select('*').eq('zone', zone);
+    const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
+    const { data: booksData } = await supabase.from('individual_books').select('*').eq('material_code', material_code);
+
+    // 2. Setup Lookups
+    const kitMap = {}; // kitCode -> qtyPerKit
+    (booksData || []).forEach(b => {
+       if (b.composite_code) kitMap[String(b.composite_code).toLowerCase().trim()] = Number(b.quantity) || 0;
+    });
+
+    const bomParents = {}; // parentCode -> qtyPerParent
+    (bomData || []).forEach(b => {
+      if (String(b.component_code).toLowerCase().trim() === material_code.toLowerCase().trim()) {
+        bomParents[String(b.composite_code).toLowerCase().trim()] = Number(b.component_quantity) || 0;
+      }
+    });
+
+    // 3. Filter and calculate contributions
+    const details = [];
+    const normMaterialCode = material_code.toLowerCase().trim();
+
+    (orderData || []).forEach(order => {
+      const sku = String(order.item_sku || "").toLowerCase().trim();
+      let contribution = 0;
+      let source = "";
+
+      if (sku === normMaterialCode) {
+        contribution = Number(order.quantity) || 0;
+        source = "Direct Order";
+      } else if (bomParents[sku]) {
+        contribution = (Number(order.quantity) || 0) * bomParents[sku];
+        source = `BOM Parent (${order.item_sku})`;
+      } else if (kitMap[sku]) {
+        contribution = (Number(order.quantity) || 0) * kitMap[sku];
+        source = `Kit Order (${order.item_sku})`;
+      }
+
+      if (contribution > 0) {
+        details.push({
+          branch_name: order.branch_name,
+          grade_name: order.grade_name,
+          ordered_sku: order.item_sku,
+          item_name: order.item_name,
+          ordered_qty: order.quantity,
+          source: source,
+          contribution: contribution
+        });
+      }
+    });
+
+    res.json(details);
+  } catch (err) {
+    console.error("Paid Qty source error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 

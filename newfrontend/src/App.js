@@ -1175,11 +1175,11 @@ function App() {
 
   const handleShowPaidQtySource = async (item, zone) => {
     setSourceModalTitle(`Paid Quantity Source: ${item.material_code} (${zone})`);
-    setSourceModalCols(['Branch Name', 'Grade Name', 'Item SKU', 'Item Name', 'Quantity']);
+    setSourceModalCols(['Branch Name', 'Grade Name', 'Ordered SKU', 'Item Name', 'Ordered Qty', 'Source', 'Contribution']);
     setIsSourceLoading(true);
     setShowSourceModal(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/order-table`, { 
+      const res = await axios.get(`${API_BASE_URL}/dashboard/paid-quantity-source`, { 
         params: { item_sku: item.material_code, zone } 
       });
       setSourceModalData(res.data || []);
