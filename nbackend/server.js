@@ -1288,6 +1288,17 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const normMCode = mCode.toLowerCase().trim();
       const activeBranches = materialBranchMap[normMCode] || new Set();
 
+      // Build kit contributions from individual_books for this material
+      const kitContributions = {};
+      (booksData || []).forEach(book => {
+        if (String(book.material_code || "").toLowerCase().trim() !== normMCode) return;
+        const compCode = String(book.composite_code || "").toLowerCase().trim();
+        const qtyPerKit = Number(book.quantity) || 0;
+        if (compCode && qtyPerKit > 0) {
+          kitContributions[compCode] = Math.max(kitContributions[compCode] || 0, qtyPerKit);
+        }
+      });
+
       allZones.forEach(z => {
         let totalPaidInZone = 0;
         
@@ -1306,6 +1317,17 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
               Object.keys(paidMap[z][comp.composite_code]).forEach(brNorm => {
                 if (activeBranches.has(brNorm)) {
                   totalPaidInZone += (paidMap[z][comp.composite_code][brNorm] * comp.multiplier);
+                }
+              });
+            }
+          });
+
+          // 3. Orders from kits that contain this material
+          Object.entries(kitContributions).forEach(([kitSku, qtyPerKit]) => {
+            if (paidMap[z][kitSku]) {
+              Object.keys(paidMap[z][kitSku]).forEach(brNorm => {
+                if (activeBranches.has(brNorm)) {
+                  totalPaidInZone += (paidMap[z][kitSku][brNorm] * qtyPerKit);
                 }
               });
             }
