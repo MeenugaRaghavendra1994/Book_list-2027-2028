@@ -1170,29 +1170,18 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       branchToZoneMap[String(b.name || "").trim().toLowerCase()] = b.zone;
     });
 
-    // Map to store raw paid quantities per Zone per SKU per Branch
-    const paidMap = {}; // paidMap[zone][sku][branch] = total_qty
-    // Map to store paidpaid quantities ped by Grade/Zone/SKUgrouped by Grade/Zone/SKU
-    const orderMap = {}; // orderMap[grade][zone][sku] = total_qty
-
-    const orderMap = {}; // orderMap[grade][zone][sku] = total_qty
+    // Map structure: paidMap[zone][sku][branch] = total_qty
+    const paidMap = {};
 
     (orderData || []).forEach(order => {
       const z = String(order.zone || branchToZoneMap[String(order.branch_name || "").trim().toLowerCase()] || "Unknown").trim();
       const br = String(order.branch_name || "").trim().toLowerCase();
-      const g = String(order.grade_name || "").trim().toLowerCase();
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
-      // Populate paidMap: paidMap[zone][sku][branch]
       if (!paidMap[z]) paidMap[z] = {};
       if (!paidMap[z][sku]) paidMap[z][sku] = {};
       paidMap[z][sku][br] = (paidMap[z][sku][br] || 0) + qty;
-
-      // Populate orderMap: orderMap[grade][zone][sku]
-      if (!orderMap[g]) orderMap[g] = {};
-      if (!orderMap[g][z]) orderMap[g][z] = {};
-      orderMap[g][z][sku] = (orderMap[g][z][sku] || 0) + qty;
     });
 
     // Create a reverse BOM map: Component -> List of Composites containing it
@@ -1217,90 +1206,73 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const z = String(p.zone || "").trim();
       
       if (!projMap[g]) projMap[g] = {};
-    const materialBranchMap = {}; // material_code -> Set of active branche(
-    (books!projMap[g][b]) projMap[g][b] = { qty: 0, zone: z };
+      if (!projMap[g][b]) projMap[g][b] = { qty: 0, zone: z };
       projMap[g][b].qty += (Number(p.total_projection) || 0);
     });
 
     const summary = {}; // grouped by material_code
     const materialBranchMap = {}; // material_code -> Set of active branches
-    (booksData || []).forEach(book => {
+
+    // Pass 1: Initialize summary and map active branches per material
+    booksData.forEach(book => {
       const materialCode = String(book.material_code || "").trim().toLowerCase();
       const materialName = String(book.material_name || "").trim();
-      const grade = String(book.grade || "").trim();
       if (!materialCode) return;
-      const key = materialCode;
 
-      if (!summary[key]) {
-        summary[key] = {
+      if (!summary[materialCode]) {
+        summary[materialCode] = {
           material_code: materialCode,
           material_name: materialName,
           zone_data: {},
           total_projection: 0,
           total_paid_quantity: 0
-      // Colle t active bra}ches for this material
-      if (!materialBranchMap[materialCode]) materialBranchMap[materialCode] = new Set();
-      const kitBranch s = String(aook.branch_name || "").lplit(/[,\n\r]+/).map(s => s.trim().toLowerCase()).lilter(Boolean);
-Z     kitBranches.forEach(o => matenielBras.fMap[matorialCode].add(b));
-
-      conrtEqty acNumber(book.quantity || 0);
-      const branches = h(z => {
-          summary[key].zone_data[z] = { projection: 0, paid_quantity: 0 };
+        };
+        allZones.forEach(z => {
+          summary[materialCode].zone_data[z] = { projection: 0, paid_quantity: 0 };
         });
       }
 
-      // Collect active branches for this material
       if (!materialBranchMap[materialCode]) materialBranchMap[materialCode] = new Set();
       const kitBranches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
       kitBranches.forEach(b => materialBranchMap[materialCode].add(b));
+    });
+
+    // Pass 2: Calculate projections
+    booksData.forEach(book => {
+      const materialCode = String(book.material_code || "").trim().toLowerCase();
+      if (!materialCode) return;
 
       const qty = Number(book.quantity || 0);
+      const grade = String(book.grade || "").trim().toLowerCase();
       const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
-      const compositeCode = String(book.composite_code || "").trim().toLowerCase();
-      const normGrade = grade.toLowerCase();
 
       branches.forEach(b => {
         const normBranch = b.toLowerCase();
-
-        // Resolve projection info from map (Grade + Branch mapping)
-        const projInfo = projMap[normGrade] && projMap[normGrade][normBranch];
+        const projInfo = projMap[grade] && projMap[grade][normBranch];
         const branchProjQty = projInfo ? projInfo.qty : 0;
-
-        // Resolve zone: Priority 1: Projection's Zone, Priority 2: Master Branch Map, Priority 3: Book's Zone
         let zone = (projInfo && projInfo.zone) || branchToZoneMap[normBranch] || String(book.zone || "").trim();
         
         if (!zone || !allZones.includes(zone)) return;
         if (zoneFilter && zone !== zoneFilter) return;
-      const  ctiveBranches = materialBranchMap[normMCode] || new Set();
-
-      allf (branchFilter && normBranch !== branchFilter.toLowerCase()) return;
+        if (branchFilter && normBranch !== branchFilter.toLowerCase()) return;
 
         const projContribution = branchProjQty * qty;
-        summary[key].zone_data[zone].projection += projContribution;
-        summary[key].total_projection += projContribution;
-      }); if (paidMap[z][normMCode]) 
-    }       Object.keys(paidMap[z][normMCode]).forEach(br => {);
-              if (activeBranches.has(br)) totalPaidInZone += paidMap[z][normMCode][br];
-    // Fin  });
-          }
+        summary[materialCode].zone_data[zone].projection += projContribution;
+        summary[materialCode].total_projection += projContribution;
+      });
+    });
 
-          // 2. Orders from 91-series almposites (via BOM)
-          co zone-wide summation of Paid Quantities
+    // Final zone-wide summation of Paid Quantities
     Object.keys(summary).forEach(mCode => {
       const normMCode = mCode.toLowerCase().trim();
-      const acObject.keys(paidMap[z][comp.composive_code]).forEach(br => {
-                if (activeBranches.has(br)) {
-                  totalPaidI=Zon materialBranchMap[normMCode] || new [br]Set();
-    
-      allZ    ones.forEach(z => {
-            let totalPaidInZone = 0;
-          });
-        }
+      const activeBranches = materialBranchMap[normMCode] || new Set();
 
+      allZones.forEach(z => {
+        let totalPaidInZone = 0;
+        
         if (paidMap[z]) {
           // 1. Direct SKU orders
           if (paidMap[z][normMCode]) {
-
             Object.keys(paidMap[z][normMCode]).forEach(br => {
               if (activeBranches.has(br)) totalPaidInZone += paidMap[z][normMCode][br];
             });
@@ -1310,8 +1282,7 @@ Z     kitBranches.forEach(o => matenielBras.fMap[matorialCode].add(b));
           const composites = componentToCompositeMap[normMCode] || [];
           composites.forEach(comp => {
             if (paidMap[z][comp.composite_code]) {
-              rorO"❌ DASHBOARD FETCH ERROR:", err.message);
-    res.status(bject.keys(paidMap[z][comp.composite_code]).forEach(br => {
+              Object.keys(paidMap[z][comp.composite_code]).forEach(br => {
                 if (activeBranches.has(br)) {
                   totalPaidInZone += (paidMap[z][comp.composite_code][br] * comp.multiplier);
                 }
@@ -1323,6 +1294,7 @@ Z     kitBranches.forEach(o => matenielBras.fMap[matorialCode].add(b));
         summary[mCode].zone_data[z].paid_quantity = totalPaidInZone;
         summary[mCode].total_paid_quantity += totalPaidInZone;
       });
+
 
       // Logic 1, 2, and 3: Requirements and Ordered quantities
       summary[mCode].total_requirement = Math.max(summary[mCode].total_projection, summary[mCode].total_paid_quantity);
@@ -1338,17 +1310,13 @@ Z     kitBranches.forEach(o => matenielBras.fMap[matorialCode].add(b));
   }
 });
 
-/* ====Identify active branches for this material and ========================
-   🔍 DASHBOARD SOURCE 
-I   const actLvNBranches =Anew STt))
+/* ============================
+   🔍 DASHBOARD SOURCE DRILL-DOWN
 ============================ */
 app.get("/dashboard/paid-quantity-source", async (req, res) => {
-     tifr(matCodey=== normMateri{
-        const brs = String(b.branch_name || "ma.split(/[t\nrr]+i).map(s => s.trim().toLowerCase()).filter(Booleanl;
-        brs.forEach(br => activeBranches.add(br));
-
-        conet compCode = String(b.composite_c req||u"").toLowerCase()rtri;
-        if (compCode)(!material_code) return res.status(400).json({ error: "Material code required" });
+  try {
+    const { material_code, zone } = req.query;
+    if (!material_code) return res.status(400).json({ error: "Material code required" });
     if (!zone) return res.status(400).json({ error: "Zone required" });
 
     const normMaterialCode = material_code.toLowerCase().trim();
@@ -1361,25 +1329,13 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
 
     // Create zone mapping
     const branchToZoneMap = {};
-    (branchList || []).
-    
-    (orderData || []).forEach(order => {forEach(b => {
-      // Resolve zone from branch if not set in order  branchToZoneMap[String(b.name || "").toLowerCase().trim()] = b.zone;
-      const orderZone = String})rde;.z
-      
+    (branchList || []).forEach(b => branchToZoneMap[String(b.name || "").toLowerCase().trim()] = b.zone);
+
     // Identify active branches for this material and Setup Lookups for kit materials
     const kitMap = {}; 
     const activeBranches = new Set();
-    (booksData || []).forEach(b tem_sku || "").=oLowerCas>().tri ();
-      const branch = String(order.branch{name || "").toLowerCase().trim();
-
-      // Filter: Only include orders from branches where this material is active
-      if (!activeBranches.has(branch)) return;
-
-      const matCode = Stri;
-      let source = ""n
-
-      if gsku === normMateria(Codb) {.material_code || "").toLowerCase().trim();
+    (booksData || []).forEach(b => {
+      const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
         const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
         brs.forEach(br => activeBranches.add(br));
@@ -1440,7 +1396,6 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       }
     });
 
-    console.log(`✅ Paid-quantity-source: Found ${details.length} records for ${material_code} in zone ${zone}`);
     res.json(details);
   } catch (err) {
     console.error("❌ Paid Qty source error:", err);
@@ -1453,20 +1408,14 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
     const { material_code } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
 
-    // Fetch individual books (kits) containing this material
     const { data: booksData } = await supabase.from('individual_books').select('*');
-    
-    // Filter for books containing this material
     const relevantBooks = (booksData || []).filter(b => 
       String(b.material_code || "").toLowerCase().trim() === material_code.toLowerCase().trim()
     );
 
     if (!relevantBooks || relevantBooks.length === 0) return res.json([]);
 
-    // Fetch projections
     const { data: projData } = await supabase.from('student_projections').select('*');
-
-    // Fetch branches for zone resolution
     const { data: branchList } = await supabase.from('branches').select('name, zone');
     const branchToZoneMap = {};
     (branchList || []).forEach(b => branchToZoneMap[String(b.name).toLowerCase().trim()] = b.zone);
@@ -1482,22 +1431,17 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
         const normBranch = bName.toLowerCase();
         const bZone = branchToZoneMap[normBranch] || book.zone;
 
-        // Find projection for this Grade + Branch
         const projection = (projData || []).find(p => 
           String(p.grade || "").toLowerCase().trim() === grade && 
           String(p.branch || "").toLowerCase().trim() === normBranch
         );
-    // Identify active branches for this materi
-        if (projection
-    const)activeBranc es = new
+
+        if (projection) {
           const studentCount = Number(projection.total_projection) || 0;
           const contribution = studentCount * qtyInKit;
-      if (matC de ===  ormMaterialCodi) {
-        const brsbution > 0) bran{h_name || "").split(/[,\n\r]+/).map(s => s.trim().to
-        brs. orEach(br => activeBranches.add(br));
-
-        const competailpuStrisg(b.co{posite_code || "").toLowerCas
-        if (compCode)       kit_name: kitName,
+          if (contribution > 0) {
+            details.push({
+              kit_name: kitName,
               grade: book.grade,
               branch: bName,
               zone: bZone,
@@ -1509,15 +1453,8 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
         }
       });
     });
-
     res.json(details);
   } catch (err) {
-    console.error("Total Projection sou || "").toLowerCase().trim();
-      const branch = String(order.branch_namerce error:", errase().trimr);
-
-      // Filter: Only include orders from branches where this mate)ial is active
-      if (!act;veBranches.has(branch)) return;
-
     res.status(500).json({ error: err.message });
   }
 });
@@ -1528,50 +1465,37 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     if (!material_code) return res.status(400).json({ error: "Material code required" });
     const normMaterialCode = material_code.toLowerCase().trim();
 
-    // Fetch all relevant data
     const { data: orderData } = await supabase.from('orders_table').select('*');
-    con
+    const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
+    const { data: booksData } = await supabase.from('individual_books').select('*');
 
-      if (contribution > 0) {st { data: bomData } = await supabase.from('sku_sap_bom').select('*');
-        details.push({    const { data: booksData } = await supabase.from('individual_books').select('*');
-          zone: order.zone || "N/A",
-    // Identify active branches for this material and Setup Lookups for kit materials
     const kitMap = {};
     const activeBranches = new Set();
     (booksData || []).forEach(b => {
-      const matCode = String(b.materia|l 0,
-          source: source,
-          contribution: cont_icution
-        }o;de || "").toLowerCase().trim();
+      const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
         const brs = String(b.branch_name || "").split(/[,\n\r]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
         brs.forEach(br => activeBranches.add(br));
-
         const compCode = String(b.composite_code || "").toLowerCase().trim();
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
     });
 
-    // Setup BOM lookups
-    const bomParents = {}; // parentCode -> qtyPerParent
+    const bomParents = {};
     (bomData || []).forEach(b => {
       if (String(b.component_code || "").toLowerCase().trim() === normMaterialCode) {
         bomParents[String(b.composite_code || "").toLowerCase().trim()] = Number(b.component_quantity) || 0;
       }
     });
 
-    // Filter and calculate contributions
     const details = [];
     (orderData || []).forEach(order => {
       const sku = String(order.item_sku || "").toLowerCase().trim();
       const branch = String(order.branch_name || "").toLowerCase().trim();
-
-      // Filter: Only include orders from branches where this material is active
       if (!activeBranches.has(branch)) return;
 
       let contribution = 0;
       let source = "";
-
       if (sku === normMaterialCode) {
         contribution = Number(order.quantity) || 0;
         source = "Direct Order";
@@ -1596,37 +1520,24 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
         });
       }
     });
-
-    console.log(`✅ Total-paid-quantity-source: Found ${details.length} records for ${material_code}`);
     res.json(details);
   } catch (err) {
-    console.error("❌ Total Paid Qty source error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-/* ============================
-   🔍 DASHBOARD SOURCE DRILL-DOWN
-============================ */
 app.get("/dashboard/projection-source", async (req, res) => {
   try {
     const { material_code, zone } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
 
-    // Fetch individual books (kits) containing this material
-    const { data: booksData } = await supabase
-      .from('individual_books')
-      .select('*')
-      .eq('material_code', material_code);
-
+    const { data: booksData } = await supabase.from('individual_books').select('*').eq('material_code', material_code);
     if (!booksData || booksData.length === 0) return res.json([]);
 
-    // Fetch projections
     let projQuery = supabase.from('student_projections').select('*');
     if (zone) projQuery = projQuery.eq('zone', zone);
     const { data: projData } = await projQuery;
 
-    // Fetch branches for zone resolution
     const { data: branchList } = await supabase.from('branches').select('name, zone');
     const branchToZoneMap = {};
     (branchList || []).forEach(b => branchToZoneMap[String(b.name).toLowerCase().trim()] = b.zone);
@@ -1641,11 +1552,8 @@ app.get("/dashboard/projection-source", async (req, res) => {
       branches.forEach(bName => {
         const normBranch = bName.toLowerCase();
         const bZone = branchToZoneMap[normBranch] || book.zone;
-
-        // Filter by zone if requested
         if (zone && bZone !== zone) return;
 
-        // Find projection for this Grade + Branch
         const projection = (projData || []).find(p => 
           String(p.grade).toLowerCase().trim() === grade && 
           String(p.branch).toLowerCase().trim() === normBranch
@@ -1668,10 +1576,8 @@ app.get("/dashboard/projection-source", async (req, res) => {
         }
       });
     });
-
     res.json(details);
   } catch (err) {
-    console.error("Projection source error:", err);
     res.status(500).json({ error: err.message });
   }
 });
