@@ -1730,7 +1730,7 @@ app.post("/run-dispatch-load", async (req, res) => {
 
     // Use a hardcoded list for now, but in a real scenario, this would come from the database
     //const allBranches = [3,4,5,6,7,8,10,11,12,13,14,15,17,18,19,20,21,24,26,27,30,41,57,66,67,69,70,72,73,76,77,81,82,94,101,123,124,194,205,209,210,213,239,240,241,242,244,245,246,248,249,250,251,252,253,254,257,258,264,265,266,267,268,269,270,271,272,273,274,275,276,277,280,281,282,283,285,286,287,288,289,290,291,292,293,296,297,298,299,300,301,305,338,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,369,370,371,423,425,426,427,428,429,430,432,433,434,435,436,437,438,442,443,444,445,446,447,449,450,451]; 
-    const allBranches = [3,4,5,6,7,8,10,11,12,13];
+    const allBranches = [3,4,5,6,7,8,10,11,12,13,14,15,17,18,19,20,21,24,26,27,30,41,57,66,67,69,70,72,73,76,77,81,82,94,101,123,124,194,205,209,210,213,239,240,241,242,244,245,246,248,249,250,251,252,253,254,257,258,264,265,266,267,268,269,270,271,272,273,274,275,276,277,280,281,282,283,285,286,287,288,289,290,291,292,293,296,297,298,299,300,301,305,338,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,369,370,371,423,425,426,427,428,429,430,432,433,434,435,436,437,438,442,443,444,445,446,447,449,450,451];
     log(`Found ${allBranches.length} branches to process.`);
     
     // Force Update: Clean up target and tracking tables
@@ -1747,7 +1747,7 @@ app.post("/run-dispatch-load", async (req, res) => {
     const aggregatedMap = new Map();
     const failedBranches = [];
     const branchQueue = [...allBranches];
-    const concurrencyLimit = 5; 
+    const concurrencyLimit = 10; 
     let totalRawProcessed = 0;
 
     const worker = async () => {
@@ -1786,13 +1786,15 @@ app.post("/run-dispatch-load", async (req, res) => {
 
             log(`✅ Branch ${branchId} done: ${result.rows.length} rows processed.`);
             
-            await supabase.from('completed_branches').upsert({
+            // Safe upsert: don't crash if table doesn't exist
+            const { error: upsertError } = await supabase.from('completed_branches').upsert({
               branch_id: branchId,
               status: 'Completed',
               rows_fetched: result.rows.length,
               error_message: null,
               processed_at: new Date().toISOString()
             }, { onConflict: 'branch_id' });
+            if (upsertError) console.warn(`⚠️ Could not update status for branch ${branchId}`);
 
             success = true;
             break; 
@@ -1802,13 +1804,14 @@ app.post("/run-dispatch-load", async (req, res) => {
             if (attempt < MAX_RETRIES) {
               await new Promise(r => setTimeout(r, 1000 * attempt));
             } else {
-               await supabase.from('completed_branches').upsert({
+               const { error: failUpsertError } = await supabase.from('completed_branches').upsert({
                  branch_id: branchId,
                  status: 'Failed',
                  rows_fetched: 0,
                  error_message: errorInfo,
                  processed_at: new Date().toISOString()
                }, { onConflict: 'branch_id' });
+               if (failUpsertError) console.warn(`⚠️ Could not update failure status for branch ${branchId}`);
             }
           }
         }
@@ -1840,7 +1843,7 @@ app.post("/run-dispatch-load", async (req, res) => {
     log("Dispatch data load process completed.");
     res.json({ 
       success: true, 
-      message: `Dispatch data loaded successfully. Processed ${allRows.length} raw rows, aggregated into ${aggRows.length} records.`, logs, failedBranches
+      message: `Dispatch data loaded successfully. Processed ${totalRawProcessed} raw rows, aggregated into ${aggRows.length} records.`, logs, failedBranches
     });
     
   } catch (err) {
