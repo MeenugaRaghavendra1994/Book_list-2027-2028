@@ -636,7 +636,9 @@ function App() {
           .catch(() => setOrderTableData([]));
       }
     } catch (error) {
-      const errorMessage = "Error running dispatch load: " + (error.response?.data?.error || error.message);
+      const rawError = error.response?.data?.error || error.message;
+      const errorStr = typeof rawError === 'object' ? JSON.stringify(rawError) : String(rawError);
+      const errorMessage = "Error running dispatch load: " + errorStr;
       setDispatchLoadLogs(prev => [...prev, errorMessage, ...(error.response?.data?.logs || [])]);
     }
     // Keep modal open until user closes it, or for a few seconds

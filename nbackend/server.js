@@ -1732,12 +1732,14 @@ app.post("/run-dispatch-load", async (req, res) => {
     const allBranches = [3,4,5,6,7,8,10,11,12,13,14,15,17,18,19,20,21,24,26,27,30,41,57,66,67,69,70,72,73,76,77,81,82,94,101,123,124,194,205,209,210,213,239,240,241,242,244,245,246,248,249,250,251,252,253,254,257,258,264,265,266,267,268,269,270,271,272,273,274,275,276,277,280,281,282,283,285,286,287,288,289,290,291,292,293,296,297,298,299,300,301,305,338,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,369,370,371,423,425,426,427,428,429,430,432,433,434,435,436,437,438,442,443,444,445,446,447,449,450,451]; 
     log(`Found ${allBranches.length} branches to process.`);
     
-    // Force update: Clear target and tracking tables
-    log("Clearing existing data from orders_table...");
-    await supabase.from('orders_table').delete().neq('id', 0); 
+    // Force Update: Clean up target and tracking tables
+    log("Cleaning up orders_table for fresh sync...");
+    const { error: clearOrdersError } = await supabase.from('orders_table').delete().neq('id', 0); 
+    if (clearOrdersError) log(`⚠️ Could not clear orders: ${clearOrdersError.message}`);
     
-    log("Clearing existing status from completed_branches...");
-    await supabase.from('completed_branches').delete().neq('id', 0);
+    log("Resetting branch tracking status...");
+    const { error: clearTrackingError } = await supabase.from('completed_branches').delete().neq('id', 0);
+    if (clearTrackingError) log(`⚠️ Could not reset tracking: ${clearTrackingError.message}`);
 
     log("✅ Cleared existing data.");
     
@@ -1758,8 +1760,7 @@ app.post("/run-dispatch-load", async (req, res) => {
           const result = await processBranch(branchId, accessToken);
 
           if (result && result.rows) {
-            // Using concat to merge large row sets safely
-            allRows = allRows.concat(result.rows);
+            allRows.push(...result.rows);
             log(`✅ Branch ${branchId} done: ${result.rows.length} rows fetched.`);
             
             // Force update status in database for completed branches
@@ -1767,31 +1768,32 @@ app.post("/run-dispatch-load", async (req, res) => {
               branch_id: branchId,
               status: 'Completed',
               rows_fetched: result.rows.length,
+              error_message: null,
               processed_at: new Date().toISOString()
             }, { onConflict: 'branch_id' });
 
             success = true;
             break; 
           } else {
-            const errorInfo = (result && result.error) ? result.error : "Network error or timeout";
+            const errorInfo = String((result && result.error) ? result.error : "Network error or timeout");
             log(`⚠️ Branch ${branchId} attempt ${attempt} failed: ${errorInfo}`);
             if (attempt < MAX_RETRIES) {
               await new Promise(r => setTimeout(r, 1000 * attempt));
+            } else {
+               // Mark failure in completed_branches tracking table
+               await supabase.from('completed_branches').upsert({
+                 branch_id: branchId,
+                 status: 'Failed',
+                 rows_fetched: 0,
+                 error_message: errorInfo,
+                 processed_at: new Date().toISOString()
+               }, { onConflict: 'branch_id' });
             }
           }
         }
 
         if (!success) {
           failedBranches.push(branchId);
-          
-          // Mark failure in completed_branches table
-          await supabase.from('completed_branches').upsert({
-            branch_id: branchId,
-            status: 'Failed',
-            rows_fetched: 0,
-            processed_at: new Date().toISOString()
-          }, { onConflict: 'branch_id' });
-
           log(`🔴 Branch ${branchId} failed all ${MAX_RETRIES} attempts.`);
         }
       }
@@ -1840,8 +1842,8 @@ app.post("/run-dispatch-load", async (req, res) => {
     });
     
   } catch (err) {
-    // Extract a clear error string to prevent [object Object] appearing in frontend logs
-    const errorMsg = err.message || (err.error && err.error.message) || String(err);
+    // Paranoia: Convert any error to string explicitly
+    const errorMsg = String(err?.message || (err?.error && err.error?.message) || JSON.stringify(err) || "Unknown critical error");
     console.error("❌ DISPATCH LOAD CRITICAL ERROR:", errorMsg);
     res.status(500).json({ success: false, error: errorMsg, logs });
   }
