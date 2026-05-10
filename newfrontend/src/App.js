@@ -21,7 +21,17 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
     if (!isOpen) setSearchTerm("");
   }, [isOpen]);
 
-  const normalizedValue = Array.isArray(value) ? value.map(item => String(item || "").trim()).filter(Boolean) : [];
+  const normalizedValue = (() => {
+    if (Array.isArray(value)) return value.map(item => String(item || "").trim()).filter(Boolean);
+    const str = String(value || "").trim();
+    if (str.startsWith('[') && str.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) return parsed.map(item => String(item || "").trim()).filter(Boolean);
+      } catch (e) {}
+    }
+    return str ? str.split(/[,\n\r|]+/).map(item => item.trim()).filter(Boolean) : [];
+  })();
   const filteredOptions = options
     .filter(option => Boolean(option) && String(option).toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => String(a).localeCompare(String(b)));
@@ -484,7 +494,14 @@ function App() {
       return branchData.map(item => String(item || "").trim()).filter(Boolean);
     }
     if (!branchData) return [];
-    return String(branchData).split(/[,\n\r|]+/).map(item => item.trim()).filter(Boolean);
+    const str = String(branchData).trim();
+    if (str.startsWith('[') && str.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) return parsed.map(item => String(item || "").trim()).filter(Boolean);
+      } catch (e) {}
+    }
+    return str.split(/[,\n\r|]+/).map(item => item.trim()).filter(Boolean);
   };
 
   const renderBranchBadges = (branchData) => {
@@ -2876,15 +2893,19 @@ function App() {
                         <tr key={i}>
                           {Object.values(row).map((val, j) => (
                             <td key={j} className="px-3 text-truncate" style={{ maxWidth: '200px' }}>
-                              {val === null ? (
-                                <span className="text-muted fst-italic">null</span>
-                              ) : Array.isArray(val) ? (
-                                val.join(", ")
-                              ) : typeof val === 'object' ? (
-                                JSON.stringify(val)
-                              ) : (
-                                String(val)
-                              )}
+                              {(() => {
+                                if (val === null) return <span className="text-muted fst-italic">null</span>;
+                                if (Array.isArray(val)) return val.join(", ");
+                                const s = String(val).trim();
+                                if (s.startsWith('[') && s.endsWith(']')) {
+                                  try {
+                                    const p = JSON.parse(s);
+                                    if (Array.isArray(p)) return p.join(", ");
+                                  } catch (e) {}
+                                }
+                                if (typeof val === 'object') return JSON.stringify(val);
+                                return s;
+                              })()}
                             </td>
                           ))}
                           {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || selectedTable === 'student_projections' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && (
@@ -2925,11 +2946,17 @@ function App() {
                               <input
                                 type={typeof editingTableRow[key] === 'number' ? 'number' : 'text'}
                                 className="form-control"
-                                value={
-                                  Array.isArray(editingTableRow[key])
-                                    ? editingTableRow[key].join(", ")
-                                    : editingTableRow[key] || ""
-                                }
+                                value={(() => {
+                                  if (Array.isArray(editingTableRow[key])) return editingTableRow[key].join(", ");
+                                  const s = String(editingTableRow[key] || "").trim();
+                                  if (s.startsWith('[') && s.endsWith(']')) {
+                                    try {
+                                      const p = JSON.parse(s);
+                                      if (Array.isArray(p)) return p.join(", ");
+                                    } catch (e) {}
+                                  }
+                                  return s;
+                                })()}
                                 onChange={(e) => setEditingTableRow(prev => ({ ...prev, [key]: e.target.value }))}
                               />
                             )}
@@ -3086,7 +3113,17 @@ function App() {
                                 const val = row[key] !== undefined ? row[key] : row[col];
                                 return (
                                   <td key={col} className="px-3 small">
-                                    {Array.isArray(val) ? val.join(", ") : (val ?? 0)}
+                                    {(() => {
+                                      if (Array.isArray(val)) return val.join(", ");
+                                      const s = String(val ?? 0).trim();
+                                      if (s.startsWith('[') && s.endsWith(']')) {
+                                        try {
+                                          const p = JSON.parse(s);
+                                          if (Array.isArray(p)) return p.join(", ");
+                                        } catch (e) {}
+                                      }
+                                      return s;
+                                    })()}
                                   </td>
                                 );
                               })}
