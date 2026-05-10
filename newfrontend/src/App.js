@@ -289,7 +289,6 @@ function App() {
   const [showDataSection, setShowDataSection] = useState(false);
   const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "", material_name: "" });
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
-  const [showMainSection, setShowMainSection] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const logEndRef = useRef(null);
 
