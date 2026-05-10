@@ -1301,8 +1301,14 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           
           // Robust zone matching: Use book zone or derive from branch mapping
           const bookBrs = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
-          const derivedZone = (bookBrs.length > 0 && branchToZoneMapNormalized[bookBrs[0]]) || String(book.zone || "");
-          const zoneMatch = derivedZone.trim().toLowerCase() === zKey;
+          const derivedZones = bookBrs
+            .map(br => branchToZoneMapNormalized[br])
+            .filter(Boolean)
+            .map(z => String(z).trim().toLowerCase());
+          if (String(book.zone || "").trim()) {
+            derivedZones.push(String(book.zone || "").trim().toLowerCase());
+          }
+          const zoneMatch = derivedZones.includes(zKey);
           
           return zoneMatch;
         });
@@ -1421,8 +1427,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       if (orderZone !== targetZone) return;
       const sku = String(order.item_sku || "").toLowerCase().trim();
 
-      // Filter: Only include orders from branches where this material is active
-      if (!activeBranches.has(brNorm)) return;
+      // Filter only if the material has explicit active branches defined.
+      if (activeBranches.size > 0 && !activeBranches.has(brNorm)) return;
 
       let contribution = 0;
       let source = "";
@@ -1491,7 +1497,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     (orderData || []).forEach(order => {
       const sku = String(order.item_sku || "").toLowerCase().trim();
       const brNorm = normalize(order.branch_name);
-      if (!activeBranchesNorm.has(brNorm)) return;
+      if (activeBranchesNorm.size > 0 && !activeBranchesNorm.has(brNorm)) return;
 
       let contribution = 0;
       let source = "";
