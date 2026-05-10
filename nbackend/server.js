@@ -1106,7 +1106,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (branchFilter) {
       const normBranchFilter = normalize(branchFilter);
       booksDataForSummary = booksDataForSummary.filter(book => {
-        const bookBranches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+        const bookBranches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
         return bookBranches.includes(normBranchFilter);
       });
     }
@@ -1129,7 +1129,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       if (!validGradeBranches[gradeStr]) validGradeBranches[gradeStr] = new Set();
       
       // Split branch string which might contain multiple branches separated by commas or newlines
-      const bs = String(kit.branch || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+      const bs = String(kit.branch || "").split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
       bs.forEach(b => validGradeBranches[gradeStr].add(b.toLowerCase()));
     });
 
@@ -1236,7 +1236,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const materialCode = String(book.material_code || "").trim().toLowerCase();
       if (!materialCode) return;
       if (!materialBranchMap[materialCode]) materialBranchMap[materialCode] = new Set();
-      const kitBranches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => normalize(s)).filter(Boolean);
+      const kitBranches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
       kitBranches.forEach(bNorm => materialBranchMap[materialCode].add(bNorm));
     });
 
@@ -1265,7 +1265,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       const qty = Number(book.quantity || 0);
       const grade = String(book.grade || "").trim().toLowerCase();
-      const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+      const branches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
 
       branches.forEach(b => {
         const branchNorm = normalize(b);
@@ -1514,7 +1514,7 @@ app.get("/dashboard/projection-source", async (req, res) => {
       const kitName = book.composite_name || "N/A";
       const qtyInKit = Number(book.quantity) || 0;
       const grade = String(book.grade).toLowerCase().trim();
-      const branches = String(book.branch_name || "").split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+      const branches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
 
       branches.forEach(bName => {
         const normBranch = bName.toLowerCase();

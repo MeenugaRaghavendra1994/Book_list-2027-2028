@@ -469,7 +469,7 @@ function App() {
       return branchData.map(item => String(item || "").trim()).filter(Boolean);
     }
     if (!branchData) return [];
-    return String(branchData).split(',').map(item => item.trim()).filter(Boolean);
+    return String(branchData).split(/[,\n\r|]+/).map(item => item.trim()).filter(Boolean);
   };
 
   const renderBranchBadges = (branchData) => {
@@ -788,7 +788,7 @@ function App() {
     if (!book) return;
     const branchArray = Array.isArray(book.branch)
       ? book.branch.map(item => String(item || "").trim()).filter(Boolean)
-      : String(book.branch || "").split(',').map(item => item.trim()).filter(Boolean);
+      : String(book.branch || "").split(/[,\n\r|]+/).map(item => item.trim()).filter(Boolean);
     setActiveBook(book);
     setEditForm({ name: book.name, zone: book.zone, branch: branchArray, grade: book.grade, status: book.status });
     setShowEdit(true);
@@ -1303,7 +1303,7 @@ function App() {
       createdBy: activeBook.created_by || activeBook.createdBy || "",
       createdAt: activeBook.created_at || activeBook.createdAt || "",
       statusInfo: activeBook.status_info || activeBook.statusInfo || "",
-      branch: Array.isArray(editForm.branch) ? editForm.branch : String(editForm.branch || "").split(',').map(item => item.trim()).filter(Boolean)
+      branch: Array.isArray(editForm.branch) ? editForm.branch : String(editForm.branch || "").split(/[,\n\r|]+/).map(item => item.trim()).filter(Boolean)
     };
 
     setIsProcessing(true);
