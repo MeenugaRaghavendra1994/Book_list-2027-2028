@@ -338,8 +338,14 @@ app.post("/books", async (req, res) => {
 
     if (error) throw error;
 
-    console.log("✅ INSERT SUCCESS. ID generated:", data?.id, "for SKU:", sku);
-    res.json({ success: true, book: data });
+    // Aggregate the newly inserted rows into a single logical book object for the UI
+    const responseBook = (data && data.length > 0) ? { 
+      ...data[0], 
+      branch_name: data.map(b => b.branch_name) 
+    } : null;
+
+    console.log("✅ INSERT SUCCESS. SKU:", sku);
+    res.json({ success: true, book: responseBook });
 
   } catch (err) {
     console.error("❌ INSERT ERROR:", err.message, err.details, err.hint);

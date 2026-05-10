@@ -1416,6 +1416,7 @@ function App() {
   const handleEditBook = (item, index) => {
     setShowAddBook(true);
     setEditingBookIndex(index);
+    const branches = normalizeBranchArray(item.branch_name || item.branch || activeBook?.branch);
     setNewBookItem({
       ...item,
       subject: item.subject || "",
@@ -1428,7 +1429,7 @@ function App() {
       quantity: item.quantity || 1,
       zone: item.zone || activeBook?.zone || "",
       grade: item.grade || activeBook?.grade || "",
-      branch: item.branch || activeBook?.branch || ""
+      branch: branches
     });
   };
 
