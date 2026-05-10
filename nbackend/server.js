@@ -1345,7 +1345,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const skuBranchPaidMap = {}; // SKU -> brNorm -> totalQty
 
     (orderData || []).forEach(order => {
-      const brNorm = normalize(order.branch_name);
+      const brNorm = normalize(order.branch_name || order.branch);
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
       if (!skuBranchPaidMap[sku]) skuBranchPaidMap[sku] = {};
@@ -1541,7 +1541,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     const targetZone = String(zone).trim().toLowerCase();
 
     // Fetch all relevant data
-    const { data: orderData } = await supabase.from('orders_table').select('*');
+    const { data: orderData } = await supabase.from('order_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
     const { data: booksData } = await supabase.from('individual_books').select('*');
     const { data: branchList } = await supabase.from('branches').select('name, zone');
@@ -1640,7 +1640,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     if (!material_code) return res.status(400).json({ error: "Material code required" });
     const normMaterialCode = material_code.toLowerCase().trim();
 
-    const { data: orderData } = await supabase.from('orders_table').select('*');
+    const { data: orderData } = await supabase.from('order_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
     const { data: booksData } = await supabase.from('individual_books').select('*');
 
@@ -1961,8 +1961,8 @@ app.post("/clear-dispatch-data", async (req, res) => {
     return res.status(403).json({ error: "Unauthorized" });
   }
   try {
-    console.log("🧹 Clearing orders_table and tracking table...");
-    await supabase.from('orders_table').delete().neq('id', 0);
+    console.log("🧹 Clearing order_table and tracking table...");
+    await supabase.from('order_table').delete().neq('id', 0);
     await supabase.from('completed_branches').delete().neq('id', 0);
     res.json({ success: true, message: "Tables cleared successfully." });
   } catch (err) {
@@ -2035,7 +2035,7 @@ app.post("/run-dispatch-load", async (req, res) => {
       const batchSize = 1000;
       for (let i = 0; i < aggRows.length; i += batchSize) {
         const batch = aggRows.slice(i, i + batchSize);
-        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        const { error: insertError } = await supabase.from('order_table').insert(batch);
         if (insertError) throw insertError;
       }
     }
@@ -2057,7 +2057,7 @@ app.get("/order-table", async (req, res) => {
     const itemNameFilter = String(req.query.item_name || "").trim();
     const zoneFilter = String(req.query.zone || "").trim();
 
-    let query = supabase.from('orders_table').select('*');
+    let query = supabase.from('order_table').select('*');
 
     if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
     if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
