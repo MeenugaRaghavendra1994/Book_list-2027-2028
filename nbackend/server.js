@@ -1278,26 +1278,45 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     // Final zone-wide summation of Paid Quantities
     Object.keys(summary).forEach(mCode => {
       const normMCode = mCode.toLowerCase().trim();
-      const activeBranches = materialBranchMap[normMCode] || new Set();
 
       allZones.forEach(z => {
         let totalPaidInZone = 0;
-        
+
+        // Get ALL active branches for this material + zone
+        const matchingBooks = (allBooksData || []).filter(book => {
+          const mat = String(book.material_code || "").trim().toLowerCase();
+          const zoneName = String(book.zone || "").trim();
+          return mat === normMCode && zoneName === z;
+        });
+
+        const activeBranches = new Set();
+        matchingBooks.forEach(book => {
+          const branches = String(book.branch_name || "")
+            .split(/[,\n\r|]+/)
+            .map(b => normalize(b))
+            .filter(Boolean);
+          branches.forEach(b => activeBranches.add(b));
+        });
+
         if (paidMap[z]) {
-          // 1. Direct SKU orders
+          // Direct orders
           if (paidMap[z][normMCode]) {
             Object.keys(paidMap[z][normMCode]).forEach(brNorm => {
-              if (activeBranches.has(brNorm)) totalPaidInZone += paidMap[z][normMCode][brNorm];
+              if (activeBranches.has(brNorm)) {
+                totalPaidInZone += paidMap[z][normMCode][brNorm];
+              }
             });
           }
 
-          // 2. Orders from 91-series composites (via BOM)
+          // BOM orders
           const composites = componentToCompositeMap[normMCode] || [];
           composites.forEach(comp => {
             if (paidMap[z][comp.composite_code]) {
               Object.keys(paidMap[z][comp.composite_code]).forEach(brNorm => {
                 if (activeBranches.has(brNorm)) {
-                  totalPaidInZone += (paidMap[z][comp.composite_code][brNorm] * comp.multiplier);
+                  totalPaidInZone += (
+                    paidMap[z][comp.composite_code][brNorm] * comp.multiplier
+                  );
                 }
               });
             }
@@ -1308,11 +1327,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         summary[mCode].total_paid_quantity += totalPaidInZone;
       });
 
+      summary[mCode].total_requirement = Math.max(
+        summary[mCode].total_projection,
+        summary[mCode].total_paid_quantity
+      );
 
-      // Logic 1, 2, and 3: Requirements and Ordered quantities
-      summary[mCode].total_requirement = Math.max(summary[mCode].total_projection, summary[mCode].total_paid_quantity);
-      summary[mCode].already_ordered_quantity = poMap[mCode] || 0;
-      summary[mCode].final_requirement = summary[mCode].total_requirement - summary[mCode].already_ordered_quantity;
+      summary[mCode].already_ordered_quantity = poMap[normMCode] || 0;
+
+      summary[mCode].final_requirement =
+        summary[mCode].total_requirement -
+        summary[mCode].already_ordered_quantity;
     });
 
     const result = Object.values(summary).sort((a, b) => a.material_code.localeCompare(b.material_code));
