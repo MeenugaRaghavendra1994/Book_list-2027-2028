@@ -246,7 +246,7 @@ app.post("/books", async (req, res) => {
     let mrp = Number(d.mrp) || 0;
     let costPrice = Number(d.cost_price) || 0;
     const compositeCode = String(d.composite_code || "").trim();
-    const compositeName = String(d.composite_name || "").trim();
+    let branchName = Array.isArray(d.branch) ? d.branch : String(d.branch || "").trim();
 
     // Pricing Lookup from master pricing table
     const { data: pricingData } = await supabase
@@ -337,11 +337,10 @@ app.post("/kits", async (req, res) => {
       return res.status(409).json({ success: false, error: `A book list named "${name}" already exists for zone "${zone}".` });
     }
 
-    const branchString = branchValues.join(', ');
-
     const { data, error } = await supabase
       .from('grade_wise_kits')
-      .insert([{ name, zone, branch: branchString, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo }])
+      // Save as array (different "cells" in Postgres sense) instead of joined string
+      .insert([{ name, zone, branch: branchValues, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo }])
       .select()
       .single();
 
@@ -388,11 +387,10 @@ app.put("/kits/:id", async (req, res) => {
       branchValues = (zoneBranches || []).map(b => String(b.name || "").trim()).filter(Boolean);
     }
 
-    const branchString = branchValues.length ? branchValues.join(', ') : "";
-
     const { data, error } = await supabase
       .from('grade_wise_kits')
-      .update({ name, zone, branch: branchString, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo })
+      // Save as array instead of joined string
+      .update({ name, zone, branch: branchValues, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo })
       .eq('id', id)
       .select()
       .single();
@@ -408,12 +406,13 @@ app.put("/kits/:id", async (req, res) => {
 
     if (!fetchBooksError && books) {
       for (const book of books) {
-        // When a kit's branch list is updated, synchronize all associated individual books 
-        // to ensure new branches are correctly added to the book records.
-        if (book.branch_name !== branchString) {
+        // Synchronize using array comparison or string representation
+        const currentBrs = String(book.branch_name || "");
+        const newBrsString = branchValues.join(', ');
+        if (currentBrs !== newBrsString) {
           await supabase
             .from('individual_books')
-            .update({ branch_name: branchString })
+            .update({ branch_name: branchValues })
             .eq('id', book.id);
         }
       }
@@ -538,7 +537,7 @@ app.put("/books/:id", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
-    let branchName = String(d.branch || "").trim();
+    let branchName = Array.isArray(d.branch) ? d.branch : String(d.branch || "").trim();
 
     // If branch is missing but kit_id is present, inherit branches from the kit
     if (!branchName && d.kit_id) {
@@ -1290,43 +1289,38 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     Object.keys(summary).forEach(mCode => {
       const normMCode = mCode.toLowerCase().trim();
 
+      // Step 1: Collect ALL active branches for this material globally
+      const materialBranchZones = new Map(); // branchNorm -> Set of zoneNorms
+      (allBooksData || []).forEach(book => {
+        const mat = String(book.material_code || "").trim().toLowerCase();
+        if (mat === normMCode) {
+          const branches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
+          const bookZone = String(book.zone || "").trim().toLowerCase();
+          branches.forEach(b => {
+            if (!materialBranchZones.has(b)) materialBranchZones.set(b, new Set());
+            const zonesSet = materialBranchZones.get(b);
+            if (bookZone) zonesSet.add(bookZone);
+            const mappedZone = branchToZoneMapNormalized[b];
+            if (mappedZone) zonesSet.add(mappedZone.toLowerCase());
+          });
+        }
+      });
+
       allZones.forEach(z => {
         let totalPaidInZone = 0;
         const zKey = z.toLowerCase();
 
-        // Get ALL active branches for this material + zone
-        const matchingBooks = (allBooksData || []).filter(book => {
-          const mat = String(book.material_code || "").trim().toLowerCase();
-          if (mat !== normMCode) return false;
-          
-          // Robust zone matching: Use book zone or derive from branch mapping
-          const bookBrs = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
-          const derivedZones = bookBrs
-            .map(br => branchToZoneMapNormalized[br])
-            .filter(Boolean)
-            .map(z => String(z).trim().toLowerCase());
-          if (String(book.zone || "").trim()) {
-            derivedZones.push(String(book.zone || "").trim().toLowerCase());
-          }
-          const zoneMatch = derivedZones.includes(zKey);
-          
-          return zoneMatch;
-        });
-
-        const activeBranches = new Set();
-        matchingBooks.forEach(book => {
-          const branches = String(book.branch_name || "")
-            .split(/[,\n\r|]+/)
-            .map(b => normalize(b))
-            .filter(Boolean);
-          branches.forEach(b => activeBranches.add(b));
+        // Step 2: Filter global branches to only those belonging to the current zone column
+        const zoneActiveBranches = new Set();
+        materialBranchZones.forEach((zonesSet, brNorm) => {
+          if (zonesSet.has(zKey)) zoneActiveBranches.add(brNorm);
         });
 
         if (paidMap[zKey]) {
           // Direct orders
           if (paidMap[zKey][normMCode]) {
             Object.keys(paidMap[zKey][normMCode]).forEach(brNorm => {
-              if (activeBranches.has(brNorm)) {
+              if (zoneActiveBranches.has(brNorm)) {
                 totalPaidInZone += paidMap[zKey][normMCode][brNorm];
               }
             });
@@ -1337,7 +1331,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           composites.forEach(comp => {
             if (paidMap[zKey][comp.composite_code]) {
               Object.keys(paidMap[zKey][comp.composite_code]).forEach(brNorm => {
-                if (activeBranches.has(brNorm)) {
+                if (zoneActiveBranches.has(brNorm)) {
                   totalPaidInZone += (
                     paidMap[zKey][comp.composite_code][brNorm] * comp.multiplier
                   );
