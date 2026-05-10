@@ -1743,33 +1743,45 @@ app.post("/run-dispatch-load", async (req, res) => {
     log("✅ Cleared existing data.");
     
     let allRows = [];
-    const failedBranches = []; // To store branches that failed all retries
-    
-    // Process branches sequentially with retry logic
-    for (const branchId of allBranches) {
-      let success = false;
-      const MAX_RETRIES = 3; // Define max retries
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        log(`⏳ Processing branch ID ${branchId}, attempt ${attempt}/${MAX_RETRIES}...`);
-        const result = await processBranch(branchId, accessToken);
-        
-        if (result.rows) {
-          allRows.push(...result.rows);
-          log(`✅ Successfully processed branch ID ${branchId}. Fetched ${result.rows.length} rows.`);
-          success = true;
-          break; // Break retry loop on success
-        } else {
-          log(`❌ Attempt ${attempt} failed for branch ID ${branchId}: ${result.error}`);
-          if (attempt < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+    const failedBranches = [];
+    const branchQueue = [...allBranches];
+    const concurrencyLimit = 10;
+
+    // Worker function to process branches concurrently with a pool limit of 10
+    const worker = async () => {
+      while (branchQueue.length > 0) {
+        const branchId = branchQueue.shift();
+        let success = false;
+        const MAX_RETRIES = 3;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          log(`⏳ Branch ${branchId}: Processing attempt ${attempt}/${MAX_RETRIES}...`);
+          const result = await processBranch(branchId, accessToken);
+
+          if (result && result.rows) {
+            // Using concat to merge large row sets safely
+            allRows = allRows.concat(result.rows);
+            log(`✅ Branch ${branchId} done: ${result.rows.length} rows fetched.`);
+            success = true;
+            break; 
+          } else {
+            const errorInfo = (result && result.error) ? result.error : "Network error or timeout";
+            log(`⚠️ Branch ${branchId} attempt ${attempt} failed: ${errorInfo}`);
+            if (attempt < MAX_RETRIES) {
+              await new Promise(r => setTimeout(r, 1000 * attempt));
+            }
           }
         }
+
+        if (!success) {
+          failedBranches.push(branchId);
+          log(`🔴 Branch ${branchId} failed all ${MAX_RETRIES} attempts.`);
+        }
       }
-      if (!success) {
-        failedBranches.push(branchId);
-        log(`🔴 Branch ID ${branchId} failed after ${MAX_RETRIES} attempts.`);
-      }
-    }
+    };
+
+    // Start 10 parallel workers
+    await Promise.all(Array.from({ length: concurrencyLimit }, worker));
 
     log(`Total raw rows fetched: ${allRows.length}.`);
     
@@ -1811,8 +1823,10 @@ app.post("/run-dispatch-load", async (req, res) => {
     });
     
   } catch (err) {
-    console.error("❌ DISPATCH LOAD CRITICAL ERROR:", err.message);
-    res.status(500).json({ success: false, error: err.message, logs });
+    // Extract a clear error string to prevent [object Object] appearing in frontend logs
+    const errorMsg = err.message || (err.error && err.error.message) || String(err);
+    console.error("❌ DISPATCH LOAD CRITICAL ERROR:", errorMsg);
+    res.status(500).json({ success: false, error: errorMsg, logs });
   }
 });
 
