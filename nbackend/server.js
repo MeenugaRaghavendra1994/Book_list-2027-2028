@@ -1345,8 +1345,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const skuBranchPaidMap = {}; // SKU -> brNorm -> totalQty
 
     (orderData || []).forEach(order => {
-      const brNorm = normalize(order.branch_name || order.branch);
-      const sku = String(order.item_sku || "").trim().toLowerCase();
+      const brNorm = normalize(order.branch_name || order.branch || "");
+      const sku = normalize(order.item_sku || "");
       const qty = Number(order.quantity) || 0;
       if (!skuBranchPaidMap[sku]) skuBranchPaidMap[sku] = {};
       skuBranchPaidMap[sku][brNorm] = (skuBranchPaidMap[sku][brNorm] || 0) + qty;
@@ -1475,15 +1475,17 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         materialBranchZones.forEach((zonesSet, brNorm) => {
           if (zonesSet.has(zKey)) {
             // Direct orders
-            if (skuBranchPaidMap[normMCode]) {
-              totalPaidInZone += (skuBranchPaidMap[normMCode][brNorm] || 0);
-            }
-            // BOM orders
+            totalPaidInZone += (skuBranchPaidMap[normMCode]?.[brNorm] || 0);
+
+            // Kit orders (from individual_books.composite_code)
+            materialKitCodes.forEach((multiplier, kitCode) => {
+              totalPaidInZone += (skuBranchPaidMap[kitCode]?.[brNorm] || 0) * multiplier;
+            });
+
+            // BOM orders (from sku_sap_bom)
             const composites = componentToCompositeMap[normMCode] || [];
             composites.forEach(comp => {
-              if (skuBranchPaidMap[comp.composite_code]) {
-                totalPaidInZone += (skuBranchPaidMap[comp.composite_code][brNorm] || 0) * comp.multiplier;
-              }
+              totalPaidInZone += (skuBranchPaidMap[normalize(comp.composite_code)]?.[brNorm] || 0) * comp.multiplier;
             });
           }
         });
@@ -1495,15 +1497,17 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       let grandTotalPaid = 0;
       materialBranchZones.forEach((zonesSet, brNorm) => {
         // Direct
-        if (skuBranchPaidMap[normMCode]) {
-          grandTotalPaid += (skuBranchPaidMap[normMCode][brNorm] || 0);
-        }
+        grandTotalPaid += (skuBranchPaidMap[normMCode]?.[brNorm] || 0);
+
+        // Kit Orders
+        materialKitCodes.forEach((multiplier, kitCode) => {
+          grandTotalPaid += (skuBranchPaidMap[kitCode]?.[brNorm] || 0) * multiplier;
+        });
+
         // BOM
         const composites = componentToCompositeMap[normMCode] || [];
         composites.forEach(comp => {
-          if (skuBranchPaidMap[comp.composite_code]) {
-            grandTotalPaid += (skuBranchPaidMap[comp.composite_code][brNorm] || 0) * comp.multiplier;
-          }
+          grandTotalPaid += (skuBranchPaidMap[normalize(comp.composite_code)]?.[brNorm] || 0) * comp.multiplier;
         });
       });
       summary[mCode].total_paid_quantity = grandTotalPaid;
@@ -1537,7 +1541,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     if (!material_code) return res.status(400).json({ error: "Material code required" });
     if (!zone) return res.status(400).json({ error: "Zone required" });
 
-    const normMaterialCode = material_code.toLowerCase().trim();
+    const normMaterialCode = normalize(material_code);
     const targetZone = String(zone).trim().toLowerCase();
 
     // Fetch all relevant data
@@ -1554,13 +1558,13 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     const kitMap = {}; 
     const activeBranches = new Set();
     (booksData || []).forEach(b => {
-      const matCode = String(b.material_code || "").toLowerCase().trim();
+      const matCode = normalize(b.material_code);
       if (matCode === normMaterialCode) {
         const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
           .map(s => normalize(s))
           .filter(Boolean);
         brs.forEach(brNorm => activeBranches.add(brNorm));
-        const compCode = String(b.composite_code || "").toLowerCase().trim();
+        const compCode = normalize(b.composite_code);
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
     });
@@ -1568,8 +1572,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     // Setup BOM lookups
     const bomParents = {}; // parentCode -> qtyPerParent
     (bomData || []).forEach(b => {
-      if (String(b.component_code || "").toLowerCase().trim() === normMaterialCode) {
-        bomParents[String(b.composite_code || "").toLowerCase().trim()] = Number(b.component_quantity) || 0;
+      if (normalize(b.component_code) === normMaterialCode) {
+        bomParents[normalize(b.composite_code)] = Number(b.component_quantity) || 0;
       }
     });
 
@@ -1577,7 +1581,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     const details = [];
     
     (orderData || []).forEach(order => {
-      const brNorm = normalize(order.branch_name || order.branch);
+      const brNorm = normalize(order.branch_name || order.branch || "");
       
       // Find all zones this branch belongs to for this material
       const brZones = new Set();
@@ -1597,7 +1601,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       });
 
       if (!brZones.has(targetZone)) return;
-      const sku = String(order.item_sku || "").toLowerCase().trim();
+      const sku = normalize(order.item_sku);
       if (activeBranches.size > 0 && !activeBranches.has(brNorm)) return;
 
       let contribution = 0;
@@ -1606,10 +1610,10 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       if (sku === normMaterialCode) {
         contribution = Number(order.quantity) || 0;
         source = "Direct Order";
-      } else if (bomParents[sku]) {
+      } else if (bomParents[sku] !== undefined) {
         contribution = (Number(order.quantity) || 0) * bomParents[sku];
         source = `BOM Parent (${order.item_sku})`;
-      } else if (kitMap[sku]) {
+      } else if (kitMap[sku] !== undefined) {
         contribution = (Number(order.quantity) || 0) * kitMap[sku];
         source = `Kit Order (${order.item_sku})`;
       }
@@ -1638,7 +1642,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
   try {
     const { material_code } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
-    const normMaterialCode = material_code.toLowerCase().trim();
+    const normMaterialCode = normalize(material_code);
 
     const { data: orderData } = await supabase.from('orders_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
@@ -1647,28 +1651,28 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     const kitMap = {};
     const activeBranchesNorm = new Set();
     (booksData || []).forEach(b => {
-      const matCode = String(b.material_code || "").toLowerCase().trim();
+      const matCode = normalize(b.material_code);
       if (matCode === normMaterialCode) {
         const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
           .map(s => normalize(s))
           .filter(Boolean);
         brs.forEach(brNorm => activeBranchesNorm.add(brNorm));
-        const compCode = String(b.composite_code || "").toLowerCase().trim();
+        const compCode = normalize(b.composite_code);
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
     });
 
     const bomParents = {};
     (bomData || []).forEach(b => {
-      if (String(b.component_code || "").toLowerCase().trim() === normMaterialCode) {
-        bomParents[String(b.composite_code || "").toLowerCase().trim()] = Number(b.component_quantity) || 0;
+      if (normalize(b.component_code) === normMaterialCode) {
+        bomParents[normalize(b.composite_code)] = Number(b.component_quantity) || 0;
       }
     });
 
     const details = [];
     (orderData || []).forEach(order => {
-      const sku = String(order.item_sku || "").toLowerCase().trim();
-      const brNorm = normalize(order.branch_name || order.branch);
+      const sku = normalize(order.item_sku);
+      const brNorm = normalize(order.branch_name || order.branch || "");
       if (activeBranchesNorm.size > 0 && !activeBranchesNorm.has(brNorm)) return;
 
       let contribution = 0;
@@ -1676,10 +1680,10 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
       if (sku === normMaterialCode) {
         contribution = Number(order.quantity) || 0;
         source = "Direct Order";
-      } else if (bomParents[sku]) {
+      } else if (bomParents[sku] !== undefined) {
         contribution = (Number(order.quantity) || 0) * bomParents[sku];
         source = `BOM Parent (${order.item_sku})`;
-      } else if (kitMap[sku]) {
+      } else if (kitMap[sku] !== undefined) {
         contribution = (Number(order.quantity) || 0) * kitMap[sku];
         source = `Kit Order (${order.item_sku})`;
       }
