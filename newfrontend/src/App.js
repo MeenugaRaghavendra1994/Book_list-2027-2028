@@ -2903,7 +2903,7 @@ function App() {
                                 if (val === null) return <span className="text-muted fst-italic">null</span>;
                                 if (Array.isArray(val)) return val.join(", ");
                                 // Remove brackets and double quotes, then format as clean comma-separated list
-                                let s = String(val ?? "").replace(/[\[\]"]/g, '').trim();
+                                let s = String(val ?? "").replace(/[[\]"]/g, '').trim();
                                 if (String(val).includes('[') || String(val).includes(',') || String(val).includes('|')) {
                                   return s.split(/[,\n\r|]+/).map(i => i.trim()).filter(Boolean).join(', ');
                                 }
@@ -2953,7 +2953,7 @@ function App() {
                                 value={(() => {
                                   if (Array.isArray(editingTableRow[key])) return editingTableRow[key].join(", ");
                                   // Remove brackets and double quotes for clean editing
-                                  let s = String(editingTableRow[key] ?? "").replace(/[\[\]"]/g, '').trim();
+                                  let s = String(editingTableRow[key] ?? "").replace(/[[\]"]/g, '').trim();
                                   if (String(editingTableRow[key]).includes('[') || String(editingTableRow[key]).includes(',')) {
                                     return s.split(/[,\n\r|]+/).map(i => i.trim()).filter(Boolean).join(', ');
                                   }
@@ -3118,7 +3118,7 @@ function App() {
                                     {(() => {
                                       if (Array.isArray(val)) return val.join(", ");
                                       // Dashboard popup fix: strip [ ] and " then format list
-                                      let s = String(val ?? 0).replace(/[\[\]"]/g, '').trim();
+                                      let s = String(val ?? 0).replace(/[[\]"]/g, '').trim();
                                       if (String(val).includes('[') || String(val).includes(',') || String(val).includes('|')) {
                                         return s.split(/[,\n\r|]+/).map(i => i.trim()).filter(Boolean).join(', ');
                                       }
