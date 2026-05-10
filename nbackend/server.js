@@ -628,22 +628,32 @@ app.get("/grades", async (req, res) => {
 ============================ */
 app.put("/books/:id", async (req, res) => {
   const d = req.body;
+  const id = req.params.id;
 
   try {
-    const zone = String(d.zone || "").trim();
-    const grade = String(d.grade || "").trim();
-    let branchName = Array.isArray(d.branch) ? d.branch : String(d.branch || "").trim();
+    // 1. Identify the logical group for this book
+    const { data: targetBook } = await supabase.from('individual_books').select('material_code, kit_id').eq('id', id).single();
+    if (!targetBook) return res.status(404).json({ success: false, error: "Book not found" });
 
-    // If branch is missing but kit_id is present, inherit branches from the kit
-    if (!branchName && d.kit_id) {
-      const { data: kitData } = await supabase
-        .from('grade_wise_kits')
-        .select('branch')
-        .eq('id', d.kit_id)
-        .maybeSingle();
-      
-      if (kitData && kitData.branch) branchName = kitData.branch;
-    }
+    // 2. Identify the logical kit group (all branches for this kit)
+    const { data: seedKit } = await supabase.from('grade_wise_kits').select('name, zone, grade').eq('id', targetBook.kit_id).single();
+    if (!seedKit) throw new Error("Parent kit group not found");
+
+    const { data: kitRows } = await supabase
+      .from('grade_wise_kits')
+      .select('id, branch')
+      .eq('name', seedKit.name).eq('zone', seedKit.zone).eq('grade', seedKit.grade);
+    
+    const kitIds = (kitRows || []).map(r => r.id);
+
+    // 3. Delete existing rows for this material across the kit group
+    await supabase.from('individual_books').delete().eq('material_code', targetBook.material_code).in('kit_id', kitIds);
+
+    // 4. Prepare new rows based on updated branch selection
+    const zone = String(d.zone || seedKit.zone).trim();
+    const grade = String(d.grade || seedKit.grade).trim();
+    let branchName = Array.isArray(d.branch) ? d.branch : [String(d.branch || "").trim()];
+    branchName = branchName.filter(Boolean);
 
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
@@ -662,7 +672,6 @@ app.put("/books/:id", async (req, res) => {
     const compositeCode = String(d.composite_code || "").trim();
     const compositeName = String(d.composite_name || "").trim();
 
-    // Pricing Lookup from master pricing table
     const { data: pricingData } = await supabase
       .from('pricing')
       .select('mrp, cost_price')
@@ -675,22 +684,32 @@ app.put("/books/:id", async (req, res) => {
     }
     const total = Number(d.total_amount) || qty * rate;
 
-    const { data, error } = await supabase
-      .from('individual_books')
-      .update({
-        zone, grade, branch_name: branchName, subject, material_name: materialName, material_code: materialCode,
+    const rows = branchName.map(br => {
+      const kitRow = kitRows.find(kr => normalize(kr.branch) === normalize(br));
+      return {
+        zone, grade, branch_name: br, subject, material_name: materialName, material_code: materialCode,
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
         author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
-        mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, kit_id: d.kit_id
-      })
-      .eq('id', req.params.id)
-      .select()
-      .single();
+        mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, 
+        kit_id: kitRow ? kitRow.id : targetBook.kit_id
+      };
+    });
+
+    const { data, error } = await supabase
+      .from('individual_books')
+      .insert(rows)
+      .select();
 
     if (error) throw error;
 
-    console.log("✏ UPDATED:", req.params.id);
-    res.json({ success: true, book: data });
+    // Aggregate for the UI
+    const responseBook = (data && data.length > 0) ? { 
+      ...data[0], 
+      branch_name: data.map(b => b.branch_name) 
+    } : null;
+
+    console.log("✏ UPDATED:", id);
+    res.json({ success: true, book: responseBook });
 
   } catch (err) {
     console.error("❌ UPDATE ERROR:", err.message, err.details, err.hint);
@@ -807,16 +826,28 @@ app.delete("/student_projections/:id", async (req, res) => {
 app.delete("/books/:id", async (req, res) => {
   try {
     const bookId = req.params.id;
-    if (!bookId || bookId === 'undefined' || bookId === 'null') {
-      return res.status(400).json({ success: false, error: "A valid Book ID is required for deletion." });
-    }
-
-    const { error, count } = await supabase
+    
+    // 1. Identify the logical book and its kit group
+    const { data: targetBook } = await supabase
       .from('individual_books')
-      .delete({ count: 'exact' })
-      .eq('id', bookId);
+      .select('material_code, kit_id')
+      .eq('id', bookId)
+      .single();
+
+    let count = 0;
+    if (targetBook) {
+      const { data: seedKit } = await supabase.from('grade_wise_kits').select('name, zone, grade').eq('id', targetBook.kit_id).single();
+      if (seedKit) {
+        const { data: kitRows } = await supabase.from('grade_wise_kits').select('id').eq('name', seedKit.name).eq('zone', seedKit.zone).eq('grade', seedKit.grade);
+        const kitIds = (kitRows || []).map(r => r.id);
+        
+        // 2. Delete all rows for this material across all branch kits in the group
+        const deleteRes = await supabase.from('individual_books').delete({ count: 'exact' }).eq('material_code', targetBook.material_code).in('kit_id', kitIds);
+        count = deleteRes.count || 0;
+        if (deleteRes.error) throw deleteRes.error;
+      }
+    }
       
-    if (error) throw error;
     
     console.log(`🗑️ DELETE REQUEST: ID ${bookId}, Rows Deleted: ${count}`);
 
