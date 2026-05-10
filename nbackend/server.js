@@ -1229,18 +1229,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     });
 
     const summary = {}; // grouped by material_code
-    const materialBranchMap = {}; // material_code -> Set of ALL branches associated with this item
 
-    // Pass 1: Build materialBranchMap from ALL matching books
-    (allBooksData || []).forEach(book => {
-      const materialCode = String(book.material_code || "").trim().toLowerCase();
-      if (!materialCode) return;
-      if (!materialBranchMap[materialCode]) materialBranchMap[materialCode] = new Set();
-      const kitBranches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
-      kitBranches.forEach(bNorm => materialBranchMap[materialCode].add(bNorm));
-    });
-
-    // Pass 2: Initialize summary for only displayed materials
+    // Pass 1: Initialize summary for only displayed materials
     booksDataForSummary.forEach(book => {
       const materialCode = String(book.material_code || "").trim().toLowerCase();
       const materialName = String(book.material_name || "").trim();
@@ -1258,7 +1248,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       });
     });
 
-    // Pass 3: Calculate projections (only for displayed materials)
+    // Pass 2: Calculate projections (only for displayed materials)
     booksDataForSummary.forEach(book => {
       const materialCode = String(book.material_code || "").trim().toLowerCase();
       if (!materialCode) return;
