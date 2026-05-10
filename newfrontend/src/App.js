@@ -23,7 +23,10 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
 
   const normalizedValue = (() => {
     if (Array.isArray(value)) return value.map(item => String(item || "").trim()).filter(Boolean);
-    const str = String(value || "").trim();
+    let str = String(value || "").trim();
+    if (str.length >= 2 && str.startsWith('"') && str.endsWith('"')) {
+      str = str.slice(1, -1);
+    }
     if (str.startsWith('[') && str.endsWith(']')) {
       try {
         const parsed = JSON.parse(str);
@@ -494,7 +497,10 @@ function App() {
       return branchData.map(item => String(item || "").trim()).filter(Boolean);
     }
     if (!branchData) return [];
-    const str = String(branchData).trim();
+    let str = String(branchData).trim();
+    if (str.length >= 2 && str.startsWith('"') && str.endsWith('"')) {
+      str = str.slice(1, -1);
+    }
     if (str.startsWith('[') && str.endsWith(']')) {
       try {
         const parsed = JSON.parse(str);
@@ -2896,7 +2902,10 @@ function App() {
                               {(() => {
                                 if (val === null) return <span className="text-muted fst-italic">null</span>;
                                 if (Array.isArray(val)) return val.join(", ");
-                                const s = String(val).trim();
+                                let s = String(val).trim();
+                                if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+                                  s = s.slice(1, -1);
+                                }
                                 if (s.startsWith('[') && s.endsWith(']')) {
                                   try {
                                     const p = JSON.parse(s);
@@ -2948,7 +2957,10 @@ function App() {
                                 className="form-control"
                                 value={(() => {
                                   if (Array.isArray(editingTableRow[key])) return editingTableRow[key].join(", ");
-                                  const s = String(editingTableRow[key] || "").trim();
+                                  let s = String(editingTableRow[key] || "").trim();
+                                  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+                                    s = s.slice(1, -1);
+                                  }
                                   if (s.startsWith('[') && s.endsWith(']')) {
                                     try {
                                       const p = JSON.parse(s);
@@ -3115,7 +3127,10 @@ function App() {
                                   <td key={col} className="px-3 small">
                                     {(() => {
                                       if (Array.isArray(val)) return val.join(", ");
-                                      const s = String(val ?? 0).trim();
+                                      let s = String(val ?? 0).trim();
+                                      if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+                                        s = s.slice(1, -1);
+                                      }
                                       if (s.startsWith('[') && s.endsWith(']')) {
                                         try {
                                           const p = JSON.parse(s);
