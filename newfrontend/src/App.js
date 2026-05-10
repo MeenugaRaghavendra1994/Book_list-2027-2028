@@ -81,12 +81,17 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
                 onClick={() => toggleOption(normalized)}
               >
                 <span>{normalized}</span>
-                <span>{checked ? <i className="bi bi-check-circle-fill text-danger"></i> : ''}</span>
+                <span>{checked ? <span className="text-success fw-bold">✓</span> : ''}</span>
               </button>
             );
           }) : (
             <div className="p-3 text-muted">No branches found.</div>
           )}
+          <div className="p-2 border-top bg-light d-flex justify-content-end">
+            <button type="button" className="btn btn-sm btn-success" onClick={() => setIsOpen(false)}>
+              ✓ Done
+            </button>
+          </div>
         </div>
       )}
     </div>
