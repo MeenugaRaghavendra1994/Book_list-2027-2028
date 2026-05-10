@@ -1687,13 +1687,27 @@ const getAllBranchIds = async () => {
   return data.map(b => b.id);
 };
 
-app.post("/run-dispatch-load", async (req, res) => {
-  // Simple auth check: expect user in body
+app.post("/clear-dispatch-data", async (req, res) => {
   const { user } = req.body;
   if (!user || user.role !== 'Admin') {
-    return res.status(403).json({ success: false, error: "Unauthorized: Admin access required" });
+    return res.status(403).json({ error: "Unauthorized" });
   }
-  
+  try {
+    console.log("🧹 Clearing orders_table and tracking table...");
+    await supabase.from('orders_table').delete().neq('id', 0);
+    await supabase.from('completed_branches').delete().neq('id', 0);
+    res.json({ success: true, message: "Tables cleared successfully." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/run-dispatch-load", async (req, res) => {
+  const { user, branchIds } = req.body;
+  if (!user || user.role !== 'Admin') {
+    return res.status(403).json({ success: false, error: "Unauthorized" });
+  }
+
   let logs = [];
   const log = (message) => {
     console.log(message);
@@ -1701,36 +1715,18 @@ app.post("/run-dispatch-load", async (req, res) => {
   };
 
   try {
-    log("Starting dispatch data load process...");
-    const accessToken = await getAccessToken();
+    const targetBranches = branchIds || [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 24, 26, 27, 30, 41, 57, 66, 67, 69, 70, 72, 73, 76, 77, 81, 82, 94, 101, 123, 124, 194, 205, 209, 210, 213, 239, 240, 241, 242, 244, 245, 246, 248, 249, 250, 251, 252, 253, 254, 257, 258, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 280, 281, 282, 283, 285, 286, 287, 288, 289, 290, 291, 292, 293, 296, 297, 298, 299, 300, 301, 305, 338, 353, 354, 355, 356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 369, 370, 371, 423, 425, 426, 427, 428, 429, 430, 432, 433, 434, 435, 436, 437, 438, 442, 443, 444, 445, 446, 447, 449, 450, 451];
+    log(`🚀 Processing ${targetBranches.length} branches...`);
 
-    // Get branch-to-zone mapping for aggregation into orders_table
+    const accessToken = await getAccessToken();
     const { data: branchMapping } = await supabase.from('branches').select('name, zone');
     const branchToZoneMapInternal = {};
-    (branchMapping || []).forEach(b => {
-      branchToZoneMapInternal[String(b.name || "").trim().toLowerCase()] = b.zone;
-    });
-
-    // Use a hardcoded list for now, but in a real scenario, this would come from the database
-    //const allBranches = [3,4,5,6,7,8,10,11,12,13,14,15,17,18,19,20,21,24,26,27,30,41,57,66,67,69,70,72,73,76,77,81,82,94,101,123,124,194,205,209,210,213,239,240,241,242,244,245,246,248,249,250,251,252,253,254,257,258,264,265,266,267,268,269,270,271,272,273,274,275,276,277,280,281,282,283,285,286,287,288,289,290,291,292,293,296,297,298,299,300,301,305,338,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,369,370,371,423,425,426,427,428,429,430,432,433,434,435,436,437,438,442,443,444,445,446,447,449,450,451]; 
-    const allBranches = [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 24, 26, 27, 30, 41, 57, 66, 67, 69, 70, 72, 73, 76, 77, 81, 82, 94, 101, 123, 124, 194, 205, 209, 210, 213, 239, 240, 241, 242, 244, 245, 246, 248, 249, 250, 251, 252, 253, 254, 257, 258, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 280, 281, 282, 283, 285, 286, 287, 288, 289, 290, 291, 292, 293, 296, 297, 298, 299, 300, 301, 305, 338, 353, 354, 355, 356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 369, 370, 371, 423, 425, 426, 427, 428, 429, 430, 432, 433, 434, 435, 436, 437, 438, 442, 443, 444, 445, 446, 447, 449, 450, 451];
-    log(`Found ${allBranches.length} branches to process.`);
-    
-    // Force Update: Clean up target and tracking tables
-    log("Cleaning up orders_table for fresh sync...");
-    const { error: clearOrdersError } = await supabase.from('orders_table').delete().neq('id', 0); 
-    if (clearOrdersError) log(`⚠️ Could not clear orders: ${clearOrdersError.message}`);
-    
-    log("Resetting branch tracking status...");
-    const { error: clearTrackingError } = await supabase.from('completed_branches').delete().neq('id', 0);
-    if (clearTrackingError) log(`⚠️ Could not reset tracking: ${clearTrackingError.message}`);
-
-    log("✅ Cleared existing data.");
+    (branchMapping || []).forEach(b => { branchToZoneMapInternal[String(b.name || "").trim().toLowerCase()] = b.zone; });
 
     const aggregatedMap = new Map();
     const failedBranches = [];
-    const branchQueue = [...allBranches];
-    const concurrencyLimit = 10; 
+    const branchQueue = [...targetBranches];
+    const concurrencyLimit = 10;
     let totalRawProcessed = 0;
 
     const worker = async () => {
@@ -1742,48 +1738,21 @@ app.post("/run-dispatch-load", async (req, res) => {
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
           log(`⏳ Branch ${branchId}: Fetching attempt ${attempt}/${MAX_RETRIES}...`);
           const result = await processBranch(branchId, accessToken, branchToZoneMapInternal);
-
           if (result && result.aggregated) {
             totalRawProcessed += result.count;
-            
-            // Merge branch aggregation into the global map
             for (const [key, value] of result.aggregated) {
-              if (aggregatedMap.has(key)) {
-                aggregatedMap.get(key).quantity += value.quantity;
-              } else {
-                aggregatedMap.set(key, value);
-              }
+              if (aggregatedMap.has(key)) aggregatedMap.get(key).quantity += value.quantity;
+              else aggregatedMap.set(key, value);
             }
-
-            log(`✅ Branch ${branchId} done: ${result.count} raw rows processed.`);
-            
-            // Safe upsert: don't crash if table doesn't exist
-            const { error: upsertError } = await supabase.from('completed_branches').upsert({
-              branch_id: branchId,
-              status: 'Completed',
-              rows_fetched: result.count,
-              error_message: null,
-              processed_at: new Date().toISOString()
-            }, { onConflict: 'branch_id' });
-            if (upsertError) console.warn(`⚠️ Could not update status for branch ${branchId}`);
-
+            log(`✅ Branch ${branchId} done: ${result.count} raw rows.`);
+            await supabase.from('completed_branches').upsert({ branch_id: branchId, status: 'Completed', rows_fetched: result.count, error_message: null, processed_at: new Date().toISOString() }, { onConflict: 'branch_id' });
             success = true;
-            break; 
+            break;
           } else {
-            const errorInfo = String((result && result.error) ? result.error : "Network error or timeout");
+            const errorInfo = String((result && result.error) ? result.error : "Network error");
             log(`⚠️ Branch ${branchId} attempt ${attempt} failed: ${errorInfo}`);
-            if (attempt < MAX_RETRIES) {
-              await new Promise(r => setTimeout(r, 1000 * attempt));
-            } else {
-               const { error: failUpsertError } = await supabase.from('completed_branches').upsert({
-                 branch_id: branchId,
-                 status: 'Failed',
-                 rows_fetched: 0,
-                 error_message: errorInfo,
-                 processed_at: new Date().toISOString()
-               }, { onConflict: 'branch_id' });
-               if (failUpsertError) console.warn(`⚠️ Could not update failure status for branch ${branchId}`);
-            }
+            if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 1000 * attempt));
+            else await supabase.from('completed_branches').upsert({ branch_id: branchId, status: 'Failed', rows_fetched: 0, error_message: errorInfo, processed_at: new Date().toISOString() }, { onConflict: 'branch_id' });
           }
         }
         if (!success) failedBranches.push(branchId);
@@ -1792,35 +1761,19 @@ app.post("/run-dispatch-load", async (req, res) => {
 
     await Promise.all(Array.from({ length: concurrencyLimit }, worker));
 
-    log(`Collection finished. Total raw records: ${totalRawProcessed}.`);
-    
     const aggRows = Array.from(aggregatedMap.values());
     if (aggRows.length > 0) {
-      log(`Batch inserting ${aggRows.length} unique records into orders_table...`);
+      log(`Batch inserting ${aggRows.length} records...`);
       const batchSize = 1000;
       for (let i = 0; i < aggRows.length; i += batchSize) {
         const batch = aggRows.slice(i, i + batchSize);
         const { error: insertError } = await supabase.from('orders_table').insert(batch);
-        if (insertError) {
-          log(`❌ Batch insert failed: ${insertError.message}`);
-          throw insertError;
-        }
+        if (insertError) throw insertError;
       }
-      log(`Successfully inserted aggregated data into orders_table.`);
-    } else {
-      log("⚠️ No data was aggregated.");
     }
-    
-    log("Dispatch data load process completed.");
-    res.json({ 
-      success: true, 
-      message: `Dispatch data loaded successfully. Processed ${totalRawProcessed} raw rows, aggregated into ${aggRows.length} records.`, logs, failedBranches
-    });
-    
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
   } catch (err) {
-    // Paranoia: Convert any error to string explicitly
-    const errorMsg = String(err?.message || (err?.error && err.error?.message) || JSON.stringify(err) || "Unknown critical error");
-    console.error("❌ DISPATCH LOAD CRITICAL ERROR:", errorMsg);
+    const errorMsg = String(err?.message || JSON.stringify(err));
     res.status(500).json({ success: false, error: errorMsg, logs });
   }
 });

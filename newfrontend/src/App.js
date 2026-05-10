@@ -621,20 +621,39 @@ function App() {
     if (!window.confirm("Are you sure you want to run the dispatch data load? This may take some time and clear existing order data.")) return;
     
     setShowDispatchLoadModal(true);
-    setDispatchLoadLogs(["Starting dispatch data load... This may take a few minutes."]);
+    setDispatchLoadLogs(["Initializing fresh data sync..."]);
+
+    const allBranches = [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 24, 26, 27, 30, 41, 57, 66, 67, 69, 70, 72, 73, 76, 77, 81, 82, 94, 101, 123, 124, 194, 205, 209, 210, 213, 239, 240, 241, 242, 244, 245, 246, 248, 249, 250, 251, 252, 253, 254, 257, 258, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 280, 281, 282, 283, 285, 286, 287, 288, 289, 290, 291, 292, 293, 296, 297, 298, 299, 300, 301, 305, 338, 353, 354, 355, 356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 369, 370, 371, 423, 425, 426, 427, 428, 429, 430, 432, 433, 434, 435, 436, 437, 438, 442, 443, 444, 445, 446, 447, 449, 450, 451];
+    const branchChunks = [];
+    for (let i = 0; i < allBranches.length; i += 10) {
+      branchChunks.push(allBranches.slice(i, i + 10));
+    }
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/run-dispatch-load`, { user: currentUser });
-      setDispatchLoadLogs(prev => [...prev, ...response.data.logs, "Dispatch data loaded successfully!"]);
-      if (response.data.failedBranches && response.data.failedBranches.length > 0) {
-        setDispatchLoadLogs(prev => [...prev, `⚠️ Some branches failed to load after retries: ${response.data.failedBranches.join(', ')}`]);
+      // Step 1: Clear existing data
+      await axios.post(`${API_BASE_URL}/clear-dispatch-data`, { user: currentUser });
+      setDispatchLoadLogs(prev => [...prev, "✅ Database cleared. Starting batch processing..."]);
+
+      // Step 2: Process in parallel batches of 10 branches (total 13-14 requests)
+      // We use a sequential loop of parallel batches to respect Vercel timeouts and server load
+      for (let j = 0; j < branchChunks.length; j++) {
+        const batch = branchChunks[j];
+        setDispatchLoadLogs(prev => [...prev, `🚀 Processing Batch ${j + 1}/${branchChunks.length}...`]);
+        
+        const res = await axios.post(`${API_BASE_URL}/run-dispatch-load`, { 
+          user: currentUser, 
+          branchIds: batch 
+        });
+
+        setDispatchLoadLogs(prev => [...prev, ...(res.data.logs || []), `✅ Batch ${j + 1} finished.`]);
       }
 
+      setDispatchLoadLogs(prev => [...prev, "🏁 Full Dispatch Data Sync Completed Successfully!"]);
+      
       if (viewMode === 'order-table') {
-        axios.get(`${API_BASE_URL}/order-table`)
-          .then(res => setOrderTableData(res.data || []))
-          .catch(() => setOrderTableData([]));
+        axios.get(`${API_BASE_URL}/order-table`).then(res => setOrderTableData(res.data || []));
       }
+
     } catch (error) {
       const rawError = error.response?.data?.error || error.message;
       const errorStr = typeof rawError === 'object' ? JSON.stringify(rawError) : String(rawError);
