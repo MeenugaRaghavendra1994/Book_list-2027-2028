@@ -235,6 +235,7 @@ function App() {
   const [viewMode, setViewMode] = useState("welcome");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showReportsSection, setShowReportsSection] = useState(false);
+  const [showMainSection, setShowMainSection] = useState(true);
   const [tableFilters, setTableFilters] = useState({});
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [editingTableRow, setEditingTableRow] = useState(null);
@@ -288,6 +289,7 @@ function App() {
   const [showDataSection, setShowDataSection] = useState(false);
   const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "", material_name: "" });
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+  const [showMainSection, setShowMainSection] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const logEndRef = useRef(null);
 
@@ -1627,10 +1629,10 @@ function App() {
           </button>
         </div>
         
-        <div className="px-3 flex-grow-1 overflow-auto">
+        <div className="px-3 flex-grow-1 overflow-auto pt-3">
           {!isSidebarCollapsed && (
             <div
-              className={`table-item px-3 py-2 d-flex align-items-center justify-content-between mt-3 ${showMainSection ? 'active' : ''}`}
+              className={`table-item px-3 py-2 d-flex align-items-center justify-content-between ${showMainSection ? 'active' : ''}`}
               style={{ cursor: 'pointer' }}
               onClick={() => setShowMainSection(prev => !prev)}
             >

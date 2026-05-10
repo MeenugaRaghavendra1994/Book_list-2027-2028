@@ -1297,8 +1297,14 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         // Get ALL active branches for this material + zone
         const matchingBooks = (allBooksData || []).filter(book => {
           const mat = String(book.material_code || "").trim().toLowerCase();
-          const zoneName = String(book.zone || "").trim().toLowerCase();
-          return mat === normMCode && zoneName === zKey;
+          if (mat !== normMCode) return false;
+          
+          // Robust zone matching: Use book zone or derive from branch mapping
+          const bookBrs = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
+          const derivedZone = (bookBrs.length > 0 && branchToZoneMapNormalized[bookBrs[0]]) || String(book.zone || "");
+          const zoneMatch = derivedZone.trim().toLowerCase() === zKey;
+          
+          return zoneMatch;
         });
 
         const activeBranches = new Set();
