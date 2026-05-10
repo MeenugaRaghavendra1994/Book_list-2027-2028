@@ -218,19 +218,21 @@ app.post("/books", async (req, res) => {
   try {
     const zone = String(d.zone || "").trim();
     const grade = String(d.grade || "").trim();
-    let branchName = String(d.branch || "").trim();
+    let branchName = Array.isArray(d.branch) ? d.branch : String(d.branch || "").trim(); // Consolidated declaration
 
     // If branch is missing but kit_id is present, inherit branches from the parent kit
-    if (!branchName && d.kit_id) {
+    const isBranchEmpty = (Array.isArray(branchName) && branchName.length === 0) || (!Array.isArray(branchName) && !branchName);
+    if (isBranchEmpty && d.kit_id) {
       const { data: kitData } = await supabase
         .from('grade_wise_kits')
         .select('branch')
         .eq('id', d.kit_id)
         .maybeSingle();
       
-      if (kitData && kitData.branch) branchName = kitData.branch;
+      if (kitData && kitData.branch) {
+        branchName = Array.isArray(kitData.branch) ? kitData.branch : [String(kitData.branch).trim()];
+      }
     }
-
     const sku = String(d.material_code || "").trim();
     const subject = String(d.subject || "").trim();
     const materialName = String(d.material_name || "").trim();
@@ -246,7 +248,7 @@ app.post("/books", async (req, res) => {
     let mrp = Number(d.mrp) || 0;
     let costPrice = Number(d.cost_price) || 0;
     const compositeCode = String(d.composite_code || "").trim();
-    let branchName = Array.isArray(d.branch) ? d.branch : String(d.branch || "").trim();
+    const compositeName = String(d.composite_name || "").trim();
 
     // Pricing Lookup from master pricing table
     const { data: pricingData } = await supabase
