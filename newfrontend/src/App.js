@@ -2413,62 +2413,71 @@ function App() {
       )}
 
       {showEdit && activeBook && (
-        <div className="card card-soft mt-4 p-4 shadow-sm">
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div>
-              <h5 className="mb-1">Edit Kit</h5>
-              <div className="text-muted">Update basic details and save your changes.</div>
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content shadow-lg">
+              <div className="modal-header bg-dark text-white">
+                <h5 className="modal-title">Edit Kit: {activeBook.name}</h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowEdit(false)} aria-label="Close"></button>
+              </div>
+              <div className="modal-body p-4">
+                <div className="mb-3">
+                  <div>
+                    <h6 className="mb-1">Edit Kit</h6>
+                    <div className="text-muted">Update basic details and save your changes.</div>
+                  </div>
+                </div>
+                <div className="row gx-3 gy-3">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Book List Name</label>
+                    <input type="text" className="form-control" value={editForm.name} onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))} />
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Branches</label>
+                    <BranchMultiSelect
+                      options={editBranchOptions}
+                      value={editForm.branch || []}
+                      onChange={(selected) => setEditForm(prev => ({ ...prev, branch: selected }))}
+                      placeholder="Search and select branches"
+                    />
+                    <div className="form-text">Select one or more branches for this book list.</div>
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label">Zone</label>
+                    <select className="form-select" value={editForm.zone} onChange={e => {
+                      const zoneValue = e.target.value;
+                      setEditForm(prev => ({
+                        ...prev,
+                        zone: zoneValue,
+                        branch: Array.isArray(prev.branch)
+                          ? prev.branch.filter(branchName => branchList.some(branch => branch.name === branchName && branch.zone === zoneValue))
+                          : []
+                      }));
+                    }}>
+                      <option value="">Select Zone</option>
+                      {zones.map(zone => <option key={zone} value={zone}>{zone || "All Zones"}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label">Grade</label>
+                    <select className="form-select" value={editForm.grade} onChange={e => setEditForm(prev => ({ ...prev, grade: e.target.value }))}>
+                      <option value="">Select Grade</option>
+                      {grades.map(grade => <option key={grade} value={grade}>{grade}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label">Status</label>
+                    <select className="form-select" value={editForm.status} onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}>
+                      {statusOptions.filter(opt => opt).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer bg-light">
+                <button className="btn btn-danger" onClick={handleSave}>Save Changes</button>
+                <button className="btn btn-outline-secondary" onClick={() => setShowEdit(false)}>Cancel</button>
+              </div>
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowEdit(false)}>Cancel</button>
-          </div>
-          <div className="row gx-3 gy-3">
-            <div className="col-12 col-md-6">
-              <label className="form-label">Book List Name</label>
-              <input type="text" className="form-control" value={editForm.name} onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))} />
-            </div>
-            <div className="col-12 col-md-6">
-              <label className="form-label">Branches</label>
-              <BranchMultiSelect
-                options={editBranchOptions}
-                value={editForm.branch || []}
-                onChange={(selected) => setEditForm(prev => ({ ...prev, branch: selected }))}
-                placeholder="Search and select branches"
-              />
-              <div className="form-text">Select one or more branches for this book list.</div>
-            </div>
-            <div className="col-12 col-md-4">
-              <label className="form-label">Zone</label>
-              <select className="form-select" value={editForm.zone} onChange={e => {
-                const zoneValue = e.target.value;
-                setEditForm(prev => ({
-                  ...prev,
-                  zone: zoneValue,
-                  branch: Array.isArray(prev.branch)
-                    ? prev.branch.filter(branchName => branchList.some(branch => branch.name === branchName && branch.zone === zoneValue))
-                    : []
-                }));
-              }}>
-                <option value="">Select Zone</option>
-                {zones.map(zone => <option key={zone} value={zone}>{zone || "All Zones"}</option>)}
-              </select>
-            </div>
-            <div className="col-12 col-md-4">
-              <label className="form-label">Grade</label>
-              <select className="form-select" value={editForm.grade} onChange={e => setEditForm(prev => ({ ...prev, grade: e.target.value }))}>
-                <option value="">Select Grade</option>
-                {grades.map(grade => <option key={grade} value={grade}>{grade}</option>)}
-              </select>
-            </div>
-            <div className="col-12 col-md-4">
-              <label className="form-label">Status</label>
-              <select className="form-select" value={editForm.status} onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}>
-                {statusOptions.filter(opt => opt).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="mt-4 d-flex gap-2">
-            <button className="btn btn-danger" onClick={handleSave}>Save Changes</button>
-            <button className="btn btn-outline-secondary" onClick={() => setShowEdit(false)}>Cancel</button>
           </div>
         </div>
       )}
