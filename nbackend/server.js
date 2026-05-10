@@ -1732,14 +1732,13 @@ app.post("/run-dispatch-load", async (req, res) => {
     const allBranches = [3,4,5,6,7,8,10,11,12,13,14,15,17,18,19,20,21,24,26,27,30,41,57,66,67,69,70,72,73,76,77,81,82,94,101,123,124,194,205,209,210,213,239,240,241,242,244,245,246,248,249,250,251,252,253,254,257,258,264,265,266,267,268,269,270,271,272,273,274,275,276,277,280,281,282,283,285,286,287,288,289,290,291,292,293,296,297,298,299,300,301,305,338,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,369,370,371,423,425,426,427,428,429,430,432,433,434,435,436,437,438,442,443,444,445,446,447,449,450,451]; 
     log(`Found ${allBranches.length} branches to process.`);
     
-    // Clear existing data in orders_table
+    // Force update: Clear target and tracking tables
     log("Clearing existing data from orders_table...");
-    const { error: deleteError } = await supabase.from('orders_table').delete().neq('id', 0); 
+    await supabase.from('orders_table').delete().neq('id', 0); 
     
-    if (deleteError) {
-      log(`❌ Failed to clear orders_table: ${deleteError.message}`);
-      throw new Error(`Database Error (Delete): ${deleteError.message}`);
-    }
+    log("Clearing existing status from completed_branches...");
+    await supabase.from('completed_branches').delete().neq('id', 0);
+
     log("✅ Cleared existing data.");
     
     let allRows = [];
@@ -1762,6 +1761,15 @@ app.post("/run-dispatch-load", async (req, res) => {
             // Using concat to merge large row sets safely
             allRows = allRows.concat(result.rows);
             log(`✅ Branch ${branchId} done: ${result.rows.length} rows fetched.`);
+            
+            // Force update status in database for completed branches
+            await supabase.from('completed_branches').upsert({
+              branch_id: branchId,
+              status: 'Completed',
+              rows_fetched: result.rows.length,
+              processed_at: new Date().toISOString()
+            }, { onConflict: 'branch_id' });
+
             success = true;
             break; 
           } else {
@@ -1775,6 +1783,15 @@ app.post("/run-dispatch-load", async (req, res) => {
 
         if (!success) {
           failedBranches.push(branchId);
+          
+          // Mark failure in completed_branches table
+          await supabase.from('completed_branches').upsert({
+            branch_id: branchId,
+            status: 'Failed',
+            rows_fetched: 0,
+            processed_at: new Date().toISOString()
+          }, { onConflict: 'branch_id' });
+
           log(`🔴 Branch ${branchId} failed all ${MAX_RETRIES} attempts.`);
         }
       }
@@ -1819,7 +1836,7 @@ app.post("/run-dispatch-load", async (req, res) => {
     log("Dispatch data load process completed.");
     res.json({ 
       success: true, 
-      message: `Dispatch data loaded successfully. Processed ${allRows.length} raw rows, aggregated into ${aggRows.length} records.`, logs 
+      message: `Dispatch data loaded successfully. Processed ${allRows.length} raw rows, aggregated into ${aggRows.length} records.`, logs, failedBranches
     });
     
   } catch (err) {

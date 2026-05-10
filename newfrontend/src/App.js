@@ -289,6 +289,15 @@ function App() {
   const [dashboardFilters, setDashboardFilters] = useState({ zone: "", branch: "", grade: "", material_name: "" });
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const logEndRef = useRef(null);
+
+  // Auto-scroll logs to bottom when new logs are added
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [dispatchLoadLogs]);
+
   const roleOptions = ["Admin", "User"];
   const rightsOptions = ["View", "Edit/Delete"];
 
@@ -3054,6 +3063,7 @@ function App() {
                       <span className="text-secondary small">[{new Date().toLocaleTimeString()}]</span> {log}
                     </div>
                   ))}
+                  <div ref={logEndRef} />
                 </div>
               </div>
               <div className="modal-footer bg-light">
