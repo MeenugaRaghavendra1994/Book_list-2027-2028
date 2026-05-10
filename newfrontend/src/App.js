@@ -42,8 +42,9 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
   const toggleOption = (option) => {
     const normalized = String(option || "").trim();
     if (!normalized) return;
-    if (normalizedValue.includes(normalized)) {
-      onChange(normalizedValue.filter(item => item !== normalized));
+    const exists = normalizedValue.some(v => v.toLowerCase() === normalized.toLowerCase());
+    if (exists) {
+      onChange(normalizedValue.filter(item => item.toLowerCase() !== normalized.toLowerCase()));
     } else {
       onChange([...normalizedValue, normalized]);
     }
@@ -84,7 +85,7 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
         <div className="position-absolute w-100 bg-white border rounded shadow-lg mt-1" style={{ maxHeight: 260, overflowY: 'auto', zIndex: 1050, border: '1px solid #ced4da' }}>
           {filteredOptions.length > 0 ? filteredOptions.map((option) => {
             const normalized = String(option || "").trim();
-            const checked = normalizedValue.includes(normalized);
+            const checked = normalizedValue.some(v => v.toLowerCase() === normalized.toLowerCase());
             return (
               <button
                 key={normalized}
