@@ -287,11 +287,11 @@ def load_data():
     # Already inserted per-branch failed_rows above.
 
     # ================================
-    # 📊 AGGREGATE INTO ORDER_TABLE
+    # 📊 AGGREGATE INTO ORDERS_TABLE
     # ================================
-    logging.info("📊 Aggregating data into order_table")
+    logging.info("📊 Aggregating data into orders_table")
     cursor.execute("""
-        INSERT INTO public.order_table (branch_name, grade_name, item_sku, item_name, quantity)
+        INSERT INTO public.orders_table (branch_name, grade_name, item_sku, item_name, quantity)
         SELECT branch_name, grade_name, item_sku, item_name, SUM(quantity) as quantity
         FROM dispatch_tracker_2627
         WHERE quantity IS NOT NULL
@@ -300,7 +300,7 @@ def load_data():
         quantity = EXCLUDED.quantity
     """)
     conn.commit()
-    logging.info("✅ Aggregated data inserted into order_table")
+    logging.info("✅ Aggregated data inserted into orders_table")
 
     cursor.close()
     conn.close()
