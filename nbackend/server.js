@@ -171,9 +171,24 @@ app.get("/kits", async (req, res) => {
       .from('grade_wise_kits')
       .select('*')
       .order('id', { ascending: false });
-
     if (error) throw error;
-    res.json(data);
+
+    // Aggregate branch-wise rows into logical kits for the UI
+    const groupedKits = [];
+    const kitMap = new Map();
+
+    (data || []).forEach(item => {
+      const key = `${item.name}|${item.zone}|${item.grade}`;
+      if (!kitMap.has(key)) {
+        const kit = { ...item, branch: [item.branch] };
+        kitMap.set(key, kit);
+        groupedKits.push(kit);
+      } else {
+        kitMap.get(key).branch.push(item.branch);
+      }
+    });
+
+    res.json(groupedKits);
   } catch (err) {
     console.error("GET KITS ERROR:", err.message, err.details, err.hint);
     res.status(500).json({ success: false, error: err.message });
@@ -263,16 +278,19 @@ app.post("/books", async (req, res) => {
     }
     const total = Number(d.total_amount) || qty * rate;
 
+    // Create a row for every branch selected
+    const branchArray = Array.isArray(branchName) ? branchName : [branchName];
+    const rows = branchArray.map(br => ({
+      zone, grade, branch_name: br, subject, material_name: materialName, material_code: sku,
+      tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
+      author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
+      mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, kit_id: d.kit_id
+    }));
+
     const { data, error } = await supabase
       .from('individual_books')
-      .insert([{
-        zone, grade, branch_name: branchName, subject, material_name: materialName, material_code: sku,
-        tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
-        author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
-        mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, kit_id: d.kit_id
-      }])
-      .select()
-      .single();
+      .insert(rows)
+      .select();
 
     if (error) throw error;
 
@@ -339,12 +357,15 @@ app.post("/kits", async (req, res) => {
       return res.status(409).json({ success: false, error: `A book list named "${name}" already exists for zone "${zone}".` });
     }
 
+    // Insert one row per branch
+    const rows = branchValues.map(br => ({
+      name, zone, branch: br, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo
+    }));
+
     const { data, error } = await supabase
       .from('grade_wise_kits')
-      // Save as array (different "cells" in Postgres sense) instead of joined string
-      .insert([{ name, zone, branch: branchValues, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo }])
-      .select()
-      .single();
+      .insert(rows)
+      .select();
 
     if (error) {
        console.error("❌ SUPABASE KIT INSERT ERROR:", error.message);
@@ -389,41 +410,51 @@ app.put("/kits/:id", async (req, res) => {
       branchValues = (zoneBranches || []).map(b => String(b.name || "").trim()).filter(Boolean);
     }
 
-    const { data, error } = await supabase
-      .from('grade_wise_kits')
-      // Save as array instead of joined string
-      .update({ name, zone, branch: branchValues, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo })
-      .eq('id', id)
-      .select()
-      .single();
+    // 1. Find the logical kit identity
+    const { data: original } = await supabase.from('grade_wise_kits').select('name, zone, grade').eq('id', id).single();
+    if (!original) return res.status(404).json({ error: "Kit not found" });
 
+    // 2. Delete all existing rows for this logical kit
+    await supabase.from('grade_wise_kits').delete().eq('name', original.name).eq('zone', original.zone).eq('grade', original.grade);
+
+    // 3. Re-insert new rows for each branch
+    const rows = branchValues.map(br => ({
+      name, zone, branch: br, grade, status, created_by: createdBy, created_at: createdAt, status_info: statusInfo
+    }));
+
+    const { data, error } = await supabase.from('grade_wise_kits').insert(rows).select();
     if (error) throw error;
-    if (!data) return res.status(404).json({ success: false, error: "Kit record not found." });
 
-    // Synchronize individual books: remove branches no longer in the kit
-    const { data: books, error: fetchBooksError } = await supabase
-      .from('individual_books')
-      .select('id, branch_name')
-      .eq('kit_id', id);
-
-    if (!fetchBooksError && books) {
-      for (const book of books) {
-        // Synchronize using array comparison or string representation
-        const currentBrs = String(book.branch_name || "");
-        const newBrsString = branchValues.join(', ');
-        if (currentBrs !== newBrsString) {
-          await supabase
-            .from('individual_books')
-            .update({ branch_name: branchValues })
-            .eq('id', book.id);
-        }
-      }
-    }
-
-    res.json({ success: true, kit: data });
+    res.json({ success: true, kit: data[0] });
   } catch (err) {
     console.error("❌ KIT UPDATE ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
+  }
+});
+
+app.delete("/kits/:id", async (req, res) => {
+  try {
+    const kitId = req.params.id;
+    // Find logical identity to delete all branch rows
+    const { data: kit } = await supabase.from('grade_wise_kits').select('name, zone, grade').eq('id', kitId).single();
+    
+    if (kit) {
+      // Delete associated books for all branches of this kit
+      await supabase.from('individual_books').delete().eq('kit_id', kitId);
+      
+      // Delete all branch rows for this kit
+      const { error } = await supabase
+        .from('grade_wise_kits')
+        .delete()
+        .eq('name', kit.name)
+        .eq('zone', kit.zone)
+        .eq('grade', kit.grade);
+      if (error) throw error;
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
