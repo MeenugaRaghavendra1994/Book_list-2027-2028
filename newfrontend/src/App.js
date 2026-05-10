@@ -2902,18 +2902,13 @@ function App() {
                               {(() => {
                                 if (val === null) return <span className="text-muted fst-italic">null</span>;
                                 if (Array.isArray(val)) return val.join(", ");
-                                let s = String(val).trim();
-                                if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
-                                  s = s.slice(1, -1);
-                                }
-                                if (s.startsWith('[') && s.endsWith(']')) {
-                                  try {
-                                    const p = JSON.parse(s);
-                                    if (Array.isArray(p)) return p.join(", ");
-                                  } catch (e) {}
+                                // Remove brackets and double quotes, then format as clean comma-separated list
+                                let s = String(val ?? "").replace(/[\[\]"]/g, '').trim();
+                                if (String(val).includes('[') || String(val).includes(',') || String(val).includes('|')) {
+                                  return s.split(/[,\n\r|]+/).map(i => i.trim()).filter(Boolean).join(', ');
                                 }
                                 if (typeof val === 'object') return JSON.stringify(val);
-                                return s;
+                                return s || (val === 0 ? "0" : "");
                               })()}
                             </td>
                           ))}
@@ -2957,17 +2952,12 @@ function App() {
                                 className="form-control"
                                 value={(() => {
                                   if (Array.isArray(editingTableRow[key])) return editingTableRow[key].join(", ");
-                                  let s = String(editingTableRow[key] || "").trim();
-                                  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
-                                    s = s.slice(1, -1);
+                                  // Remove brackets and double quotes for clean editing
+                                  let s = String(editingTableRow[key] ?? "").replace(/[\[\]"]/g, '').trim();
+                                  if (String(editingTableRow[key]).includes('[') || String(editingTableRow[key]).includes(',')) {
+                                    return s.split(/[,\n\r|]+/).map(i => i.trim()).filter(Boolean).join(', ');
                                   }
-                                  if (s.startsWith('[') && s.endsWith(']')) {
-                                    try {
-                                      const p = JSON.parse(s);
-                                      if (Array.isArray(p)) return p.join(", ");
-                                    } catch (e) {}
-                                  }
-                                  return s;
+                                  return s || "";
                                 })()}
                                 onChange={(e) => setEditingTableRow(prev => ({ ...prev, [key]: e.target.value }))}
                               />
@@ -3127,15 +3117,10 @@ function App() {
                                   <td key={col} className="px-3 small">
                                     {(() => {
                                       if (Array.isArray(val)) return val.join(", ");
-                                      let s = String(val ?? 0).trim();
-                                      if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
-                                        s = s.slice(1, -1);
-                                      }
-                                      if (s.startsWith('[') && s.endsWith(']')) {
-                                        try {
-                                          const p = JSON.parse(s);
-                                          if (Array.isArray(p)) return p.join(", ");
-                                        } catch (e) {}
+                                      // Dashboard popup fix: strip [ ] and " then format list
+                                      let s = String(val ?? 0).replace(/[\[\]"]/g, '').trim();
+                                      if (String(val).includes('[') || String(val).includes(',') || String(val).includes('|')) {
+                                        return s.split(/[,\n\r|]+/).map(i => i.trim()).filter(Boolean).join(', ');
                                       }
                                       return s;
                                     })()}
