@@ -1345,8 +1345,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const skuBranchPaidMap = {}; // SKU -> brNorm -> totalQty
 
     (orderData || []).forEach(order => {
-      const brNorm = normalize(order.branch_name || order.branch || "");
-      const sku = normalize(order.item_sku || "");
+      const brNorm = normalize(order.branch_name || order.branch || ""); // Normalize branch name
+      const sku = normalize(order.item_sku || ""); // Normalize SKU
       const qty = Number(order.quantity) || 0;
       if (!skuBranchPaidMap[sku]) skuBranchPaidMap[sku] = {};
       skuBranchPaidMap[sku][brNorm] = (skuBranchPaidMap[sku][brNorm] || 0) + qty;
@@ -1446,14 +1446,23 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Final zone-wide summation of Paid Quantities
     Object.keys(summary).forEach(mCode => {
-      const normMCode = mCode.toLowerCase().trim();
+      const normMCode = normalize(mCode); // Ensure material code is normalized
 
       // Step 1: Collect ALL active branches for this material globally and map to zones
       const materialBranchZones = new Map(); // brNorm -> Set of zoneKeys
+      const componentToKitMap = {}; // material_code -> [{ composite_code, quantity_in_kit }]
+
       (allBooksData || []).forEach(book => {
-        const mat = String(book.material_code || "").trim().toLowerCase();
+        const mat = normalize(book.material_code); // Normalize material code
         if (mat === normMCode) {
-          const branches = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || "").split(/[,\n\r|]+/))
+          // Populate componentToKitMap for this material
+          const compositeCode = normalize(book.composite_code);
+          const quantityInKit = Number(book.quantity) || 1;
+          if (compositeCode) {
+            if (!componentToKitMap[mat]) componentToKitMap[mat] = [];
+            componentToKitMap[mat].push({ composite_code: compositeCode, quantity_in_kit: quantityInKit });
+          }
+          const branches = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || book.branch || "").split(/[,\n\r|]+/))
             .map(s => normalize(s))
             .filter(Boolean);
           const bookZone = String(book.zone || "").trim().toLowerCase();
@@ -1464,6 +1473,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
             const mappedZone = branchToZoneMapNormalized[b];
             if (mappedZone) zonesSet.add(mappedZone.toLowerCase());
           });
+
         }
       });
 
@@ -1477,15 +1487,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
             // Direct orders
             totalPaidInZone += (skuBranchPaidMap[normMCode]?.[brNorm] || 0);
 
-            // Kit orders (from individual_books.composite_code)
-            materialKitCodes.forEach((multiplier, kitCode) => {
-              totalPaidInZone += (skuBranchPaidMap[kitCode]?.[brNorm] || 0) * multiplier;
+            // Kit orders (from individual_books.composite_code, "91 series")
+            const kitParents = componentToKitMap[normMCode] || [];
+            kitParents.forEach(kitParent => {
+              totalPaidInZone += (skuBranchPaidMap[kitParent.composite_code]?.[brNorm] || 0) * kitParent.quantity_in_kit;
             });
 
             // BOM orders (from sku_sap_bom)
             const composites = componentToCompositeMap[normMCode] || [];
             composites.forEach(comp => {
-              totalPaidInZone += (skuBranchPaidMap[normalize(comp.composite_code)]?.[brNorm] || 0) * comp.multiplier;
+              totalPaidInZone += (skuBranchPaidMap[comp.composite_code]?.[brNorm] || 0) * comp.multiplier;
             });
           }
         });
@@ -1499,15 +1510,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         // Direct
         grandTotalPaid += (skuBranchPaidMap[normMCode]?.[brNorm] || 0);
 
-        // Kit Orders
-        materialKitCodes.forEach((multiplier, kitCode) => {
-          grandTotalPaid += (skuBranchPaidMap[kitCode]?.[brNorm] || 0) * multiplier;
+        // Kit Orders (from individual_books.composite_code, "91 series")
+        const kitParents = componentToKitMap[normMCode] || [];
+        kitParents.forEach(kitParent => {
+          grandTotalPaid += (skuBranchPaidMap[kitParent.composite_code]?.[brNorm] || 0) * kitParent.quantity_in_kit;
         });
 
         // BOM
         const composites = componentToCompositeMap[normMCode] || [];
         composites.forEach(comp => {
-          grandTotalPaid += (skuBranchPaidMap[normalize(comp.composite_code)]?.[brNorm] || 0) * comp.multiplier;
+          grandTotalPaid += (skuBranchPaidMap[comp.composite_code]?.[brNorm] || 0) * comp.multiplier;
         });
       });
       summary[mCode].total_paid_quantity = grandTotalPaid;
@@ -1541,7 +1553,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     if (!material_code) return res.status(400).json({ error: "Material code required" });
     if (!zone) return res.status(400).json({ error: "Zone required" });
 
-    const normMaterialCode = normalize(material_code);
+    const normMaterialCode = normalize(material_code); // Normalize material code
     const targetZone = String(zone).trim().toLowerCase();
 
     // Fetch all relevant data
@@ -1584,7 +1596,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       const brNorm = normalize(order.branch_name || order.branch || "");
       
       // Find all zones this branch belongs to for this material
-      const brZones = new Set();
+      const brZones = new Set(); // Use a Set to avoid duplicate zones
       const mappedZone = branchToZoneMapNorm[brNorm];
       if (mappedZone) brZones.add(mappedZone.toLowerCase());
       (booksData || []).forEach(b => {
@@ -1601,7 +1613,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       });
 
       if (!brZones.has(targetZone)) return;
-      const sku = normalize(order.item_sku);
+      const sku = normalize(order.item_sku); // Normalize SKU
       if (activeBranches.size > 0 && !activeBranches.has(brNorm)) return;
 
       let contribution = 0;
@@ -1922,7 +1934,7 @@ const processBranch = async (branch, accessToken, branchToZoneMapInternal) => {
         const sku = clean(row['Item SKU']);
         const bName = clean(row['Branch Name']);
         if (!qty || !sku || !bName) continue;
-
+    
         const grade = clean(row['Grade Name']);
         const item = clean(row['Item Name']);
         const zName = clean(row['Zone Name']);

@@ -60,6 +60,17 @@ def clean(value):
 
 
 # ---------------------------
+# SKU NORMALIZER FOR DB
+# ---------------------------
+def normalize_sku_for_db(value):
+    if value is None or pd.isna(value):
+        return None
+    v = str(value).strip().lower()
+    # Remove non-alphanumeric characters, similar to JS normalize
+    import re
+    v = re.sub(r'[^a-z0-9]', '', v)
+    return v if v else None
+# ---------------------------
 # INTEGER CLEANER
 # ---------------------------
 def to_int(value):
@@ -157,7 +168,7 @@ def process_branch(branch, access_token):
                 clean(row.get("transaction_no")),
                 clean(row.get("payment_date")),
                 clean(row.get("payment_month")),
-                clean(row.get("item_sku")),
+                normalize_sku_for_db(row.get("item_sku")), # Use normalized SKU
                 clean(row.get("item_name")),
                 to_int(row.get("quantity")),
                 clean(row.get("docket_id")),
