@@ -1588,16 +1588,10 @@ app.get("/download", async (req, res) => {
 
 // Helper functions
 const clean = (value) => {
-  if (value == null || value === '') return null;
+  if (value == null) return null;
   const v = String(value).trim();
-  if (v === '' || v.toLowerCase() === 'none' || v.toLowerCase() === 'null' || v.toLowerCase() === 'nan') return null;
-  if (v.endsWith('.0')) {
-    try {
-      return String(Math.floor(parseFloat(v)));
-    } catch {
-      return v;
-    }
-  }
+  if (!v || v === 'none' || v === 'null' || v === 'nan') return null;
+  if (v.endsWith('.0')) return v.slice(0, -2);
   return v;
 };
 
@@ -1629,7 +1623,7 @@ const getAccessToken = async () => {
   return response.data.data;
 };
 
-const processBranch = async (branch, accessToken) => {
+const processBranch = async (branch, accessToken, branchToZoneMapInternal) => {
   console.log(`🚀 Fetching branch ${branch}`);
 
   const url = `https://orchids.finance.letseduvate.com/qbox/ekart/branch-wise-dispatch-report/?finance_session_year=47&branch=${branch}&is_branch_wise_report=true`;
@@ -1638,56 +1632,45 @@ const processBranch = async (branch, accessToken) => {
     const response = await axios.get(url, {
       headers: { "Authorization": `Bearer ${accessToken}` },
       responseType: 'arraybuffer',
-      timeout: 300000 // Increased to 5 minutes
+      timeout: 120000 // 2 minutes per branch fetch
     });
 
     const workbook = XLSX.read(response.data, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
+    // Parse report data
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: null });
 
-    const rows = [];
+    const localAggregated = new Map();
+    let rawCount = 0;
+
     for (const row of jsonData) {
       try {
-        rows.push({
-          zone_id: clean(row['Zone ID']), // Ensure column names match the Excel sheet exactly
-          zone_name: clean(row['Zone Name']),
-          branch_id: clean(row['Branch ID']),
-          branch_name: clean(row['Branch Name']),
-          grade_name: clean(row['Grade Name']),
-          branch_pin_code: clean(row['Branch Pin Code']),
-          city: clean(row['City']),
-          student_name: clean(row['Student Name']),
-          erp_id: clean(row['ERP ID']),
-          ekart_order_no: clean(row['Ekart Order No']),
-          ekart_tracking_no: clean(row['Ekart Tracking No']),
-          ekart_order_created_at: clean(row['Ekart Order Created At']),
-          transaction_no: clean(row['Transaction No']),
-          payment_date: clean(row['Payment Date']),
-          payment_month: clean(row['Payment Month']),
-          item_sku: clean(row['Item SKU']),
-          item_name: clean(row['Item Name']),
-          quantity: toInt(row['Quantity']),
-          docket_id: clean(row['Docket ID']),
-          invoice_id: clean(row['Invoice ID']),
-          sub_category_name: clean(row['Sub Category Name']),
-          volume: clean(row['Volume']),
-          order_type: clean(row['Order Type']),
-          expected_delivery_date: clean(row['Expected Delivery Date']),
-          shipped_datetime: cleanDatetime(row['Shipped Datetime']),
-          delivery_datetime: cleanDatetime(row['Delivery Datetime']),
-          current_status: clean(row['Current Status']),
-          recieved_by_parent_datetime: cleanDatetime(row['Recieved By Parent Datetime']),
-          sales_order: clean(row['Sales Order']),
-          packed_datetime: cleanDatetime(row['Packed Datetime'])
-        });
+        const qty = toInt(row['Quantity']);
+        const sku = clean(row['Item SKU']);
+        const bName = clean(row['Branch Name']);
+        if (!qty || !sku || !bName) continue;
+
+        const grade = clean(row['Grade Name']);
+        const item = clean(row['Item Name']);
+        const zName = clean(row['Zone Name']);
+        const normBranch = bName.toLowerCase();
+        const zone = branchToZoneMapInternal[normBranch] || zName || "Unknown";
+        
+        const key = `${zone}||${bName}||${grade}||${sku}||${item}`;
+        if (localAggregated.has(key)) {
+          localAggregated.get(key).quantity += qty;
+        } else {
+          localAggregated.set(key, { zone, branch_name: bName, grade_name: grade, item_sku: sku, item_name: item, quantity: qty });
+        }
+        rawCount++;
       } catch (e) {
-        console.error(`Failed to process row for branch ${branch} (row data: ${JSON.stringify(row)}):`, e.message);
+        // Skip malformed rows
       }
     }
 
-    console.log(`✅ branch=${branch} done; rows=${rows.length}`);
-    return { rows };
+    console.log(`✅ branch=${branch} done; raw_rows=${rawCount}; aggregated_unique=${localAggregated.size}`);
+    return { aggregated: localAggregated, count: rawCount };
   } catch (e) {
     console.error(`Failed branch ${branch}:`, e.message);
     return { failed_branch: branch, error: e.message };
@@ -1730,7 +1713,7 @@ app.post("/run-dispatch-load", async (req, res) => {
 
     // Use a hardcoded list for now, but in a real scenario, this would come from the database
     //const allBranches = [3,4,5,6,7,8,10,11,12,13,14,15,17,18,19,20,21,24,26,27,30,41,57,66,67,69,70,72,73,76,77,81,82,94,101,123,124,194,205,209,210,213,239,240,241,242,244,245,246,248,249,250,251,252,253,254,257,258,264,265,266,267,268,269,270,271,272,273,274,275,276,277,280,281,282,283,285,286,287,288,289,290,291,292,293,296,297,298,299,300,301,305,338,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,369,370,371,423,425,426,427,428,429,430,432,433,434,435,436,437,438,442,443,444,445,446,447,449,450,451]; 
-    const allBranches = [3,4,5,6,7,8,10,11,12,13,14,15,17,18,19,20,21,24,26,27,30,41,57,66,67,69,70,72,73,76,77,81,82,94,101,123,124,194,205,209,210,213,239,240,241,242,244,245,246,248,249,250,251,252,253,254,257,258,264,265,266,267,268,269,270,271,272,273,274,275,276,277,280,281,282,283,285,286,287,288,289,290,291,292,293,296,297,298,299,300,301,305,338,353,354,355,356,357,358,359,360,361,362,363,364,365,366,367,369,370,371,423,425,426,427,428,429,430,432,433,434,435,436,437,438,442,443,444,445,446,447,449,450,451];
+    const allBranches = [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 24, 26, 27, 30, 41, 57, 66, 67, 69, 70, 72, 73, 76, 77, 81, 82, 94, 101, 123, 124, 194, 205, 209, 210, 213, 239, 240, 241, 242, 244, 245, 246, 248, 249, 250, 251, 252, 253, 254, 257, 258, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 280, 281, 282, 283, 285, 286, 287, 288, 289, 290, 291, 292, 293, 296, 297, 298, 299, 300, 301, 305, 338, 353, 354, 355, 356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 369, 370, 371, 423, 425, 426, 427, 428, 429, 430, 432, 433, 434, 435, 436, 437, 438, 442, 443, 444, 445, 446, 447, 449, 450, 451];
     log(`Found ${allBranches.length} branches to process.`);
     
     // Force Update: Clean up target and tracking tables
@@ -1758,39 +1741,27 @@ app.post("/run-dispatch-load", async (req, res) => {
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
           log(`⏳ Branch ${branchId}: Fetching attempt ${attempt}/${MAX_RETRIES}...`);
-          const result = await processBranch(branchId, accessToken);
+          const result = await processBranch(branchId, accessToken, branchToZoneMapInternal);
 
-          if (result && result.rows) {
-            totalRawProcessed += result.rows.length;
+          if (result && result.aggregated) {
+            totalRawProcessed += result.count;
             
-            // Aggregate data immediately to keep memory usage low
-            for (const row of result.rows) {
-              if (!row.quantity || !row.branch_name || !row.grade_name || !row.item_sku || !row.item_name) continue;
-              const normBranch = String(row.branch_name).trim().toLowerCase();
-              const zone = branchToZoneMapInternal[normBranch] || row.zone_name || "Unknown";
-              const key = `${zone}||${row.branch_name}||${row.grade_name}||${row.item_sku}||${row.item_name}`;
-              
+            // Merge branch aggregation into the global map
+            for (const [key, value] of result.aggregated) {
               if (aggregatedMap.has(key)) {
-                aggregatedMap.get(key).quantity += (row.quantity || 0);
+                aggregatedMap.get(key).quantity += value.quantity;
               } else {
-                aggregatedMap.set(key, {
-                  zone,
-                  branch_name: row.branch_name,
-                  grade_name: row.grade_name,
-                  item_sku: row.item_sku,
-                  item_name: row.item_name,
-                  quantity: (row.quantity || 0)
-                });
+                aggregatedMap.set(key, value);
               }
             }
 
-            log(`✅ Branch ${branchId} done: ${result.rows.length} rows processed.`);
+            log(`✅ Branch ${branchId} done: ${result.count} raw rows processed.`);
             
             // Safe upsert: don't crash if table doesn't exist
             const { error: upsertError } = await supabase.from('completed_branches').upsert({
               branch_id: branchId,
               status: 'Completed',
-              rows_fetched: result.rows.length,
+              rows_fetched: result.count,
               error_message: null,
               processed_at: new Date().toISOString()
             }, { onConflict: 'branch_id' });
