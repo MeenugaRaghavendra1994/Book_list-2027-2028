@@ -1742,13 +1742,13 @@ app.post("/run-dispatch-load", async (req, res) => {
     if (clearTrackingError) log(`⚠️ Could not reset tracking: ${clearTrackingError.message}`);
 
     log("✅ Cleared existing data.");
-    
-    let allRows = [];
+
+    const aggregatedMap = new Map();
     const failedBranches = [];
     const branchQueue = [...allBranches];
-    const concurrencyLimit = 10;
+    const concurrencyLimit = 5; 
+    let totalRawProcessed = 0;
 
-    // Worker function to process branches concurrently with a pool limit of 10
     const worker = async () => {
       while (branchQueue.length > 0) {
         const branchId = branchQueue.shift();
@@ -1756,14 +1756,35 @@ app.post("/run-dispatch-load", async (req, res) => {
         const MAX_RETRIES = 3;
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-          log(`⏳ Branch ${branchId}: Processing attempt ${attempt}/${MAX_RETRIES}...`);
+          log(`⏳ Branch ${branchId}: Fetching attempt ${attempt}/${MAX_RETRIES}...`);
           const result = await processBranch(branchId, accessToken);
 
           if (result && result.rows) {
-            allRows.push(...result.rows);
-            log(`✅ Branch ${branchId} done: ${result.rows.length} rows fetched.`);
+            totalRawProcessed += result.rows.length;
             
-            // Force update status in database for completed branches
+            // Aggregate data immediately to keep memory usage low
+            for (const row of result.rows) {
+              if (!row.quantity || !row.branch_name || !row.grade_name || !row.item_sku || !row.item_name) continue;
+              const normBranch = String(row.branch_name).trim().toLowerCase();
+              const zone = branchToZoneMapInternal[normBranch] || row.zone_name || "Unknown";
+              const key = `${zone}||${row.branch_name}||${row.grade_name}||${row.item_sku}||${row.item_name}`;
+              
+              if (aggregatedMap.has(key)) {
+                aggregatedMap.get(key).quantity += (row.quantity || 0);
+              } else {
+                aggregatedMap.set(key, {
+                  zone,
+                  branch_name: row.branch_name,
+                  grade_name: row.grade_name,
+                  item_sku: row.item_sku,
+                  item_name: row.item_name,
+                  quantity: (row.quantity || 0)
+                });
+              }
+            }
+
+            log(`✅ Branch ${branchId} done: ${result.rows.length} rows processed.`);
+            
             await supabase.from('completed_branches').upsert({
               branch_id: branchId,
               status: 'Completed',
@@ -1780,7 +1801,6 @@ app.post("/run-dispatch-load", async (req, res) => {
             if (attempt < MAX_RETRIES) {
               await new Promise(r => setTimeout(r, 1000 * attempt));
             } else {
-               // Mark failure in completed_branches tracking table
                await supabase.from('completed_branches').upsert({
                  branch_id: branchId,
                  status: 'Failed',
@@ -1791,48 +1811,29 @@ app.post("/run-dispatch-load", async (req, res) => {
             }
           }
         }
-
-        if (!success) {
-          failedBranches.push(branchId);
-          log(`🔴 Branch ${branchId} failed all ${MAX_RETRIES} attempts.`);
-        }
+        if (!success) failedBranches.push(branchId);
       }
     };
 
-    // Start 10 parallel workers
     await Promise.all(Array.from({ length: concurrencyLimit }, worker));
 
-    log(`Total raw rows fetched: ${allRows.length}.`);
+    log(`Collection finished. Total raw records: ${totalRawProcessed}.`);
     
-    // Aggregate data by branch_name, grade_name, item_sku, item_name and sum quantities
-    console.log("📊 Aggregating data into orders_table");
-    const aggregated = {};
-    allRows.forEach(row => {
-      if (!row.quantity || !row.branch_name || !row.grade_name || !row.item_sku || !row.item_name) return;
-      const normBranch = String(row.branch_name).trim().toLowerCase();
-      const zone = branchToZoneMapInternal[normBranch] || row.zone_name || "Unknown";
-      const key = `${zone}||${row.branch_name}||${row.grade_name}||${row.item_sku}||${row.item_name}`;
-      aggregated[key] = {
-        zone: zone,
-        branch_name: row.branch_name,
-        grade_name: row.grade_name,
-        item_sku: row.item_sku,
-        item_name: row.item_name,
-        quantity: (aggregated[key]?.quantity || 0) + (row.quantity || 0)
-      };
-    });
-    
-    const aggRows = Object.values(aggregated);
+    const aggRows = Array.from(aggregatedMap.values());
     if (aggRows.length > 0) {
-      log(`Aggregated ${aggRows.length} unique records. Inserting into orders_table...`);
-      const { error: insertError } = await supabase.from('orders_table').insert(aggRows);
-      if (insertError) {
-        log(`❌ Insert failed: ${insertError.message}`);
-        throw insertError;
+      log(`Batch inserting ${aggRows.length} unique records into orders_table...`);
+      const batchSize = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) {
+          log(`❌ Batch insert failed: ${insertError.message}`);
+          throw insertError;
+        }
       }
-      log(`Successfully inserted ${aggRows.length} aggregated records into orders_table.`);
+      log(`Successfully inserted aggregated data into orders_table.`);
     } else {
-      log("⚠️ No data was aggregated to insert.");
+      log("⚠️ No data was aggregated.");
     }
     
     log("Dispatch data load process completed.");
