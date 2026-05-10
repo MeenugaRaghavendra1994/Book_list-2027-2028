@@ -1633,7 +1633,7 @@ function App() {
           </button>
         </div>
         
-        <div className="px-3 flex-grow-1 overflow-auto pt-3">
+        <div className="sidebar-scroll-container px-3 flex-grow-1 overflow-auto pt-3">
           {!isSidebarCollapsed && (
             <div
               className={`table-item px-3 py-2 d-flex align-items-center justify-content-between ${showMainSection ? 'active' : ''}`}
@@ -2876,7 +2876,15 @@ function App() {
                         <tr key={i}>
                           {Object.values(row).map((val, j) => (
                             <td key={j} className="px-3 text-truncate" style={{ maxWidth: '200px' }}>
-                              {val === null ? <span className="text-muted fst-italic">null</span> : typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                              {val === null ? (
+                                <span className="text-muted fst-italic">null</span>
+                              ) : Array.isArray(val) ? (
+                                val.join(", ")
+                              ) : typeof val === 'object' ? (
+                                JSON.stringify(val)
+                              ) : (
+                                String(val)
+                              )}
                             </td>
                           ))}
                           {(userHasRight("Edit/Delete") && (selectedTable === 'pricing' || selectedTable === 'grades' || selectedTable === 'branches' || selectedTable === 'student_projections' || (selectedTable === 'book_list_users' && currentUser?.role === 'Admin'))) && (
@@ -2917,7 +2925,11 @@ function App() {
                               <input
                                 type={typeof editingTableRow[key] === 'number' ? 'number' : 'text'}
                                 className="form-control"
-                                value={editingTableRow[key] || ''}
+                                value={
+                                  Array.isArray(editingTableRow[key])
+                                    ? editingTableRow[key].join(", ")
+                                    : editingTableRow[key] || ""
+                                }
                                 onChange={(e) => setEditingTableRow(prev => ({ ...prev, [key]: e.target.value }))}
                               />
                             )}
@@ -3071,7 +3083,12 @@ function App() {
                             <tr key={i}>
                               {sourceModalCols.map(col => {
                                 const key = col.toLowerCase().replace(/ /g, '_').replace(/\//g, '_');
-                                return <td key={col} className="px-3 small">{row[key] || row[col] || 0}</td>;
+                                const val = row[key] !== undefined ? row[key] : row[col];
+                                return (
+                                  <td key={col} className="px-3 small">
+                                    {Array.isArray(val) ? val.join(", ") : (val ?? 0)}
+                                  </td>
+                                );
                               })}
                             </tr>
                           )) : (
