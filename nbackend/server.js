@@ -1531,34 +1531,45 @@ app.get("/dashboard/projection-source", async (req, res) => {
   try {
     const { material_code, zone } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
+    
+    const normMaterialCode = String(material_code).trim().toLowerCase();
+    const targetZoneLower = String(zone || "").trim().toLowerCase();
 
-    const { data: booksData } = await supabase.from('individual_books').select('*').eq('material_code', material_code);
+    const { data: booksData } = await supabase.from('individual_books').select('*').ilike('material_code', normMaterialCode);
     if (!booksData || booksData.length === 0) return res.json([]);
 
     let projQuery = supabase.from('student_projections').select('*');
-    if (zone) projQuery = projQuery.eq('zone', zone);
+    if (zone) projQuery = projQuery.ilike('zone', targetZoneLower);
     const { data: projData } = await projQuery;
 
     const { data: branchList } = await supabase.from('branches').select('name, zone');
     const branchToZoneMap = {};
-    (branchList || []).forEach(b => branchToZoneMap[String(b.name).toLowerCase().trim()] = b.zone);
+    (branchList || []).forEach(b => {
+      const bNorm = normalize(b.name);
+      if (bNorm) branchToZoneMap[bNorm] = b.zone;
+    });
 
     const details = [];
     booksData.forEach(book => {
       const kitName = book.composite_name || "N/A";
       const qtyInKit = Number(book.quantity) || 0;
       const grade = String(book.grade).toLowerCase().trim();
-      const branches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
+      const branches = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || book.branch || "").split(/[,\n\r|]+/))
+        .map(s => String(s || "").trim())
+        .filter(Boolean);
 
       branches.forEach(bName => {
-        const normBranch = bName.toLowerCase();
-        const bZone = branchToZoneMap[normBranch] || book.zone;
-        if (zone && bZone !== zone) return;
+        const brNorm = normalize(bName);
+        const bZoneRaw = branchToZoneMap[brNorm] || String(book.zone || "");
+        const bZoneLower = bZoneRaw.trim().toLowerCase();
 
-        const projection = (projData || []).find(p => 
-          String(p.grade).toLowerCase().trim() === grade && 
-          String(p.branch).toLowerCase().trim() === normBranch
-        );
+        if (targetZoneLower && bZoneLower !== targetZoneLower) return;
+
+        const projection = (projData || []).find(p => {
+          const pGrade = String(p.grade || "").toLowerCase().trim();
+          const pBranchNorm = normalize(p.branch);
+          return pGrade === grade && pBranchNorm === brNorm;
+        });
 
         if (projection) {
           const studentCount = Number(projection.total_projection) || 0;
@@ -1568,7 +1579,68 @@ app.get("/dashboard/projection-source", async (req, res) => {
               kit_name: kitName,
               grade: book.grade,
               branch: bName,
-              zone: bZone,
+              zone: bZoneRaw,
+              students: studentCount,
+              qty_kit: qtyInKit,
+              contribution: contribution
+            });
+          }
+        }
+      });
+    });
+    res.json(details);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/dashboard/total-projection-source", async (req, res) => {
+  try {
+    const { material_code } = req.query;
+    if (!material_code) return res.status(400).json({ error: "Material code required" });
+    
+    const normMaterialCode = String(material_code).trim().toLowerCase();
+
+    const { data: booksData } = await supabase.from('individual_books').select('*').ilike('material_code', normMaterialCode);
+    if (!booksData || booksData.length === 0) return res.json([]);
+
+    const { data: projData } = await supabase.from('student_projections').select('*');
+
+    const { data: branchList } = await supabase.from('branches').select('name, zone');
+    const branchToZoneMap = {};
+    (branchList || []).forEach(b => {
+      const bNorm = normalize(b.name);
+      if (bNorm) branchToZoneMap[bNorm] = b.zone;
+    });
+
+    const details = [];
+    booksData.forEach(book => {
+      const kitName = book.composite_name || "N/A";
+      const qtyInKit = Number(book.quantity) || 0;
+      const grade = String(book.grade).toLowerCase().trim();
+      const branches = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || book.branch || "").split(/[,\n\r|]+/))
+        .map(s => String(s || "").trim())
+        .filter(Boolean);
+
+      branches.forEach(bName => {
+        const brNorm = normalize(bName);
+        const bZoneRaw = branchToZoneMap[brNorm] || String(book.zone || "");
+
+        const projection = (projData || []).find(p => {
+          const pGrade = String(p.grade || "").toLowerCase().trim();
+          const pBranchNorm = normalize(p.branch);
+          return pGrade === grade && pBranchNorm === brNorm;
+        });
+
+        if (projection) {
+          const studentCount = Number(projection.total_projection) || 0;
+          const contribution = studentCount * qtyInKit;
+          if (contribution > 0) {
+            details.push({
+              kit_name: kitName,
+              grade: book.grade,
+              branch: bName,
+              zone: bZoneRaw,
               students: studentCount,
               qty_kit: qtyInKit,
               contribution: contribution
