@@ -478,9 +478,47 @@ app.put("/kits/:id", async (req, res) => {
     const { data, error } = await supabase.from('grade_wise_kits').insert(rows).select();
     if (error) throw error;
 
-    // 4. Update existing books to point to the first new row ID to keep them in the view
+    // 4. Synchronize individual books: Ensure every book in the kit exists for every branch of the updated kit
     if (oldIds.length > 0 && data.length > 0) {
-      await supabase.from('individual_books').update({ kit_id: data[0].id }).in('kit_id', oldIds);
+      // 4.1 Fetch unique materials currently in the logical kit group
+      const { data: existingBooks } = await supabase
+        .from('individual_books')
+        .select('*')
+        .in('kit_id', oldIds);
+
+      if (existingBooks && existingBooks.length > 0) {
+        // Group by material_code to identify unique items in the kit
+        const uniqueMaterials = new Map();
+        existingBooks.forEach(b => {
+          if (!uniqueMaterials.has(b.material_code)) {
+            uniqueMaterials.set(b.material_code, b);
+          }
+        });
+
+        const newBookRows = [];
+        uniqueMaterials.forEach((template) => {
+          // Create a book row for every branch in the updated kit
+          data.forEach(newKitRow => {
+            const { id, ...cleanBookData } = template;
+            newBookRows.push({
+              ...cleanBookData,
+              zone: newKitRow.zone,
+              grade: newKitRow.grade,
+              branch_name: newKitRow.branch,
+              kit_id: newKitRow.id
+            });
+          });
+        });
+
+        // 4.2 Delete old book records across the whole group
+        await supabase.from('individual_books').delete().in('kit_id', oldIds);
+
+        // 4.3 Insert the "re-exploded" book records (one per branch per material)
+        if (newBookRows.length > 0) {
+          const { error: syncError } = await supabase.from('individual_books').insert(newBookRows);
+          if (syncError) console.error("❌ Syncing books failed during kit update:", syncError.message);
+        }
+      }
     }
 
     res.json({ success: true, kit: data[0] });
