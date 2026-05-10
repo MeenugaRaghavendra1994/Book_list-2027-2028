@@ -52,7 +52,7 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
 
   const removeOption = (option) => {
     const normalized = String(option || "").trim();
-    onChange(normalizedValue.filter(item => item !== normalized));
+    onChange(normalizedValue.filter(item => item.toLowerCase() !== normalized.toLowerCase()));
   };
 
   return (
