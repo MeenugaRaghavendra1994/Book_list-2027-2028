@@ -1091,18 +1091,21 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const { data: branchList, error: branchError } = await supabase.from('branches').select('*');
     if (branchError) console.warn("❌ Branches fetch warning:", branchError.message);
 
-    // 1. Fetch all individual books that match zone, grade, and material name filters.
-    // We don't filter by branch at the DB level yet so we can see ALL active branches for an item.
+    // 1. Fetch individual books based on search criteria (ignore zone for global active branch tracking)
     let allBooksQuery = supabase.from('individual_books').select('*');
-    if (zoneFilter) allBooksQuery = allBooksQuery.eq('zone', zoneFilter);
     if (gradeFilter) allBooksQuery = allBooksQuery.eq('grade', gradeFilter);
     if (materialNameFilter) allBooksQuery = allBooksQuery.ilike('material_name', `%${materialNameFilter}%`);
 
     const { data: allBooksData, error: booksError } = await allBooksQuery;
     if (booksError) throw booksError;
 
-    // 2. Filter these books in-memory for the summary display based on branchFilter.
+    // 2. Filter which materials to show as rows in the summary based on zone and branch filters
     let booksDataForSummary = (allBooksData || []);
+    if (zoneFilter) {
+      booksDataForSummary = booksDataForSummary.filter(book => 
+        String(book.zone || "").trim().toLowerCase() === zoneFilter.toLowerCase()
+      );
+    }
     if (branchFilter) {
       const normBranchFilter = normalize(branchFilter);
       booksDataForSummary = booksDataForSummary.filter(book => {
@@ -1176,31 +1179,39 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       branchToZoneMapNormalized[normalize(b.name)] = b.zone;
     });
 
-    // Map structure: paidMap[zone][sku][branch] = total_qty
+    // Map structure: paidMap[zone_lower][sku][branch] = total_qty
     const paidMap = {};
 
     (orderData || []).forEach(order => {
       const brNorm = normalize(order.branch_name);
-      const z = String(order.zone || branchToZoneMapNormalized[brNorm] || "Unknown").trim();
+      const zRaw = String(order.zone || branchToZoneMapNormalized[brNorm] || "Unknown").trim();
+      const zKey = zRaw.toLowerCase();
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
 
-      if (!paidMap[z]) paidMap[z] = {};
-      if (!paidMap[z][sku]) paidMap[z][sku] = {};
-      paidMap[z][sku][brNorm] = (paidMap[z][sku][brNorm] || 0) + qty;
+      if (!paidMap[zKey]) paidMap[zKey] = {};
+      if (!paidMap[zKey][sku]) paidMap[zKey][sku] = {};
+      paidMap[zKey][sku][brNorm] = (paidMap[zKey][sku][brNorm] || 0) + qty;
     });
 
-    // Get all unique zones for column headers
-    const allPotentialZones = new Set();
-    (branchList || []).forEach(b => { if (b.zone) allPotentialZones.add(b.zone); });
-    (projectionsData || []).forEach(p => { if (p.zone) allPotentialZones.add(p.zone); });
-    (allBooksData || []).forEach(b => { if (b.zone) allPotentialZones.add(b.zone); });
+    // Get all unique zones for column headers (Consolidate case-insensitive duplicates)
+    const zoneDisplayMap = {}; 
+    const addZone = (z) => {
+      if (!z) return;
+      const trimmed = String(z).trim();
+      const lowered = trimmed.toLowerCase();
+      if (!zoneDisplayMap[lowered]) zoneDisplayMap[lowered] = trimmed;
+    };
+
+    (branchList || []).forEach(b => addZone(b.zone));
+    (projectionsData || []).forEach(p => addZone(p.zone));
+    (allBooksData || []).forEach(b => addZone(b.zone));
     (orderData || []).forEach(o => {
         const brNorm = normalize(o.branch_name);
-        const derivedZone = String(o.zone || branchToZoneMapNormalized[brNorm] || "").trim();
-        if (derivedZone) allPotentialZones.add(derivedZone);
+        addZone(o.zone || branchToZoneMapNormalized[brNorm]);
     });
-    const allZones = Array.from(allPotentialZones).sort();
+    
+    const allZones = Object.values(zoneDisplayMap).sort((a, b) => a.localeCompare(b));
 
     // Create a reverse BOM map: Component -> List of Composites containing it
     const componentToCompositeMap = {};
@@ -1281,12 +1292,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       allZones.forEach(z => {
         let totalPaidInZone = 0;
+        const zKey = z.toLowerCase();
 
         // Get ALL active branches for this material + zone
         const matchingBooks = (allBooksData || []).filter(book => {
           const mat = String(book.material_code || "").trim().toLowerCase();
-          const zoneName = String(book.zone || "").trim();
-          return mat === normMCode && zoneName === z;
+          const zoneName = String(book.zone || "").trim().toLowerCase();
+          return mat === normMCode && zoneName === zKey;
         });
 
         const activeBranches = new Set();
@@ -1298,12 +1310,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           branches.forEach(b => activeBranches.add(b));
         });
 
-        if (paidMap[z]) {
+        if (paidMap[zKey]) {
           // Direct orders
-          if (paidMap[z][normMCode]) {
-            Object.keys(paidMap[z][normMCode]).forEach(brNorm => {
+          if (paidMap[zKey][normMCode]) {
+            Object.keys(paidMap[zKey][normMCode]).forEach(brNorm => {
               if (activeBranches.has(brNorm)) {
-                totalPaidInZone += paidMap[z][normMCode][brNorm];
+                totalPaidInZone += paidMap[zKey][normMCode][brNorm];
               }
             });
           }
@@ -1311,11 +1323,11 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           // BOM orders
           const composites = componentToCompositeMap[normMCode] || [];
           composites.forEach(comp => {
-            if (paidMap[z][comp.composite_code]) {
-              Object.keys(paidMap[z][comp.composite_code]).forEach(brNorm => {
+            if (paidMap[zKey][comp.composite_code]) {
+              Object.keys(paidMap[zKey][comp.composite_code]).forEach(brNorm => {
                 if (activeBranches.has(brNorm)) {
                   totalPaidInZone += (
-                    paidMap[z][comp.composite_code][brNorm] * comp.multiplier
+                    paidMap[zKey][comp.composite_code][brNorm] * comp.multiplier
                   );
                 }
               });

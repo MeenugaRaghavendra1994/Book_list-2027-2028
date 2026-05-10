@@ -1627,31 +1627,44 @@ function App() {
           </button>
         </div>
         
-        <div className="px-3 mb-4">
-          {!isSidebarCollapsed && <div className="small text-uppercase text-muted fw-bold mb-2 px-2 mt-3" style={{ fontSize: '0.7rem' }}>MAIN</div>}
-          <div 
-            className={`table-item px-3 py-2 ${viewMode === 'welcome' ? 'active' : ''}`}
-            onClick={() => { setViewMode('welcome'); setSelectedTable(null); }}
-          >
-            {isSidebarCollapsed ? <i className="bi bi-house-door-fill"></i> : "Home"}
-          </div>
-          <div 
-            className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
-            onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
-          >
-            {isSidebarCollapsed ? "📚" : "View/Create Book List"}
-          </div>
-          {currentUser?.role === 'Admin' && (
-            <div 
-              className={`table-item px-3 py-2 ${viewMode === 'users' ? 'active' : ''}`}
-              onClick={() => { setViewMode('users'); setSelectedTable(null); }}
+        <div className="px-3 flex-grow-1 overflow-auto">
+          {!isSidebarCollapsed && (
+            <div
+              className={`table-item px-3 py-2 d-flex align-items-center justify-content-between mt-3 ${showMainSection ? 'active' : ''}`}
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowMainSection(prev => !prev)}
             >
-              {isSidebarCollapsed ? <i className="bi bi-people-fill"></i> : "User Management"}
+              <span className="fw-bold">Main</span>
+              <div>
+                {showMainSection ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>}
+              </div>
             </div>
           )}
-        </div>
+          {showMainSection && (
+            <div className="mb-2">
+              <div 
+                className={`table-item px-3 py-2 ${viewMode === 'welcome' ? 'active' : ''}`}
+                onClick={() => { setViewMode('welcome'); setSelectedTable(null); }}
+              >
+                {isSidebarCollapsed ? <i className="bi bi-house-door-fill"></i> : "Home"}
+              </div>
+              <div 
+                className={`table-item px-3 py-2 ${viewMode === 'kits' ? 'active' : ''}`}
+                onClick={() => { setViewMode('kits'); setSelectedTable(null); }}
+              >
+                {isSidebarCollapsed ? "📚" : "View/Create Book List"}
+              </div>
+              {currentUser?.role === 'Admin' && (
+                <div 
+                  className={`table-item px-3 py-2 ${viewMode === 'users' ? 'active' : ''}`}
+                  onClick={() => { setViewMode('users'); setSelectedTable(null); }}
+                >
+                  {isSidebarCollapsed ? <i className="bi bi-people-fill"></i> : "User Management"}
+                </div>
+              )}
+            </div>
+          )}
 
-        <div className="px-3 flex-grow-1 overflow-auto">
           {!isSidebarCollapsed && (
             <div
               className={`table-item px-3 py-2 d-flex align-items-center justify-content-between ${showReportsSection ? 'active' : ''}`}
