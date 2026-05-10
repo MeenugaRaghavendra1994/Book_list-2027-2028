@@ -1147,7 +1147,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Fetch order table data
     let orderQuery = supabase.from('orders_table').select('*');
-    if (zoneFilter) orderQuery = orderQuery.eq('zone', zoneFilter);
     if (gradeFilter) orderQuery = orderQuery.eq('grade_name', gradeFilter);
 
     const { data: orderData, error: orderError } = await orderQuery;
@@ -1180,19 +1179,15 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       branchToZoneMapNormalized[normalize(b.name)] = b.zone;
     });
 
-    // Map structure: paidMap[zone_lower][sku][branch] = total_qty
-    const paidMap = {};
+    // Global Order Summation by SKU and Branch (normalized)
+    const skuBranchPaidMap = {}; // SKU -> brNorm -> totalQty
 
     (orderData || []).forEach(order => {
       const brNorm = normalize(order.branch_name);
-      const zRaw = String(order.zone || branchToZoneMapNormalized[brNorm] || "Unknown").trim();
-      const zKey = zRaw.toLowerCase();
       const sku = String(order.item_sku || "").trim().toLowerCase();
       const qty = Number(order.quantity) || 0;
-
-      if (!paidMap[zKey]) paidMap[zKey] = {};
-      if (!paidMap[zKey][sku]) paidMap[zKey][sku] = {};
-      paidMap[zKey][sku][brNorm] = (paidMap[zKey][sku][brNorm] || 0) + qty;
+      if (!skuBranchPaidMap[sku]) skuBranchPaidMap[sku] = {};
+      skuBranchPaidMap[sku][brNorm] = (skuBranchPaidMap[sku][brNorm] || 0) + qty;
     });
 
     // Get all unique zones for column headers (Consolidate case-insensitive duplicates)
@@ -1291,12 +1286,14 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     Object.keys(summary).forEach(mCode => {
       const normMCode = mCode.toLowerCase().trim();
 
-      // Step 1: Collect ALL active branches for this material globally
-      const materialBranchZones = new Map(); // branchNorm -> Set of zoneNorms
+      // Step 1: Collect ALL active branches for this material globally and map to zones
+      const materialBranchZones = new Map(); // brNorm -> Set of zoneKeys
       (allBooksData || []).forEach(book => {
         const mat = String(book.material_code || "").trim().toLowerCase();
         if (mat === normMCode) {
-          const branches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
+          const branches = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || "").split(/[,\n\r|]+/))
+            .map(s => normalize(s))
+            .filter(Boolean);
           const bookZone = String(book.zone || "").trim().toLowerCase();
           branches.forEach(b => {
             if (!materialBranchZones.has(b)) materialBranchZones.set(b, new Set());
@@ -1312,41 +1309,43 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         let totalPaidInZone = 0;
         const zKey = z.toLowerCase();
 
-        // Step 2: Filter global branches to only those belonging to the current zone column
-        const zoneActiveBranches = new Set();
+        // Step 2: Sum orders for branches active in this material AND associated with this zone
         materialBranchZones.forEach((zonesSet, brNorm) => {
-          if (zonesSet.has(zKey)) zoneActiveBranches.add(brNorm);
-        });
-
-        if (paidMap[zKey]) {
-          // Direct orders
-          if (paidMap[zKey][normMCode]) {
-            Object.keys(paidMap[zKey][normMCode]).forEach(brNorm => {
-              if (zoneActiveBranches.has(brNorm)) {
-                totalPaidInZone += paidMap[zKey][normMCode][brNorm];
+          if (zonesSet.has(zKey)) {
+            // Direct orders
+            if (skuBranchPaidMap[normMCode]) {
+              totalPaidInZone += (skuBranchPaidMap[normMCode][brNorm] || 0);
+            }
+            // BOM orders
+            const composites = componentToCompositeMap[normMCode] || [];
+            composites.forEach(comp => {
+              if (skuBranchPaidMap[comp.composite_code]) {
+                totalPaidInZone += (skuBranchPaidMap[comp.composite_code][brNorm] || 0) * comp.multiplier;
               }
             });
           }
-
-          // BOM orders
-          const composites = componentToCompositeMap[normMCode] || [];
-          composites.forEach(comp => {
-            if (paidMap[zKey][comp.composite_code]) {
-              Object.keys(paidMap[zKey][comp.composite_code]).forEach(brNorm => {
-                if (zoneActiveBranches.has(brNorm)) {
-                  totalPaidInZone += (
-                    paidMap[zKey][comp.composite_code][brNorm] * comp.multiplier
-                  );
-                }
-              });
-            }
-          });
-        }
+        });
 
         summary[mCode].zone_data[z].paid_quantity = totalPaidInZone;
-        summary[mCode].total_paid_quantity += totalPaidInZone;
       });
 
+      // Step 3: Calculate global total paid quantity for the material across all active branches (once)
+      let grandTotalPaid = 0;
+      materialBranchZones.forEach((zonesSet, brNorm) => {
+        // Direct
+        if (skuBranchPaidMap[normMCode]) {
+          grandTotalPaid += (skuBranchPaidMap[normMCode][brNorm] || 0);
+        }
+        // BOM
+        const composites = componentToCompositeMap[normMCode] || [];
+        composites.forEach(comp => {
+          if (skuBranchPaidMap[comp.composite_code]) {
+            grandTotalPaid += (skuBranchPaidMap[comp.composite_code][brNorm] || 0) * comp.multiplier;
+          }
+        });
+      });
+      summary[mCode].total_paid_quantity = grandTotalPaid;
+      
       summary[mCode].total_requirement = Math.max(
         summary[mCode].total_projection,
         summary[mCode].total_paid_quantity
@@ -1395,10 +1394,10 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (booksData || []).forEach(b => {
       const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
-        // Support multiple delimiters for branch list in individual_books
-        const brs = String(b.branch_name || b.branch || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
+        const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
+          .map(s => normalize(s))
+          .filter(Boolean);
         brs.forEach(brNorm => activeBranches.add(brNorm));
-
         const compCode = String(b.composite_code || "").toLowerCase().trim();
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
@@ -1417,13 +1416,26 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     
     (orderData || []).forEach(order => {
       const brNorm = normalize(order.branch_name);
-      const orderZone = String(order.zone || branchToZoneMapNorm[brNorm] || "Unknown").trim().toLowerCase();
       
-      // Case-insensitive comparison ensures Bangalore matches bangalore
-      if (orderZone !== targetZone) return;
-      const sku = String(order.item_sku || "").toLowerCase().trim();
+      // Find all zones this branch belongs to for this material
+      const brZones = new Set();
+      const mappedZone = branchToZoneMapNorm[brNorm];
+      if (mappedZone) brZones.add(mappedZone.toLowerCase());
+      (booksData || []).forEach(b => {
+        const matCode = String(b.material_code || "").toLowerCase().trim();
+        if (matCode === normMaterialCode) {
+          const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
+            .map(s => normalize(s))
+            .filter(Boolean);
+          if (brs.includes(brNorm)) {
+            const bz = String(b.zone || "").trim().toLowerCase();
+            if (bz) brZones.add(bz);
+          }
+        }
+      });
 
-      // Filter only if the material has explicit active branches defined.
+      if (!brZones.has(targetZone)) return;
+      const sku = String(order.item_sku || "").toLowerCase().trim();
       if (activeBranches.size > 0 && !activeBranches.has(brNorm)) return;
 
       let contribution = 0;
@@ -1475,7 +1487,9 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     (booksData || []).forEach(b => {
       const matCode = String(b.material_code || "").toLowerCase().trim();
       if (matCode === normMaterialCode) {
-        const brs = String(b.branch_name || b.branch || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
+        const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
+          .map(s => normalize(s))
+          .filter(Boolean);
         brs.forEach(brNorm => activeBranchesNorm.add(brNorm));
         const compCode = String(b.composite_code || "").toLowerCase().trim();
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
