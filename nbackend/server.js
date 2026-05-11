@@ -1487,7 +1487,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       // Step 1: Accumulate paid quantities per branch for this material from all sources
       const branchPaidMap = new Map();
       const addPaid = (br, qty) => {
-        if (!qty) return;
+
+  console.log("ADDPAID BRANCH", br);
+  console.log("MAPPED ZONE", branchToZoneMapNormalized[br]);
+  console.log("ZONE FILTER", zoneFilter);
+
+  if (!qty) return;
         
         // Filter 1: Curriculum Mapping (only count branches that should have this book in their kit)
         if (!activeBranches.has(br)) return;
