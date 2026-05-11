@@ -1587,18 +1587,25 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
     });
     (booksData || []).forEach(b => {
-      const brStr = b.branch_name || b.branch;
-      const br = normalize(brStr);
-      if (br && b.zone) {
-        if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-        branchToZonesSet[br].add(b.zone.trim().toLowerCase());
-      }
+  const branches = String(b.branch_name || b.branch || "")
+    .split(/[,\n\r|]+/)
+    .map(s => normalize(s))
+    .filter(Boolean);
 
-      if (normalize(b.material_code) === normMaterialCode) {
-        if (br) activeBranchesNorm.add(br);
-      }
-    });
+  branches.forEach(br => {
+    if (!branchToZonesSet[br]) {
+      branchToZonesSet[br] = new Set();
+    }
 
+    if (b.zone) {
+      branchToZonesSet[br].add(String(b.zone).trim().toLowerCase());
+    }
+
+    if (normalize(b.material_code) === normMaterialCode) {
+      activeBranchesNorm.add(br);
+    }
+  });
+});
     // Identify active branches for this material and Setup Lookups for kit materials
     const kitMap = {}; 
     (booksData || []).forEach(b => {
