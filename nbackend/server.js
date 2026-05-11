@@ -1631,9 +1631,14 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       const brNorm = normalize(order.branch_name || order.branch || "");
 
       const brZones = branchToZonesSet[brNorm] || new Set();
-      if (!brZones.has(targetZone)) return;
-      if (!activeBranchesNorm.has(brNorm)) return;
 
+console.log("ACTIVE BRANCHES", [...activeBranchesNorm]);
+console.log("ORDER BRANCH", brNorm);
+console.log("ZONE", targetZone);
+console.log("BRANCH ZONES", [...brZones]);
+
+if (!brZones.has(targetZone)) return;
+if (!activeBranchesNorm.has(brNorm)) return;
       const sku = normalize(order.item_sku); // Normalize SKU
 
       let contribution = 0;
