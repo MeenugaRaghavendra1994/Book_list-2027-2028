@@ -1318,23 +1318,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const { data: bomData, error: bomError } = await supabase.from('sku_sap_bom').select('*');
     if (bomError) console.warn("❌ BOM fetch warning:", bomError.message);
 
-    // Fetch Purchase Orders for "Already Ordered Quantity" logic
-    const { data: poData, error: poError } = await supabase.from('purchase_orders').select('sku, quantity');
-    if (poError) console.warn("❌ Purchase Orders fetch warning:", poError.message);
-    const poMap = {};
-    (poData || []).forEach(po => {
-      const sku = String(po.sku || "").trim().toLowerCase();
-      poMap[sku] = (poMap[sku] || 0) + (Number(po.quantity) || 0);
-    });
-
-    // Create a lookup map for BOM components
-    const bomMap = {};
-    (bomData || []).forEach(item => {
-      const cc = String(item.composite_code || "").trim().toLowerCase();
-      if (!bomMap[cc]) bomMap[cc] = [];
-      bomMap[cc].push(item);
-    });
-
     // Create branch to zone map
     const branchToZoneMapNormalized = {};
     (branchList || []).forEach(b => {
@@ -1371,18 +1354,52 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     
     const allZones = Object.values(zoneDisplayMap).sort((a, b) => a.localeCompare(b));
 
-    // Create a reverse BOM map: Component -> List of Composites containing it
+    // Pre-calculate branch to zones mapping for efficient zone distribution
+    const branchToZonesSet = {}; 
+    (branchList || []).forEach(b => {
+      const br = normalize(b.name);
+      if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
+      if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+    });
+    (allBooksData || []).forEach(b => {
+      const br = normalize(b.branch_name || b.branch);
+      if (br) {
+        if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
+        if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+      }
+    });
+
+    // Pre-calculate component to kit parent mapping (91 series logic)
+    const componentToKitMap = {}; 
+    (allBooksData || []).forEach(book => {
+      const mat = normalize(book.material_code);
+      const kitSku = normalize(book.composite_code);
+      if (mat && kitSku) {
+        if (!componentToKitMap[mat]) componentToKitMap[mat] = [];
+        componentToKitMap[mat].push({ kit_sku: kitSku, qty: Number(book.quantity) || 1 });
+      }
+    });
+
+    // Create a reverse BOM map with normalization
     const componentToCompositeMap = {};
     (bomData || []).forEach(bom => {
-      const compCode = String(bom.component_code || "").trim().toLowerCase();
-      const compositeCode = String(bom.composite_code || "").trim().toLowerCase();
+      const compCode = normalize(bom.component_code);
+      const compositeCode = normalize(bom.composite_code);
       const compQty = Number(bom.component_quantity) || 1;
 
       if (!componentToCompositeMap[compCode]) componentToCompositeMap[compCode] = [];
       componentToCompositeMap[compCode].push({
-        composite_code: compositeCode,
+        composite_sku: compositeCode,
         multiplier: compQty
       });
+    });
+
+    // Fetch Purchase Orders with normalization
+    const { data: poData } = await supabase.from('purchase_orders').select('sku, quantity');
+    const poMap = {};
+    (poData || []).forEach(po => {
+      const sku = normalize(po.sku);
+      poMap[sku] = (poMap[sku] || 0) + (Number(po.quantity) || 0);
     });
 
     // Map projections by Grade -> Branch
@@ -1446,82 +1463,43 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Final zone-wide summation of Paid Quantities
     Object.keys(summary).forEach(mCode => {
-      const normMCode = normalize(mCode); // Ensure material code is normalized
+      const normMCode = normalize(mCode);
 
-      // Step 1: Collect ALL active branches for this material globally and map to zones
-      const materialBranchZones = new Map(); // brNorm -> Set of zoneKeys
-      const componentToKitMap = {}; // material_code -> [{ composite_code, quantity_in_kit }]
+      // Step 1: Accumulate paid quantities per branch for this material from all sources
+      const branchPaidMap = new Map();
+      const addPaid = (br, qty) => {
+        if (!qty) return;
+        branchPaidMap.set(br, (branchPaidMap.get(br) || 0) + qty);
+      };
 
-      (allBooksData || []).forEach(book => {
-        const mat = normalize(book.material_code); // Normalize material code
-        if (mat === normMCode) {
-          // Populate componentToKitMap for this material
-          const compositeCode = normalize(book.composite_code);
-          const quantityInKit = Number(book.quantity) || 1;
-          if (compositeCode) {
-            if (!componentToKitMap[mat]) componentToKitMap[mat] = [];
-            componentToKitMap[mat].push({ composite_code: compositeCode, quantity_in_kit: quantityInKit });
-          }
-          const branches = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || book.branch || "").split(/[,\n\r|]+/))
-            .map(s => normalize(s))
-            .filter(Boolean);
-          const bookZone = String(book.zone || "").trim().toLowerCase();
-          branches.forEach(b => {
-            if (!materialBranchZones.has(b)) materialBranchZones.set(b, new Set());
-            const zonesSet = materialBranchZones.get(b);
-            if (bookZone) zonesSet.add(bookZone);
-            const mappedZone = branchToZoneMapNormalized[b];
-            if (mappedZone) zonesSet.add(mappedZone.toLowerCase());
-          });
+      // Direct
+      const direct = skuBranchPaidMap[normMCode] || {};
+      Object.entries(direct).forEach(([br, q]) => addPaid(br, q));
 
-        }
+      // Kit parents (91 series)
+      (componentToKitMap[normMCode] || []).forEach(kp => {
+        const kitOrders = skuBranchPaidMap[kp.kit_sku] || {};
+        Object.entries(kitOrders).forEach(([br, q]) => addPaid(br, q * kp.qty));
       });
 
-      allZones.forEach(z => {
-        let totalPaidInZone = 0;
-        const zKey = z.toLowerCase();
-
-        // Step 2: Sum orders for branches active in this material AND associated with this zone
-        materialBranchZones.forEach((zonesSet, brNorm) => {
-          if (zonesSet.has(zKey)) {
-            // Direct orders
-            totalPaidInZone += (skuBranchPaidMap[normMCode]?.[brNorm] || 0);
-
-            // Kit orders (from individual_books.composite_code, "91 series")
-            const kitParents = componentToKitMap[normMCode] || [];
-            kitParents.forEach(kitParent => {
-              totalPaidInZone += (skuBranchPaidMap[kitParent.composite_code]?.[brNorm] || 0) * kitParent.quantity_in_kit;
-            });
-
-            // BOM orders (from sku_sap_bom)
-            const composites = componentToCompositeMap[normMCode] || [];
-            composites.forEach(comp => {
-              totalPaidInZone += (skuBranchPaidMap[comp.composite_code]?.[brNorm] || 0) * comp.multiplier;
-            });
-          }
-        });
-
-        summary[mCode].zone_data[z].paid_quantity = totalPaidInZone;
+      // BOM parents
+      (componentToCompositeMap[normMCode] || []).forEach(cp => {
+        const compOrders = skuBranchPaidMap[cp.composite_sku] || {};
+        Object.entries(compOrders).forEach(([br, q]) => addPaid(br, q * cp.multiplier));
       });
 
-      // Step 3: Calculate global total paid quantity for the material across all active branches (once)
+      // Step 2: Sum up for zones and calculate global grand total
       let grandTotalPaid = 0;
-      materialBranchZones.forEach((zonesSet, brNorm) => {
-        // Direct
-        grandTotalPaid += (skuBranchPaidMap[normMCode]?.[brNorm] || 0);
-
-        // Kit Orders (from individual_books.composite_code, "91 series")
-        const kitParents = componentToKitMap[normMCode] || [];
-        kitParents.forEach(kitParent => {
-          grandTotalPaid += (skuBranchPaidMap[kitParent.composite_code]?.[brNorm] || 0) * kitParent.quantity_in_kit;
-        });
-
-        // BOM
-        const composites = componentToCompositeMap[normMCode] || [];
-        composites.forEach(comp => {
-          grandTotalPaid += (skuBranchPaidMap[comp.composite_code]?.[brNorm] || 0) * comp.multiplier;
+      branchPaidMap.forEach((qty, brNorm) => {
+        grandTotalPaid += qty;
+        const bZones = branchToZonesSet[brNorm] || new Set();
+        allZones.forEach(z => {
+          if (bZones.has(z.toLowerCase())) {
+            summary[mCode].zone_data[z].paid_quantity += qty;
+          }
         });
       });
+
       summary[mCode].total_paid_quantity = grandTotalPaid;
       
       summary[mCode].total_requirement = Math.max(
@@ -1565,17 +1543,25 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     // Create normalized zone mapping
     const branchToZoneMapNorm = {};
     (branchList || []).forEach(b => branchToZoneMapNorm[normalize(b.name)] = b.zone);
+    const branchToZonesSet = {}; 
+    (branchList || []).forEach(b => {
+      const br = normalize(b.name);
+      if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
+      if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+    });
+    (booksData || []).forEach(b => {
+      const br = normalize(b.branch_name || b.branch);
+      if (br) {
+        if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
+        if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+      }
+    });
 
     // Identify active branches for this material and Setup Lookups for kit materials
     const kitMap = {}; 
-    const activeBranches = new Set();
     (booksData || []).forEach(b => {
       const matCode = normalize(b.material_code);
       if (matCode === normMaterialCode) {
-        const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
-          .map(s => normalize(s))
-          .filter(Boolean);
-        brs.forEach(brNorm => activeBranches.add(brNorm));
         const compCode = normalize(b.composite_code);
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
@@ -1594,27 +1580,11 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     
     (orderData || []).forEach(order => {
       const brNorm = normalize(order.branch_name || order.branch || "");
-      
-      // Find all zones this branch belongs to for this material
-      const brZones = new Set(); // Use a Set to avoid duplicate zones
-      const mappedZone = branchToZoneMapNorm[brNorm];
-      if (mappedZone) brZones.add(mappedZone.toLowerCase());
-      (booksData || []).forEach(b => {
-        const matCode = String(b.material_code || "").toLowerCase().trim();
-        if (matCode === normMaterialCode) {
-          const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
-            .map(s => normalize(s))
-            .filter(Boolean);
-          if (brs.includes(brNorm)) {
-            const bz = String(b.zone || "").trim().toLowerCase();
-            if (bz) brZones.add(bz);
-          }
-        }
-      });
 
+      const brZones = branchToZonesSet[brNorm] || new Set();
       if (!brZones.has(targetZone)) return;
+
       const sku = normalize(order.item_sku); // Normalize SKU
-      if (activeBranches.size > 0 && !activeBranches.has(brNorm)) return;
 
       let contribution = 0;
       let source = "";
