@@ -1369,10 +1369,19 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       }
     });
 
-    // Pre-calculate component to kit parent mapping (91 series logic)
+    // Pre-calculate component to kit parent mapping (91 series logic) and active branches
     const componentToKitMap = {}; 
+    const materialActiveBranchesMap = {};
     (allBooksData || []).forEach(book => {
       const mat = normalize(book.material_code);
+      if (mat) {
+        if (!materialActiveBranchesMap[mat]) materialActiveBranchesMap[mat] = new Set();
+        const brs = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || book.branch || "").split(/[,\n\r|]+/))
+          .map(s => normalize(s))
+          .filter(Boolean);
+        brs.forEach(br => materialActiveBranchesMap[mat].add(br));
+      }
+
       const kitSku = normalize(book.composite_code);
       if (mat && kitSku) {
         if (!componentToKitMap[mat]) componentToKitMap[mat] = [];
@@ -1465,10 +1474,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     Object.keys(summary).forEach(mCode => {
       const normMCode = normalize(mCode);
 
+      const activeBranches = materialActiveBranchesMap[normMCode] || new Set();
+
       // Step 1: Accumulate paid quantities per branch for this material from all sources
       const branchPaidMap = new Map();
       const addPaid = (br, qty) => {
-        if (!qty) return;
+        if (!qty || !activeBranches.has(br)) return;
         branchPaidMap.set(br, (branchPaidMap.get(br) || 0) + qty);
       };
 
@@ -1544,16 +1555,26 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     const branchToZoneMapNorm = {};
     (branchList || []).forEach(b => branchToZoneMapNorm[normalize(b.name)] = b.zone);
     const branchToZonesSet = {}; 
+    const activeBranchesNorm = new Set();
+
     (branchList || []).forEach(b => {
       const br = normalize(b.name);
       if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
       if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
     });
     (booksData || []).forEach(b => {
-      const br = normalize(b.branch_name || b.branch);
+      const brStr = b.branch_name || b.branch;
+      const br = normalize(brStr);
       if (br) {
         if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
         if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+      }
+
+      if (normalize(b.material_code) === normMaterialCode) {
+        const brs = (Array.isArray(brStr) ? brStr : String(brStr || "").split(/[,\n\r|]+/))
+          .map(s => normalize(s))
+          .filter(Boolean);
+        brs.forEach(brNorm => activeBranchesNorm.add(brNorm));
       }
     });
 
@@ -1583,6 +1604,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
 
       const brZones = branchToZonesSet[brNorm] || new Set();
       if (!brZones.has(targetZone)) return;
+      if (!activeBranchesNorm.has(brNorm)) return;
 
       const sku = normalize(order.item_sku); // Normalize SKU
 
