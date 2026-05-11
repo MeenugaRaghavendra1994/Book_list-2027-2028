@@ -1493,9 +1493,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
   console.log("ZONE FILTER", zoneFilter);
 
   if (!qty) return;
-        
-        // Filter 1: Curriculum Mapping (only count branches that should have this book in their kit)
-        if (!activeBranches.has(br)) return;
+      
 
         // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
         if (branchFilter && br !== normalize(branchFilter)) return;
