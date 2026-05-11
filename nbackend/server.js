@@ -1359,13 +1359,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     (branchList || []).forEach(b => {
       const br = normalize(b.name);
       if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-      if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+      if (b.zone) branchToZonesSet[br].add(normalize(b.zone));
     });
     (allBooksData || []).forEach(b => {
       const br = normalize(b.branch_name || b.branch);
       if (br) {
         if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-        if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+        if (b.zone) branchToZonesSet[br].add(normalize(b.zone));
       }
     });
 
@@ -1567,7 +1567,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     if (!zone) return res.status(400).json({ error: "Zone required" });
 
     const normMaterialCode = normalize(material_code); // Normalize material code
-    const targetZone = String(zone).trim().toLowerCase();
+    const targetZone = normalize(zone);
 
     // Fetch all relevant data
     const { data: orderData } = await supabase.from('orders_table').select('*');
@@ -1584,7 +1584,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (branchList || []).forEach(b => {
       const br = normalize(b.name);
       if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-      if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+      if (b.zone) branchToZonesSet[br].add(normalize(b.zone));
     });
     (booksData || []).forEach(b => {
   const branches = String(b.branch_name || b.branch || "")
@@ -1598,8 +1598,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     }
 
     if (b.zone) {
-      branchToZonesSet[br].add(String(b.zone).trim().toLowerCase());
-    }
+  branchToZonesSet[br].add(normalize(b.zone));
+}
 
     if (normalize(b.material_code) === normMaterialCode) {
       activeBranchesNorm.add(br);
