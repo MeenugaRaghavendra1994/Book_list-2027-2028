@@ -1493,13 +1493,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
   console.log("ZONE FILTER", zoneFilter);
 
   if (!qty) return;
-  // Active branch validation
-if (
-  activeBranches.size > 0 &&
-  !activeBranches.has(br)
-) {
-  return;
-}
+ 
       
 
         // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
