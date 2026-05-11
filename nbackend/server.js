@@ -1371,14 +1371,25 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Pre-calculate component to kit parent mapping (91 series logic) and active branches
     const componentToKitMap = {}; 
-    const materialActiveBranchesMap = {}; // material -> Set of normalized branches
-    (allBooksData || []).forEach(book => {
-      const mat = normalize(book.material_code);
-      if (mat) {
-        if (!materialActiveBranchesMap[mat]) materialActiveBranchesMap[mat] = new Set();
-        const brNorm = normalize(book.branch_name || book.branch);
-        if (brNorm) materialActiveBranchesMap[mat].add(brNorm);
-      }
+    const materialActiveBranchesMap = {};
+
+(booksDataForSummary || []).forEach(book => {
+  const mat = normalize(book.material_code);
+
+  if (!mat) return;
+
+  if (!materialActiveBranchesMap[mat]) {
+    materialActiveBranchesMap[mat] = new Set();
+  }
+
+  const branches = String(book.branch_name || book.branch || "")
+    .split(/[,\n\r|]+/)
+    .map(s => normalize(s))
+    .filter(Boolean);
+
+  branches.forEach(br => {
+    materialActiveBranchesMap[mat].add(br);
+  });
 
       const kitSku = normalize(book.composite_code);
       if (mat && kitSku) {
