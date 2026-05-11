@@ -1371,15 +1371,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Pre-calculate component to kit parent mapping (91 series logic) and active branches
     const componentToKitMap = {}; 
-    const materialActiveBranchesMap = {};
+    const materialActiveBranchesMap = {}; // material -> Set of normalized branches
     (allBooksData || []).forEach(book => {
       const mat = normalize(book.material_code);
       if (mat) {
         if (!materialActiveBranchesMap[mat]) materialActiveBranchesMap[mat] = new Set();
-        const brs = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || book.branch || "").split(/[,\n\r|]+/))
-          .map(s => normalize(s))
-          .filter(Boolean);
-        brs.forEach(br => materialActiveBranchesMap[mat].add(br));
+        const brNorm = normalize(book.branch_name || book.branch);
+        if (brNorm) materialActiveBranchesMap[mat].add(brNorm);
       }
 
       const kitSku = normalize(book.composite_code);
@@ -1473,14 +1471,24 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     // Final zone-wide summation of Paid Quantities
     Object.keys(summary).forEach(mCode => {
       const normMCode = normalize(mCode);
-
       const activeBranches = materialActiveBranchesMap[normMCode] || new Set();
 
       // Step 1: Accumulate paid quantities per branch for this material from all sources
       const branchPaidMap = new Map();
       const addPaid = (br, qty) => {
-        if (!qty || !activeBranches.has(br)) return;
-        branchPaidMap.set(br, (branchPaidMap.get(br) || 0) + qty);
+        if (!qty) return;
+        
+        // Filter 1: Curriculum Mapping (only count branches that should have this book in their kit)
+        if (!activeBranches.has(br)) return;
+
+        // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
+        if (branchFilter && br !== normalize(branchFilter)) return;
+
+        // Filter 3: Dashboard Zone Filter (if user has selected a specific zone)
+        const bZone = (branchToZoneMapNormalized[br] || "").toLowerCase();
+        if (zoneFilter && bZone !== zoneFilter.toLowerCase()) return;
+
+        branchPaidMap.set(br, (branchPaidMap.get(br) || 0) + Number(qty));
       };
 
       // Direct
@@ -1501,18 +1509,23 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       // Step 2: Sum up for zones and calculate global grand total
       let grandTotalPaid = 0;
-      branchPaidMap.forEach((qty, brNorm) => {
-        grandTotalPaid += qty;
+      branchPaidMap.forEach((qtyVal, brNorm) => {
+        grandTotalPaid += qtyVal;
         const bZones = branchToZonesSet[brNorm] || new Set();
+        
+        // Ensure the master zone for the branch is included
+        const masterZone = branchToZoneMapNormalized[brNorm];
+        if (masterZone) bZones.add(masterZone.toLowerCase());
+
         allZones.forEach(z => {
           if (bZones.has(z.toLowerCase())) {
-            summary[mCode].zone_data[z].paid_quantity += qty;
+            summary[mCode].zone_data[z].paid_quantity += qtyVal;
           }
         });
       });
 
-      summary[mCode].total_paid_quantity = grandTotalPaid;
-      
+      summary[mCode].total_paid_quantity = Number(grandTotalPaid) || 0;
+
       summary[mCode].total_requirement = Math.max(
         summary[mCode].total_projection,
         summary[mCode].total_paid_quantity
@@ -1565,16 +1578,13 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (booksData || []).forEach(b => {
       const brStr = b.branch_name || b.branch;
       const br = normalize(brStr);
-      if (br) {
+      if (br && b.zone) {
         if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-        if (b.zone) branchToZonesSet[br].add(b.zone.trim().toLowerCase());
+        branchToZonesSet[br].add(b.zone.trim().toLowerCase());
       }
 
       if (normalize(b.material_code) === normMaterialCode) {
-        const brs = (Array.isArray(brStr) ? brStr : String(brStr || "").split(/[,\n\r|]+/))
-          .map(s => normalize(s))
-          .filter(Boolean);
-        brs.forEach(brNorm => activeBranchesNorm.add(brNorm));
+        if (br) activeBranchesNorm.add(br);
       }
     });
 
