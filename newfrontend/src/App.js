@@ -2527,10 +2527,17 @@ function App() {
               <div className="row gx-3 gy-3">
                 <div className="col-12 col-md-3">
                   <label className="form-label">Zone</label>
-                  <SearchableSelect 
-                    options={zones} value={dashboardFilters.zone} placeholder="All Zones"
-                    onChange={(val) => setDashboardFilters(prev => ({ ...prev, zone: val, branch: "" }))}
-                  />
+                  <SearchableSelect
+  value={dashboardFilters.zone}
+  options={zones}
+  placeholder="Select Zone"
+  onChange={(value) =>
+    setDashboardFilters(prev => ({
+      ...prev,
+      zone: value
+    }))
+  }
+/>
                 </div>
                 <div className="col-12 col-md-3">
                   <label className="form-label">Branch</label>
