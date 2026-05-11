@@ -1641,7 +1641,7 @@ console.log("ZONE", targetZone);
 console.log("BRANCH ZONES", [...brZones]);
 
 if (!brZones.has(targetZone)) return;
-if (!activeBranchesNorm.has(brNorm)) return;
+
       const sku = normalize(order.item_sku); // Normalize SKU
 
       let contribution = 0;
