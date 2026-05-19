@@ -1493,18 +1493,19 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
   console.log("ZONE FILTER", zoneFilter);
 
   if (!qty) return;
- 
-      
 
-        // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
-        if (branchFilter && br !== normalize(branchFilter)) return;
+  // Restrict to active branches only (assigned in book kits)
+  if (!activeBranches.has(br)) return;
 
-        // Filter 3: Dashboard Zone Filter (if user has selected a specific zone)
-        const bZone = (branchToZoneMapNormalized[br] || "").toLowerCase();
-        if (zoneFilter && bZone !== zoneFilter.toLowerCase()) return;
+  // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
+  if (branchFilter && br !== normalize(branchFilter)) return;
 
-        branchPaidMap.set(br, (branchPaidMap.get(br) || 0) + Number(qty));
-      };
+  // Filter 3: Dashboard Zone Filter (if user has selected a specific zone)
+  const bZone = (branchToZoneMapNormalized[br] || "").toLowerCase();
+  if (zoneFilter && bZone !== zoneFilter.toLowerCase()) return;
+
+  branchPaidMap.set(br, (branchPaidMap.get(br) || 0) + Number(qty));
+};
 
       // Direct
       const direct = skuBranchPaidMap[normMCode] || {};
