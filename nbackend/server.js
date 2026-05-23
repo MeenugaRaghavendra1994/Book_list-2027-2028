@@ -1596,113 +1596,141 @@ const materialActiveBranchesMap = {};
       });
     });
 
-    // Final zone-wide summation of Paid Quantities
-    Object.keys(summary).forEach(mCode => {
-      const normMCode = normalize(mCode);
-      const activeBranches = materialActiveBranchesMap[normMCode] || new Set();
+    // ===============================
+// FINAL PAID QUANTITY CALCULATION
+// ===============================
 
-      // Step 1: Accumulate paid quantities per branch for this material from all sources
-      const branchPaidMap = new Map();
-      const addPaid = (br, qty) => {
+Object.keys(summary).forEach(mCode => {
 
-  console.log("ADDPAID BRANCH", br);
-  console.log("MAPPED ZONE", branchToZoneMapNormalized[br]);
-  console.log("ZONE FILTER", zoneFilter);
+  const normMCode = normalize(mCode);
 
-  if (!qty) return;
+  let totalPaid = 0;
 
- 
-
-  // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
-  if (branchFilter && br !== normalize(branchFilter)) return;
-
-  // Filter 3: Dashboard Zone Filter (if user has selected a specific zone)
-  const bZone = (branchToZoneMapNormalized[br] || "").toLowerCase();
-  if (zoneFilter && bZone !== zoneFilter.toLowerCase()) return;
-
-  branchPaidMap.set(br, (branchPaidMap.get(br) || 0) + Number(qty));
-};
-
-      // Direct
-      const direct = skuBranchPaidMap[normMCode] || {};
-
-if (Object.keys(direct).length > 0) {
-
-  // PRIORITY 1: DIRECT ORDERS
-  Object.entries(direct).forEach(([br, q]) => {
-    addPaid(br, q);
-  });
-
-} else if (
-  (componentToKitMap[normMCode] || []).length > 0
-) {
-
-  // PRIORITY 2: KIT ORDERS
-  (componentToKitMap[normMCode] || []).forEach(kp => {
-
-    const kitOrders =
-      skuBranchPaidMap[normalize(kp.kit_sku)] || {};
-
-    Object.entries(kitOrders).forEach(([br, q]) => {
-
-      const contribution =
-        (Number(q) || 0) *
-        (Number(kp.qty) || 1);
-
-      addPaid(br, contribution);
-    });
-  });
-
-} else {
-
-  // PRIORITY 3: BOM ORDERS
-  (componentToCompositeMap[normMCode] || []).forEach(cp => {
-
-    const compOrders =
-      skuBranchPaidMap[normalize(cp.composite_sku)] || {};
-
-    Object.entries(compOrders).forEach(([br, q]) => {
-
-      const contribution =
-        (Number(q) || 0) *
-        (Number(cp.multiplier) || 1);
-
-      addPaid(br, contribution);
-    });
-  });
-}
-
-      // Step 2: Sum up for zones and calculate global grand total
-      let grandTotalPaid = 0;
-      branchPaidMap.forEach((qtyVal, brNorm) => {
-  grandTotalPaid += qtyVal;
-
-  const branchZone =
-    branchToZoneMapNormalized[brNorm];
-
-  if (!branchZone) return;
-
+  // Reset zone values
   allZones.forEach(z => {
-    if (
-      normalize(z) === normalize(branchZone)
-    ) {
-      summary[mCode].zone_data[z].paid_quantity += qtyVal;
+    summary[mCode].zone_data[z].paid_quantity = 0;
+  });
+
+  // VALID BRANCHES FROM individual_books
+  const validBranches = new Set();
+
+  (allBooksData || []).forEach(book => {
+
+    if (normalize(book.material_code) !== normMCode) {
+      return;
+    }
+
+    const br = normalize(
+      book.branch_name || book.branch || ""
+    );
+
+    if (br) {
+      validBranches.add(br);
     }
   });
+
+  // LOOP ORDERS
+  (orderData || []).forEach(order => {
+
+    const brNorm = normalize(
+      order.branch_name || order.branch || ""
+    );
+
+    // ONLY VALID individual_books BRANCHES
+    if (!validBranches.has(brNorm)) {
+      return;
+    }
+
+    // FILTER BY DASHBOARD BRANCH
+    if (
+      branchFilter &&
+      brNorm !== normalize(branchFilter)
+    ) {
+      return;
+    }
+
+    // FILTER BY ZONE
+    const orderZone = String(
+      branchToZoneMapNormalized[brNorm] || ""
+    ).trim();
+
+    if (
+      zoneFilter &&
+      orderZone.toLowerCase() !==
+      zoneFilter.toLowerCase()
+    ) {
+      return;
+    }
+
+    const orderSku = normalize(order.item_sku);
+
+    let contribution = 0;
+
+    // =========================
+    // DIRECT SKU MATCH
+    // =========================
+    if (orderSku === normMCode) {
+
+      contribution =
+        Number(order.quantity) || 0;
+    }
+
+    // =========================
+    // 91 SERIES BOM LOGIC
+    // =========================
+    else if (orderSku.startsWith("91")) {
+
+      (bomData || []).forEach(bom => {
+
+        const parentSku =
+          normalize(bom.composite_code);
+
+        const componentSku =
+          normalize(bom.component_code);
+
+        if (
+          parentSku === orderSku &&
+          componentSku === normMCode
+        ) {
+
+          contribution +=
+            (Number(order.quantity) || 0) *
+            (Number(bom.component_quantity) || 1);
+        }
+      });
+    }
+
+    if (contribution > 0) {
+
+      totalPaid += contribution;
+
+      if (
+        summary[mCode].zone_data[orderZone]
+      ) {
+
+        summary[mCode]
+          .zone_data[orderZone]
+          .paid_quantity += contribution;
+      }
+    }
+  });
+
+  summary[mCode].total_paid_quantity =
+    totalPaid;
+
+  summary[mCode].total_requirement =
+    Math.max(
+      summary[mCode].total_projection,
+      totalPaid
+    );
+
+  summary[mCode].already_ordered_quantity =
+    poMap[normMCode] || 0;
+
+  summary[mCode].final_requirement =
+    summary[mCode].total_requirement -
+    summary[mCode].already_ordered_quantity;
 });
-      summary[mCode].total_paid_quantity = Number(grandTotalPaid) || 0;
-
-      summary[mCode].total_requirement = Math.max(
-        summary[mCode].total_projection,
-        summary[mCode].total_paid_quantity
-      );
-
-      summary[mCode].already_ordered_quantity = poMap[normMCode] || 0;
-
-      summary[mCode].final_requirement =
-        summary[mCode].total_requirement -
-        summary[mCode].already_ordered_quantity;
-    });
 
     const result = Object.values(summary).sort((a, b) => a.material_code.localeCompare(b.material_code));
     res.json({ zones: allZones, data: result });
