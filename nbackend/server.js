@@ -23,7 +23,9 @@ const normalizeText = (str) =>
 
 // For SKU / material codes
 const normalizeSku = (str) =>
-  String(str || "").trim();
+  String(str || "")
+    .trim()
+    .toUpperCase();
 
 // Middleware to strip /api prefix from Vercel requests so they match our routes
 app.use((req, res, next) => {
@@ -1613,6 +1615,12 @@ Object.keys(summary).forEach(mCode => {
 
   const normMCode = normalizeSku(mCode);
 
+  // Debugging logs
+  console.log("BOOK MATERIAL:", normMCode);
+  console.log("ORDER SKU:", orderSku);
+  console.log("ORDER QTY:", qty);
+  console.log("BRANCH:", brNorm);
+  console.log("VALID:", validBranches.has(brNorm));
   let totalPaid = 0;
 
   // Reset zone values
@@ -1673,8 +1681,8 @@ Object.keys(summary).forEach(mCode => {
       return;
     }
 
-    const orderSku = normalizeSku(
-      order.item_sku
+    const orderSku = normalizeSku( // Updated to check multiple fields
+      order.material_code || order.sku || order.item_sku || ""
     );
 
     const qty =
@@ -1828,7 +1836,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (orderData || []).forEach(order => {
       console.log("ORDER SAMPLE", order);
       const brNorm = normalizeText(order.branch_name || order.branch || "");
-
+      
       const orderZone =
   normalizeText(
     branchToZoneMapNorm[brNorm] ||
@@ -1839,7 +1847,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
 if (orderZone !== targetZone) {
   return;
 }
-      const sku = normalizeSku(order.item_sku); // Normalize SKU
+      const sku = normalizeSku(order.material_code || order.sku || order.item_sku || ""); // Normalize SKU
 
       let contribution = 0;
       let source = "";
@@ -1908,7 +1916,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
 
     const details = [];
     (orderData || []).forEach(order => {
-      const sku = normalizeSku(order.item_sku);
+      const sku = normalizeSku(order.material_code || order.sku || order.item_sku || "");
       const brNorm = normalizeText(order.branch_name || order.branch || "");
       
 
