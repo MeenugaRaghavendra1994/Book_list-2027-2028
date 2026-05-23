@@ -1488,9 +1488,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     // Pre-calculate component to kit parent mapping (91 series logic) and active branches
     const componentToKitMap = {}; 
-    const materialActiveBranchesMap = {};
+const materialActiveBranchesMap = {};
 
-(booksDataForSummary || []).forEach(book => {
+(allBooksData || []).forEach(book => {
   const mat = normalize(book.material_code);
 
   if (!mat) return;
@@ -1499,21 +1499,25 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     materialActiveBranchesMap[mat] = new Set();
   }
 
-  const branches = String(book.branch_name || book.branch || "")
-    .split(/[,\n\r|]+/)
-    .map(s => normalize(s))
-    .filter(Boolean);
+  const br = normalize(book.branch_name || book.branch || "");
 
-  branches.forEach(br => {
+  if (br) {
     materialActiveBranchesMap[mat].add(br);
-  });
+  }
 
-      const kitSku = normalize(book.composite_code);
-      if (mat && kitSku) {
-        if (!componentToKitMap[mat]) componentToKitMap[mat] = [];
-        componentToKitMap[mat].push({ kit_sku: kitSku, qty: Number(book.quantity) || 1 });
-      }
+  const kitSku = normalize(book.composite_code);
+
+  if (mat && kitSku) {
+    if (!componentToKitMap[mat]) {
+      componentToKitMap[mat] = [];
+    }
+
+    componentToKitMap[mat].push({
+      kit_sku: kitSku,
+      qty: Number(book.quantity) || 1
     });
+  }
+});
 
     // Create a reverse BOM map with normalization
     const componentToCompositeMap = {};
@@ -1612,7 +1616,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
   if (!qty) return;
 
   // Restrict to active branches only (assigned in book kits)
-  if (!activeBranches.has(br)) return;
+  if (
+  activeBranches.size > 0 &&
+  !activeBranches.has(normalize(br))
+) {
+  return;
+}
 
   // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
   if (branchFilter && br !== normalize(branchFilter)) return;
@@ -1630,13 +1639,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       // Kit parents (91 series)
       (componentToKitMap[normMCode] || []).forEach(kp => {
-        const kitOrders = skuBranchPaidMap[kp.kit_sku] || {};
+        const kitOrders = skuBranchPaidMap[normalize(kp.kit_sku)] || {};
         Object.entries(kitOrders).forEach(([br, q]) => addPaid(br, q * kp.qty));
       });
 
       // BOM parents
       (componentToCompositeMap[normMCode] || []).forEach(cp => {
-        const compOrders = skuBranchPaidMap[cp.composite_sku] || {};
+        const compOrders = skuBranchPaidMap[normalize(cp.composite_sku)] || {};
         Object.entries(compOrders).forEach(([br, q]) => addPaid(br, q * cp.multiplier));
       });
 
