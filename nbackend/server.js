@@ -1398,7 +1398,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (branchFilter) {
       const normBranchFilter = normalizeText(branchFilter);
       booksDataForSummary = booksDataForSummary.filter(book => {
-        const bookBranches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
+        const bookBranches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalizeText(s)).filter(Boolean);
         return bookBranches.includes(normBranchFilter);
       });
     }
@@ -1550,7 +1550,7 @@ const materialActiveBranchesMap = {};
     const projMap = {}; // Grade -> Branch -> { qty, zone }
     (projectionsData || []).forEach(p => {
       const g = String(p.grade || "").trim().toLowerCase();
-      const bNorm = normalize(p.branch);
+      const bNorm = normalizeText(p.branch);
       const z = String(p.zone || "").trim();
 
       if (!projMap[g]) projMap[g] = {};
@@ -1888,7 +1888,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     const kitMap = {};
     const activeBranchesNorm = new Set();
     (booksData || []).forEach(b => {
-      const matCode = normalize(b.material_code);
+      const matCode = normalizeSku(b.material_code);
       if (matCode === normMaterialCode) {
         const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
           .map(s => normalizeText(s))
