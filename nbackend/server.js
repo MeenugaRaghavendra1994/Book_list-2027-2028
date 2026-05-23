@@ -204,7 +204,7 @@ app.post("/books/bulk", async (req, res) => {
     // Optimization: Pre-map kitRows by normalized branch name for O(1) lookup
     const kitBranchMap = new Map();
     (kitRows || []).forEach(kr => {
-      kitBranchMap.set(normalize(kr.branch), kr.id);
+      kitBranchMap.set(normalizeText(kr.branch), kr.id);
     });
 
     // 3. Prepare rows for batch insert
@@ -231,7 +231,7 @@ app.post("/books/bulk", async (req, res) => {
         : String(branchInput).split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
 
       branchArray.forEach(br => {
-        const normBr = normalize(br);
+        const normBr = normalizeText(br);
         const linkedKitId = kitBranchMap.get(normBr) || kit_id;
 
         allRowsToInsert.push({
@@ -447,7 +447,7 @@ app.post("/books", async (req, res) => {
     // Create one row per branch, linking to the specific row ID for that branch kit
     const branchArray = Array.isArray(branchName) ? branchName : [branchName];
     const rows = branchArray.map(br => {
-      const kitRow = kitRows.find(kr => normalize(kr.branch) === normalize(br));
+      const kitRow = kitRows.find(kr => normalizeText(kr.branch) === normalizeText(br));
       return {
         zone, grade, branch_name: br, subject, material_name: materialName, material_code: sku,
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
@@ -849,7 +849,7 @@ app.put("/books/:id", async (req, res) => {
     const total = Number(d.total_amount) || qty * rate;
 
     const rows = branchName.map(br => {
-      const kitRow = kitRows.find(kr => normalize(kr.branch) === normalize(br));
+      const kitRow = kitRows.find(kr => normalizeText(kr.branch) === normalizeText(br));
       return {
         zone, grade, branch_name: br, subject, material_name: materialName, material_code: materialCode,
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
@@ -1474,7 +1474,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     (projectionsData || []).forEach(p => addZone(p.zone));
     (allBooksData || []).forEach(b => addZone(b.zone));
     (orderData || []).forEach(o => {
-        const brNorm = normalize(o.branch_name || o.branch);
+        const brNorm = normalizeText(o.branch_name || o.branch);
         addZone(o.zone || branchToZoneMapNormalized[brNorm]);
     });
     
@@ -1487,7 +1487,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
   const br = normalizeText(b.name);
 
   if (br) {
-    branchToZoneMap[br] = normalize(b.zone);
+    branchToZoneMap[br] = normalizeText(b.zone);
   }
 });
 
@@ -1496,7 +1496,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 const materialActiveBranchesMap = {};
 
 (allBooksData || []).forEach(book => {
-  const mat = normalize(book.material_code);
+  const mat = normalizeSku(book.material_code);
 
   if (!mat) return;
 
@@ -1510,7 +1510,7 @@ const materialActiveBranchesMap = {};
     materialActiveBranchesMap[mat].add(br);
   }
 
-  const kitSku = normalize(book.composite_code);
+  const kitSku = normalizeSku(book.composite_code);
 
   if (mat && kitSku) {
     if (!componentToKitMap[mat]) {
@@ -1527,8 +1527,8 @@ const materialActiveBranchesMap = {};
     // Create a reverse BOM map with normalization
     const componentToCompositeMap = {};
     (bomData || []).forEach(bom => {
-      const compCode = normalize(bom.component_code);
-      const compositeCode = normalize(bom.composite_code);
+      const compCode = normalizeSku(bom.component_code);
+      const compositeCode = normalizeSku(bom.composite_code);
       const compQty = Number(bom.component_quantity) || 1;
 
       if (!componentToCompositeMap[compCode]) componentToCompositeMap[compCode] = [];
@@ -1542,7 +1542,7 @@ const materialActiveBranchesMap = {};
     const { data: poData } = await supabase.from('purchase_orders').select('sku, quantity');
     const poMap = {};
     (poData || []).forEach(po => {
-      const sku = normalize(po.sku);
+      const sku = normalizeSku(po.sku);
       poMap[sku] = (poMap[sku] || 0) + (Number(po.quantity) || 0);
     });
 
@@ -1588,7 +1588,7 @@ const materialActiveBranchesMap = {};
       const branches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
 
       branches.forEach(b => {
-        const branchNorm = normalize(b);
+        const branchNorm = normalizeText(b);
         const projInfo = projMap[grade] && projMap[grade][branchNorm];
         const branchProjQty = projInfo ? projInfo.qty : 0;
         const zone = (projInfo && projInfo.zone) || branchToZoneMapNormalized[branchNorm] || String(book.zone || "").trim();
@@ -1764,8 +1764,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     if (!material_code) return res.status(400).json({ error: "Material code required" });
     if (!zone) return res.status(400).json({ error: "Zone required" });
 
-    const normMaterialCode = normalize(material_code); // Normalize material code
-    const targetZone = normalize(zone);
+    const normMaterialCode = normalizeSku(material_code); // Normalize material code
+    const targetZone = normalizeText(zone);
 
     // Fetch all relevant data
     const { data: orderData } = await supabase.from('orders_table').select('*');
@@ -1782,12 +1782,12 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (branchList || []).forEach(b => {
       const br = normalizeText(b.name);
       if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-      if (b.zone) branchToZonesSet[br].add(normalize(b.zone));
+      if (b.zone) branchToZonesSet[br].add(normalizeText(b.zone));
     });
     (booksData || []).forEach(b => {
   const branches = String(b.branch_name || b.branch || "")
     .split(/[,\n\r|]+/)
-    .map(s => normalize(s))
+    .map(s => normalizeText(s))
     .filter(Boolean);
 
   branches.forEach(br => {
@@ -1796,10 +1796,10 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     }
 
     if (b.zone) {
-  branchToZonesSet[br].add(normalize(b.zone));
+  branchToZonesSet[br].add(normalizeText(b.zone));
 }
 
-    if (normalize(b.material_code) === normMaterialCode) {
+    if (normalizeSku(b.material_code) === normMaterialCode) {
       activeBranchesNorm.add(br);
     }
   });
@@ -1807,9 +1807,9 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     // Identify active branches for this material and Setup Lookups for kit materials
     const kitMap = {}; 
     (booksData || []).forEach(b => {
-      const matCode = normalize(b.material_code);
+      const matCode = normalizeSku(b.material_code);
       if (matCode === normMaterialCode) {
-        const compCode = normalize(b.composite_code);
+        const compCode = normalizeSku(b.composite_code);
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
     });
@@ -1817,8 +1817,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     // Setup BOM lookups
     const bomParents = {}; // parentCode -> qtyPerParent
     (bomData || []).forEach(b => {
-      if (normalize(b.component_code) === normMaterialCode) {
-        bomParents[normalize(b.composite_code)] = Number(b.component_quantity) || 0;
+      if (normalizeSku(b.component_code) === normMaterialCode) {
+        bomParents[normalizeSku(b.composite_code)] = Number(b.component_quantity) || 0;
       }
     });
 
@@ -1830,7 +1830,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       const brNorm = normalizeText(order.branch_name || order.branch || "");
 
       const orderZone =
-  normalize(
+  normalizeText(
     branchToZoneMapNorm[brNorm] ||
     order.zone ||
     ""
@@ -1839,7 +1839,7 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
 if (orderZone !== targetZone) {
   return;
 }
-      const sku = normalize(order.item_sku); // Normalize SKU
+      const sku = normalizeSku(order.item_sku); // Normalize SKU
 
       let contribution = 0;
       let source = "";
@@ -1879,7 +1879,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
   try {
     const { material_code } = req.query;
     if (!material_code) return res.status(400).json({ error: "Material code required" });
-    const normMaterialCode = normalize(material_code);
+    const normMaterialCode = normalizeSku(material_code);
 
     const { data: orderData } = await supabase.from('orders_table').select('*');
     const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
@@ -1891,24 +1891,24 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
       const matCode = normalize(b.material_code);
       if (matCode === normMaterialCode) {
         const brs = (Array.isArray(b.branch_name) ? b.branch_name : String(b.branch_name || b.branch || "").split(/[,\n\r|]+/))
-          .map(s => normalize(s))
+          .map(s => normalizeText(s))
           .filter(Boolean);
         brs.forEach(brNorm => activeBranchesNorm.add(brNorm));
-        const compCode = normalize(b.composite_code);
+        const compCode = normalizeSku(b.composite_code);
         if (compCode) kitMap[compCode] = Number(b.quantity) || 0;
       }
     });
 
     const bomParents = {};
     (bomData || []).forEach(b => {
-      if (normalize(b.component_code) === normMaterialCode) {
-        bomParents[normalize(b.composite_code)] = Number(b.component_quantity) || 0;
+      if (normalizeSku(b.component_code) === normMaterialCode) {
+        bomParents[normalizeSku(b.composite_code)] = Number(b.component_quantity) || 0;
       }
     });
 
     const details = [];
     (orderData || []).forEach(order => {
-      const sku = normalize(order.item_sku);
+      const sku = normalizeSku(order.item_sku);
       const brNorm = normalizeText(order.branch_name || order.branch || "");
       
 
@@ -1976,7 +1976,7 @@ app.get("/dashboard/projection-source", async (req, res) => {
         .filter(Boolean);
 
       branches.forEach(bName => {
-        const brNorm = normalize(bName);
+        const brNorm = normalizeText(bName);
         const bZoneRaw = branchToZoneMap[brNorm] || String(book.zone || "");
         const bZoneLower = bZoneRaw.trim().toLowerCase();
 
@@ -1984,7 +1984,7 @@ app.get("/dashboard/projection-source", async (req, res) => {
 
         const projection = (projData || []).find(p => {
           const pGrade = String(p.grade || "").toLowerCase().trim();
-          const pBranchNorm = normalize(p.branch);
+          const pBranchNorm = normalizeText(p.branch);
           return pGrade === grade && pBranchNorm === brNorm;
         });
 
@@ -2040,12 +2040,12 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
         .filter(Boolean);
 
       branches.forEach(bName => {
-        const brNorm = normalize(bName);
+        const brNorm = normalizeText(bName);
         const bZoneRaw = branchToZoneMap[brNorm] || String(book.zone || "");
 
         const projection = (projData || []).find(p => {
           const pGrade = String(p.grade || "").toLowerCase().trim();
-          const pBranchNorm = normalize(p.branch);
+          const pBranchNorm = normalizeText(p.branch);
           return pGrade === grade && pBranchNorm === brNorm;
         });
 
