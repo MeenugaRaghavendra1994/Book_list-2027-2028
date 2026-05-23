@@ -962,7 +962,7 @@ function App() {
     }
 
     setIsProcessing(true);
-    const addedBooks = [];
+    const booksToUpload = [];
     for (const row of bulkBookRows) {
       const bookItem = {
         category: row.category || row.Category || "",
@@ -984,27 +984,37 @@ function App() {
         composite_name: row.composite_name || row['Composite Name'] || "",
         zone: activeBook.zone,
         grade: activeBook.grade,
-        branch: (row.branch || row['Branch'] || row['Branch Name'] || row['branch_name'] || activeBook.branch || "").trim()
+        branch: (row.branch || row['Branch'] || row['Branch Name'] || row['branch_name'] || "").trim()
       };
-
-      try {
-        const response = await axios.post(`${API_BASE_URL}/books`, { ...bookItem, kit_id: activeBook.id });
-        if (response.data?.book) {
-          addedBooks.push(response.data.book);
-        } else {
-          // Fallback if backend didn't return the object with ID
-          addedBooks.push({ ...bookItem, id: Date.now() + Math.random() });
-        }
-      } catch (error) {
-        console.error("Failed to save row to DB:", bookItem.material_code, error?.response?.data || error?.message);
-        // We do NOT push to addedBooks here, so the UI stays in sync with the DB
-      }
+      booksToUpload.push(bookItem);
     }
 
-    setSelectedBooks(prev => [...prev, ...addedBooks]);
-    setBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: [...(book.books || []), ...addedBooks] } : book));
-    setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: [...(book.books || []), ...addedBooks] } : book));
-    setActiveBook(prev => ({ ...prev, books: [...(prev.books || []), ...addedBooks] }));
+    try {
+      const response = await axios.post(`${API_BASE_URL}/books/bulk`, { 
+        kit_id: activeBook.id, 
+        books: booksToUpload 
+      });
+
+      if (response.data.success) {
+        alert(`Successfully uploaded ${response.data.items_processed} items.`);
+        // Fetch full kit data with new books to refresh UI
+        const kitRes = await axios.get(`${API_BASE_URL}/kits/${activeBook.id}`);
+        const updatedKit = kitRes.data;
+        
+        setSelectedBooks(updatedKit.books || []);
+        setBooks(prev => prev.map(b => b.id === activeBook.id ? updatedKit : b));
+        setFilteredBooks(prev => prev.map(b => b.id === activeBook.id ? updatedKit : b));
+        setActiveBook(updatedKit);
+      }
+    } catch (error) {
+      console.error("Bulk upload failed:", error);
+      setBulkBookError("Bulk upload failed: " + (error.response?.data?.error || error.message));
+    } finally {
+      setBulkBookRows([]);
+      setBulkBookFileName("");
+      setIsProcessing(false);
+    }
+  };
     setBulkBookRows([]);
     setBulkBookFileName("");
     setBulkBookError("");
@@ -3200,6 +3210,6 @@ function App() {
       )}
     </div>
   );
-}
+
 
 export default App;

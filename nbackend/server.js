@@ -163,6 +163,106 @@ app.get("/books/:id", async (req, res) => {
 });
 
 /* ============================
+   ➕ BULK ADD BOOKS
+============================ */
+app.post("/books/bulk", async (req, res) => {
+  const { kit_id, books } = req.body;
+
+  if (!kit_id || !Array.isArray(books) || books.length === 0) {
+    return res.status(400).json({ success: false, error: "kit_id and books array are required." });
+  }
+
+  try {
+    // 1. Identify logical kit group
+    const { data: seedKit } = await supabase.from('grade_wise_kits').select('name, zone, grade').eq('id', kit_id).single();
+    if (!seedKit) throw new Error("Parent kit group not found");
+
+    const { data: kitRows } = await supabase
+      .from('grade_wise_kits')
+      .select('id, branch')
+      .eq('name', seedKit.name)
+      .eq('zone', seedKit.zone)
+      .eq('grade', seedKit.grade);
+
+    // 2. Pre-fetch pricing for all unique materials in the batch
+    const uniqueSkus = [...new Set(books.map(b => String(b.material_code || "").trim()))].filter(Boolean);
+    const { data: pricingList } = await supabase.from('pricing').select('material_code, mrp, cost_price').in('material_code', uniqueSkus);
+    const pricingMap = new Map((pricingList || []).map(p => [p.material_code, p]));
+
+    // 3. Prepare rows for batch insert
+    const allRowsToInsert = [];
+
+    for (const d of books) {
+      const sku = String(d.material_code || "").trim();
+      const priceEntry = pricingMap.get(sku);
+      
+      const qty = Number(d.quantity) || 0;
+      const rate = Number(d.per_unit_rate) || 0;
+      const mrp = priceEntry?.mrp ?? (Number(d.mrp) || 0);
+      const costPrice = priceEntry?.cost_price ?? (Number(d.cost_price) || 0);
+      const total = Number(d.total_amount) || qty * rate;
+
+      // Determine branches: explicitly from row, or fallback to all branches in this logical kit
+      let branchInput = d.branch;
+      if (!branchInput || (Array.isArray(branchInput) && branchInput.length === 0)) {
+        branchInput = kitRows.map(kr => kr.branch);
+      }
+
+      const branchArray = Array.isArray(branchInput) 
+        ? branchInput 
+        : String(branchInput).split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
+
+      branchArray.forEach(br => {
+        const kitRow = kitRows.find(kr => normalize(kr.branch) === normalize(br));
+        allRowsToInsert.push({
+          zone: String(d.zone || seedKit.zone).trim(),
+          grade: String(d.grade || seedKit.grade).trim(),
+          branch_name: br,
+          subject: String(d.subject || "").trim(),
+          material_name: String(d.material_name || "").trim(),
+          material_code: sku,
+          tax_rate: Number(d.tax_rate) || 0,
+          mandatory_optional: String(d.mandatory_optional || "").trim(),
+          category: String(d.category || "").trim(),
+          volume: String(d.volume || "").trim(),
+          year: String(d.year || "").trim(),
+          author: String(d.author || "").trim(),
+          publisher: String(d.publisher || "").trim(),
+          quantity: qty,
+          per_unit_rate: rate,
+          total_amount: total,
+          mrp,
+          cost_price,
+          composite_code: String(d.composite_code || "").trim(),
+          composite_name: String(d.composite_name || "").trim(),
+          kit_id: kitRow ? kitRow.id : kit_id
+        });
+      });
+    }
+
+    // 4. Batch Insert
+    if (allRowsToInsert.length > 0) {
+      const { data, error } = await supabase
+        .from('individual_books')
+        .insert(allRowsToInsert);
+
+      if (error) throw error;
+    }
+
+    console.log(`✅ BULK INSERT SUCCESS: ${allRowsToInsert.length} branch-rows inserted for ${books.length} items.`);
+    res.json({ 
+      success: true, 
+      items_processed: books.length, 
+      rows_created: allRowsToInsert.length 
+    });
+
+  } catch (err) {
+    console.error("❌ BULK INSERT ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
    📦 GET KITS
 ============================ */
 app.get("/kits", async (req, res) => {
