@@ -1472,19 +1472,15 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const allZones = Object.values(zoneDisplayMap).sort((a, b) => a.localeCompare(b));
 
     // Pre-calculate branch to zones mapping for efficient zone distribution
-    const branchToZonesSet = {}; 
-    (branchList || []).forEach(b => {
-      const br = normalize(b.name);
-      if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-      if (b.zone) branchToZonesSet[br].add(normalize(b.zone));
-    });
-    (allBooksData || []).forEach(b => {
-      const br = normalize(b.branch_name || b.branch);
-      if (br) {
-        if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
-        if (b.zone) branchToZonesSet[br].add(normalize(b.zone));
-      }
-    });
+    const branchToZoneMap = {};
+
+(branchList || []).forEach(b => {
+  const br = normalize(b.name);
+
+  if (br) {
+    branchToZoneMap[br] = normalize(b.zone);
+  }
+});
 
     // Pre-calculate component to kit parent mapping (91 series logic) and active branches
     const componentToKitMap = {}; 
@@ -1755,15 +1751,13 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     (orderData || []).forEach(order => {
       const brNorm = normalize(order.branch_name || order.branch || "");
 
-      const brZones = branchToZonesSet[brNorm] || new Set();
+      const orderZone =
+  branchToZoneMap[brNorm] ||
+  normalize(order.zone || "");
 
-console.log("ACTIVE BRANCHES", [...activeBranchesNorm]);
-console.log("ORDER BRANCH", brNorm);
-console.log("ZONE", targetZone);
-console.log("BRANCH ZONES", [...brZones]);
-
-if (!brZones.has(targetZone)) return;
-
+if (orderZone !== targetZone) {
+  return;
+}
       const sku = normalize(order.item_sku); // Normalize SKU
 
       let contribution = 0;
