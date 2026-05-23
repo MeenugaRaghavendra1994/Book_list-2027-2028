@@ -1615,13 +1615,7 @@ const materialActiveBranchesMap = {};
 
   if (!qty) return;
 
-  // Restrict to active branches only (assigned in book kits)
-  if (
-  activeBranches.size > 0 &&
-  !activeBranches.has(normalize(br))
-) {
-  return;
-}
+ 
 
   // Filter 2: Dashboard Branch Filter (if user has selected a specific branch)
   if (branchFilter && br !== normalize(branchFilter)) return;
@@ -1841,7 +1835,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     (orderData || []).forEach(order => {
       const sku = normalize(order.item_sku);
       const brNorm = normalize(order.branch_name || order.branch || "");
-      if (activeBranchesNorm.size > 0 && !activeBranchesNorm.has(brNorm)) return;
+      
 
       let contribution = 0;
       let source = "";
