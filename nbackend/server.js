@@ -1440,6 +1440,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (gradeFilter) orderQuery = orderQuery.eq('grade_name', gradeFilter);
 
     const { data: orderData, error: orderError } = await orderQuery;
+    console.log("TOTAL ORDERS FETCHED:", orderData?.length);
+    console.log("FIRST ORDER SAMPLE:", orderData?.[0]);
+
     if (orderError) console.warn("❌ Order data fetch warning:", orderError.message);
 
     // Fetch BOM data for 91 series resolution
@@ -1678,15 +1681,14 @@ Object.keys(summary).forEach(mCode => {
       order.material_code || order.sku || order.item_sku || ""
     );
 
-    // Debugging logs
-    console.log("BOOK MATERIAL (summary loop):", normMCode);
-    console.log("ORDER SKU (summary loop):", orderSku);
-    console.log("ORDER QTY (summary loop):", qty);
-    console.log("BRANCH (summary loop):", brNorm);
-    console.log("VALID BRANCH (summary loop):", validBranches.has(brNorm));
+    const qty = Number(order.quantity) || 0;
 
-    const qty =
-      Number(order.quantity) || 0;
+    // Debugging logs
+    console.log("BOOK MATERIAL:", normMCode);
+    console.log("ORDER SKU:", orderSku);
+    console.log("ORDER QTY:", qty);
+    console.log("BRANCH:", brNorm);
+    console.log("VALID BRANCH:", validBranches.has(brNorm));
 
     let contribution = 0;
 
