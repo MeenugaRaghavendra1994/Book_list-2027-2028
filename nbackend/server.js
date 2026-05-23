@@ -1625,19 +1625,52 @@ const materialActiveBranchesMap = {};
 
       // Direct
       const direct = skuBranchPaidMap[normMCode] || {};
-      Object.entries(direct).forEach(([br, q]) => addPaid(br, q));
 
-      // Kit parents (91 series)
-      (componentToKitMap[normMCode] || []).forEach(kp => {
-        const kitOrders = skuBranchPaidMap[normalize(kp.kit_sku)] || {};
-        Object.entries(kitOrders).forEach(([br, q]) => addPaid(br, q * kp.qty));
-      });
+if (Object.keys(direct).length > 0) {
 
-      // BOM parents
-      (componentToCompositeMap[normMCode] || []).forEach(cp => {
-        const compOrders = skuBranchPaidMap[normalize(cp.composite_sku)] || {};
-        Object.entries(compOrders).forEach(([br, q]) => addPaid(br, q * cp.multiplier));
-      });
+  // PRIORITY 1: DIRECT ORDERS
+  Object.entries(direct).forEach(([br, q]) => {
+    addPaid(br, q);
+  });
+
+} else if (
+  (componentToKitMap[normMCode] || []).length > 0
+) {
+
+  // PRIORITY 2: KIT ORDERS
+  (componentToKitMap[normMCode] || []).forEach(kp => {
+
+    const kitOrders =
+      skuBranchPaidMap[normalize(kp.kit_sku)] || {};
+
+    Object.entries(kitOrders).forEach(([br, q]) => {
+
+      const contribution =
+        (Number(q) || 0) *
+        (Number(kp.qty) || 1);
+
+      addPaid(br, contribution);
+    });
+  });
+
+} else {
+
+  // PRIORITY 3: BOM ORDERS
+  (componentToCompositeMap[normMCode] || []).forEach(cp => {
+
+    const compOrders =
+      skuBranchPaidMap[normalize(cp.composite_sku)] || {};
+
+    Object.entries(compOrders).forEach(([br, q]) => {
+
+      const contribution =
+        (Number(q) || 0) *
+        (Number(cp.multiplier) || 1);
+
+      addPaid(br, contribution);
+    });
+  });
+}
 
       // Step 2: Sum up for zones and calculate global grand total
       let grandTotalPaid = 0;
