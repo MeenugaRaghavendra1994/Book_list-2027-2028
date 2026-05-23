@@ -14,7 +14,16 @@ app.use(cors());
 app.use(express.json());
 
 // Robust normalization helper for branch matching
-const normalize = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+// For branch names
+const normalizeText = (str) =>
+  String(str || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+
+// For SKU / material codes
+const normalizeSku = (str) =>
+  String(str || "").trim();
 
 // Middleware to strip /api prefix from Vercel requests so they match our routes
 app.use((req, res, next) => {
@@ -1387,7 +1396,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       );
     }
     if (branchFilter) {
-      const normBranchFilter = normalize(branchFilter);
+      const normBranchFilter = normalizeText(branchFilter);
       booksDataForSummary = booksDataForSummary.filter(book => {
         const bookBranches = String(book.branch_name || "").split(/[,\n\r|]+/).map(s => normalize(s)).filter(Boolean);
         return bookBranches.includes(normBranchFilter);
@@ -1438,15 +1447,15 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     // Create branch to zone map
     const branchToZoneMapNormalized = {};
     (branchList || []).forEach(b => {
-      branchToZoneMapNormalized[normalize(b.name)] = b.zone;
+      branchToZoneMapNormalized[normalizeText(b.name)] = b.zone;
     });
 
     // Global Order Summation by SKU and Branch (normalized)
     const skuBranchPaidMap = {}; // SKU -> brNorm -> totalQty
 
     (orderData || []).forEach(order => {
-      const brNorm = normalize(order.branch_name || order.branch || ""); // Normalize branch name
-      const sku = normalize(order.item_sku || ""); // Normalize SKU
+      const brNorm = normalizeText(order.branch_name || order.branch || ""); // Normalize branch name
+      const sku = normalizeSku(order.item_sku || ""); // Normalize SKU
       const qty = Number(order.quantity) || 0;
       if (!skuBranchPaidMap[sku]) skuBranchPaidMap[sku] = {};
       skuBranchPaidMap[sku][brNorm] = (skuBranchPaidMap[sku][brNorm] || 0) + qty;
@@ -1475,7 +1484,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const branchToZoneMap = {};
 
 (branchList || []).forEach(b => {
-  const br = normalize(b.name);
+  const br = normalizeText(b.name);
 
   if (br) {
     branchToZoneMap[br] = normalize(b.zone);
@@ -1495,7 +1504,7 @@ const materialActiveBranchesMap = {};
     materialActiveBranchesMap[mat] = new Set();
   }
 
-  const br = normalize(book.branch_name || book.branch || "");
+  const br = normalizeText(book.branch_name || book.branch || "");
 
   if (br) {
     materialActiveBranchesMap[mat].add(br);
@@ -1553,7 +1562,7 @@ const materialActiveBranchesMap = {};
 
     // Pass 1: Initialize summary for only displayed materials
     booksDataForSummary.forEach(book => {
-      const materialCode = String(book.material_code || "").trim().toLowerCase();
+      const materialCode = normalizeSku(book.material_code);
       const materialName = String(book.material_name || "").trim();
       if (!materialCode || summary[materialCode]) return;
 
@@ -1588,7 +1597,7 @@ const materialActiveBranchesMap = {};
         if (zoneFilter && zone !== zoneFilter) return;
         
         // If dashboard filter is set to a specific branch, only count that branch's projection
-        if (branchFilter && branchNorm !== normalize(branchFilter)) return;
+        if (branchFilter && branchNorm !== normalizeText(branchFilter)) return;
 
         const projContribution = branchProjQty * qty;
         summary[materialCode].zone_data[zone].projection += projContribution;
@@ -1596,13 +1605,13 @@ const materialActiveBranchesMap = {};
       });
     });
 
-    // ===============================
+   // ===============================
 // FINAL PAID QUANTITY CALCULATION
 // ===============================
 
 Object.keys(summary).forEach(mCode => {
 
-  const normMCode = normalize(mCode);
+  const normMCode = normalizeSku(mCode);
 
   let totalPaid = 0;
 
@@ -1616,11 +1625,13 @@ Object.keys(summary).forEach(mCode => {
 
   (allBooksData || []).forEach(book => {
 
-    if (normalize(book.material_code) !== normMCode) {
+    if (
+      normalizeSku(book.material_code) !== normMCode
+    ) {
       return;
     }
 
-    const br = normalize(
+    const br = normalizeText(
       book.branch_name || book.branch || ""
     );
 
@@ -1632,7 +1643,7 @@ Object.keys(summary).forEach(mCode => {
   // LOOP ORDERS
   (orderData || []).forEach(order => {
 
-    const brNorm = normalize(
+    const brNorm = normalizeText(
       order.branch_name || order.branch || ""
     );
 
@@ -1644,7 +1655,7 @@ Object.keys(summary).forEach(mCode => {
     // FILTER BY DASHBOARD BRANCH
     if (
       branchFilter &&
-      brNorm !== normalize(branchFilter)
+      brNorm !== normalizeText(branchFilter)
     ) {
       return;
     }
@@ -1662,7 +1673,12 @@ Object.keys(summary).forEach(mCode => {
       return;
     }
 
-    const orderSku = normalize(order.item_sku);
+    const orderSku = normalizeSku(
+      order.item_sku
+    );
+
+    const qty =
+      Number(order.quantity) || 0;
 
     let contribution = 0;
 
@@ -1671,22 +1687,21 @@ Object.keys(summary).forEach(mCode => {
     // =========================
     if (orderSku === normMCode) {
 
-      contribution =
-        Number(order.quantity) || 0;
+      contribution = qty;
     }
 
     // =========================
-    // 91 SERIES BOM LOGIC
+    // BOM LOGIC
     // =========================
-    else if (orderSku.startsWith("91")) {
+    else {
 
       (bomData || []).forEach(bom => {
 
         const parentSku =
-          normalize(bom.composite_code);
+          normalizeSku(bom.composite_code);
 
         const componentSku =
-          normalize(bom.component_code);
+          normalizeSku(bom.component_code);
 
         if (
           parentSku === orderSku &&
@@ -1694,7 +1709,7 @@ Object.keys(summary).forEach(mCode => {
         ) {
 
           contribution +=
-            (Number(order.quantity) || 0) *
+            qty *
             (Number(bom.component_quantity) || 1);
         }
       });
@@ -1760,12 +1775,12 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
 
     // Create normalized zone mapping
     const branchToZoneMapNorm = {};
-    (branchList || []).forEach(b => branchToZoneMapNorm[normalize(b.name)] = b.zone);
+    (branchList || []).forEach(b => branchToZoneMapNorm[normalizeText(b.name)] = b.zone);
     const branchToZonesSet = {}; 
     const activeBranchesNorm = new Set();
 
     (branchList || []).forEach(b => {
-      const br = normalize(b.name);
+      const br = normalizeText(b.name);
       if (!branchToZonesSet[br]) branchToZonesSet[br] = new Set();
       if (b.zone) branchToZonesSet[br].add(normalize(b.zone));
     });
@@ -1811,7 +1826,8 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     const details = [];
     
     (orderData || []).forEach(order => {
-      const brNorm = normalize(order.branch_name || order.branch || "");
+      console.log("ORDER SAMPLE", order);
+      const brNorm = normalizeText(order.branch_name || order.branch || "");
 
       const orderZone =
   normalize(
@@ -1893,7 +1909,7 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     const details = [];
     (orderData || []).forEach(order => {
       const sku = normalize(order.item_sku);
-      const brNorm = normalize(order.branch_name || order.branch || "");
+      const brNorm = normalizeText(order.branch_name || order.branch || "");
       
 
       let contribution = 0;
@@ -1946,7 +1962,7 @@ app.get("/dashboard/projection-source", async (req, res) => {
     const { data: branchList } = await supabase.from('branches').select('name, zone');
     const branchToZoneMap = {};
     (branchList || []).forEach(b => {
-      const bNorm = normalize(b.name);
+      const bNorm = normalizeText(b.name);
       if (bNorm) branchToZoneMap[bNorm] = b.zone;
     });
 
@@ -2010,7 +2026,7 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
     const { data: branchList } = await supabase.from('branches').select('name, zone');
     const branchToZoneMap = {};
     (branchList || []).forEach(b => {
-      const bNorm = normalize(b.name);
+      const bNorm = normalizeText(b.name);
       if (bNorm) branchToZoneMap[bNorm] = b.zone;
     });
 
