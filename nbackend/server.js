@@ -1642,20 +1642,21 @@ const materialActiveBranchesMap = {};
       // Step 2: Sum up for zones and calculate global grand total
       let grandTotalPaid = 0;
       branchPaidMap.forEach((qtyVal, brNorm) => {
-        grandTotalPaid += qtyVal;
-        const bZones = branchToZonesSet[brNorm] || new Set();
-        
-        // Ensure the master zone for the branch is included
-        const masterZone = branchToZoneMapNormalized[brNorm];
-        if (masterZone) bZones.add(masterZone.toLowerCase());
+  grandTotalPaid += qtyVal;
 
-        allZones.forEach(z => {
-          if (bZones.has(z.toLowerCase())) {
-            summary[mCode].zone_data[z].paid_quantity += qtyVal;
-          }
-        });
-      });
+  const branchZone =
+    branchToZoneMapNormalized[brNorm];
 
+  if (!branchZone) return;
+
+  allZones.forEach(z => {
+    if (
+      normalize(z) === normalize(branchZone)
+    ) {
+      summary[mCode].zone_data[z].paid_quantity += qtyVal;
+    }
+  });
+});
       summary[mCode].total_paid_quantity = Number(grandTotalPaid) || 0;
 
       summary[mCode].total_requirement = Math.max(
@@ -1752,8 +1753,11 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
       const brNorm = normalize(order.branch_name || order.branch || "");
 
       const orderZone =
-  branchToZoneMap[brNorm] ||
-  normalize(order.zone || "");
+  normalize(
+    branchToZoneMapNorm[brNorm] ||
+    order.zone ||
+    ""
+  );
 
 if (orderZone !== targetZone) {
   return;
