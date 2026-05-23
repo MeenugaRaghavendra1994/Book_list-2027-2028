@@ -176,6 +176,7 @@ app.post("/books/bulk", async (req, res) => {
     // 1. Identify logical kit group
     const { data: seedKit } = await supabase.from('grade_wise_kits').select('name, zone, grade').eq('id', kit_id).single();
     if (!seedKit) throw new Error("Parent kit group not found");
+    console.log(`BULK INSERT: Found seed kit for kit_id ${kit_id}:`, seedKit);
 
     const { data: kitRows } = await supabase
       .from('grade_wise_kits')
@@ -183,10 +184,12 @@ app.post("/books/bulk", async (req, res) => {
       .eq('name', seedKit.name)
       .eq('zone', seedKit.zone)
       .eq('grade', seedKit.grade);
+    console.log(`BULK INSERT: Found ${kitRows?.length || 0} kit rows for logical group.`);
 
     // 2. Pre-fetch pricing for all unique materials in the batch
     const uniqueSkus = [...new Set(books.map(b => String(b.material_code || "").trim()))].filter(Boolean);
     const { data: pricingList } = await supabase.from('pricing').select('material_code, mrp, cost_price').in('material_code', uniqueSkus);
+    console.log(`BULK INSERT: Found ${uniqueSkus.length} unique SKUs, fetched ${pricingList?.length || 0} pricing entries.`);
     const pricingMap = new Map((pricingList || []).map(p => [p.material_code, p]));
 
     // 3. Prepare rows for batch insert
@@ -242,11 +245,12 @@ app.post("/books/bulk", async (req, res) => {
 
     // 4. Batch Insert
     if (allRowsToInsert.length > 0) {
+      console.log(`BULK INSERT: Attempting to insert ${allRowsToInsert.length} rows into individual_books.`);
       const { data, error } = await supabase
         .from('individual_books')
         .insert(allRowsToInsert);
 
-      if (error) throw error;
+      if (error) throw new Error(`Supabase insert error: ${error.message} (Details: ${error.details}, Hint: ${error.hint})`);
     }
 
     console.log(`✅ BULK INSERT SUCCESS: ${allRowsToInsert.length} branch-rows inserted for ${books.length} items.`);
@@ -257,7 +261,7 @@ app.post("/books/bulk", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ BULK INSERT ERROR:", err.message);
+    console.error("❌ BULK INSERT ERROR:", err.message, err.details, err.hint);
     res.status(500).json({ success: false, error: err.message });
   }
 });
