@@ -1457,7 +1457,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     (orderData || []).forEach(order => {
       const brNorm = normalizeText(order.branch_name || order.branch || ""); // Normalize branch name
-      const sku = normalizeSku(order.item_sku || ""); // Normalize SKU
+      const sku = normalizeSku(order.material_code || order.sku || order.item_sku || ""); // Normalize SKU with fallback
       const qty = Number(order.quantity) || 0;
       if (!skuBranchPaidMap[sku]) skuBranchPaidMap[sku] = {};
       skuBranchPaidMap[sku][brNorm] = (skuBranchPaidMap[sku][brNorm] || 0) + qty;
@@ -1614,13 +1614,6 @@ const materialActiveBranchesMap = {};
 Object.keys(summary).forEach(mCode => {
 
   const normMCode = normalizeSku(mCode);
-
-  // Debugging logs
-  console.log("BOOK MATERIAL:", normMCode);
-  console.log("ORDER SKU:", orderSku);
-  console.log("ORDER QTY:", qty);
-  console.log("BRANCH:", brNorm);
-  console.log("VALID:", validBranches.has(brNorm));
   let totalPaid = 0;
 
   // Reset zone values
@@ -1684,6 +1677,13 @@ Object.keys(summary).forEach(mCode => {
     const orderSku = normalizeSku( // Updated to check multiple fields
       order.material_code || order.sku || order.item_sku || ""
     );
+
+    // Debugging logs
+    console.log("BOOK MATERIAL (summary loop):", normMCode);
+    console.log("ORDER SKU (summary loop):", orderSku);
+    console.log("ORDER QTY (summary loop):", qty);
+    console.log("BRANCH (summary loop):", brNorm);
+    console.log("VALID BRANCH (summary loop):", validBranches.has(brNorm));
 
     const qty =
       Number(order.quantity) || 0;
