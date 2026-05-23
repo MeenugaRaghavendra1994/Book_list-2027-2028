@@ -1012,7 +1012,7 @@ function App() {
     } finally {
       setBulkBookRows([]);
       setBulkBookFileName("");
-      setIsProcessing(false);
+      setIsProcessing(false); // Reset processing state to hide the buffer overlay
     }
   };
 

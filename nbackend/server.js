@@ -192,6 +192,12 @@ app.post("/books/bulk", async (req, res) => {
     console.log(`BULK INSERT: Found ${uniqueSkus.length} unique SKUs, fetched ${pricingList?.length || 0} pricing entries.`);
     const pricingMap = new Map((pricingList || []).map(p => [p.material_code, p]));
 
+    // Optimization: Pre-map kitRows by normalized branch name for O(1) lookup
+    const kitBranchMap = new Map();
+    (kitRows || []).forEach(kr => {
+      kitBranchMap.set(normalize(kr.branch), kr.id);
+    });
+
     // 3. Prepare rows for batch insert
     const allRowsToInsert = [];
 
@@ -216,7 +222,9 @@ app.post("/books/bulk", async (req, res) => {
         : String(branchInput).split(/[,\n\r|]+/).map(s => s.trim()).filter(Boolean);
 
       branchArray.forEach(br => {
-        const kitRow = kitRows.find(kr => normalize(kr.branch) === normalize(br));
+        const normBr = normalize(br);
+        const linkedKitId = kitBranchMap.get(normBr) || kit_id;
+
         allRowsToInsert.push({
           zone: String(d.zone || seedKit.zone).trim(),
           grade: String(d.grade || seedKit.grade).trim(),
@@ -238,19 +246,24 @@ app.post("/books/bulk", async (req, res) => {
           cost_price,
           composite_code: String(d.composite_code || "").trim(),
           composite_name: String(d.composite_name || "").trim(),
-          kit_id: kitRow ? kitRow.id : kit_id
+          kit_id: linkedKitId
         });
       });
     }
 
     // 4. Batch Insert
     if (allRowsToInsert.length > 0) {
-      console.log(`BULK INSERT: Attempting to insert ${allRowsToInsert.length} rows into individual_books.`);
-      const { data, error } = await supabase
-        .from('individual_books')
-        .insert(allRowsToInsert);
-
-      if (error) throw new Error(`Supabase insert error: ${error.message} (Details: ${error.details}, Hint: ${error.hint})`);
+      console.log(`BULK INSERT: Attempting to insert ${allRowsToInsert.length} total rows in chunks.`);
+      
+      // Chunking to prevent timeouts and payload size limits
+      const chunkSize = 500; 
+      for (let i = 0; i < allRowsToInsert.length; i += chunkSize) {
+        const chunk = allRowsToInsert.slice(i, i + chunkSize);
+        const { error } = await supabase.from('individual_books').insert(chunk);
+        if (error) {
+          throw new Error(`Supabase insert error at chunk ${Math.floor(i/chunkSize)}: ${error.message} (Details: ${error.details})`);
+        }
+      }
     }
 
     console.log(`✅ BULK INSERT SUCCESS: ${allRowsToInsert.length} branch-rows inserted for ${books.length} items.`);
