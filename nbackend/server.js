@@ -208,7 +208,7 @@ app.post("/books/bulk", async (req, res) => {
       const qty = Number(d.quantity) || 0;
       const rate = Number(d.per_unit_rate) || 0;
       const mrp = priceEntry?.mrp ?? (Number(d.mrp) || 0);
-      const costPrice = priceEntry?.cost_price ?? (Number(d.cost_price) || 0);
+      const cost_price = priceEntry?.cost_price ?? (Number(d.cost_price) || 0);
       const total = Number(d.total_amount) || qty * rate;
 
       // Determine branches: explicitly from row, or fallback to all branches in this logical kit
