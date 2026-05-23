@@ -1015,11 +1015,6 @@ function App() {
       setIsProcessing(false);
     }
   };
-    setBulkBookRows([]);
-    setBulkBookFileName("");
-    setBulkBookError("");
-    setIsProcessing(false);
-  };
 
   const handleEditTableRow = (row) => {
     if (!userHasRight("Edit/Delete")) {
@@ -3210,6 +3205,6 @@ function App() {
       )}
     </div>
   );
-
+}
 
 export default App;
