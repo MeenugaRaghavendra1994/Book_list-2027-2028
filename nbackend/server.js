@@ -1436,7 +1436,10 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (projectionsError) console.warn("❌ Projections fetch warning:", projectionsError.message);
 
     // Fetch order table data
-    let orderQuery = supabase.from('orders_table').select('*');
+    let orderQuery = supabase
+  .from('orders_table')
+  .select('*')
+  .range(0, 50000);
     if (gradeFilter) orderQuery = orderQuery.eq('grade_name', gradeFilter);
 
     const { data: orderData, error: orderError } = await orderQuery;
@@ -1446,7 +1449,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (orderError) console.warn("❌ Order data fetch warning:", orderError.message);
 
     // Fetch BOM data for 91 series resolution
-    const { data: bomData, error: bomError } = await supabase.from('sku_sap_bom').select('*');
+    const { data: bomData, error: bomError } = L
     if (bomError) console.warn("❌ BOM fetch warning:", bomError.message);
 
     // Create branch to zone map
@@ -1778,8 +1781,15 @@ app.get("/dashboard/paid-quantity-source", async (req, res) => {
     const targetZone = normalizeText(zone);
 
     // Fetch all relevant data
-    const { data: orderData } = await supabase.from('orders_table').select('*');
-    const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
+    const { data: orderData } =
+  await supabase
+    .from('orders_table')
+    .select('*')
+    .range(0, 50000);
+    const { data: bomData } = await supabase
+  .from('sku_sap_bom')
+  .select('*')
+  .range(0, 50000);
     const { data: booksData } = await supabase.from('individual_books').select('*');
     const { data: branchList } = await supabase.from('branches').select('name, zone');
 
@@ -1891,9 +1901,19 @@ app.get("/dashboard/total-paid-quantity-source", async (req, res) => {
     if (!material_code) return res.status(400).json({ error: "Material code required" });
     const normMaterialCode = normalizeSku(material_code);
 
-    const { data: orderData } = await supabase.from('orders_table').select('*');
-    const { data: bomData } = await supabase.from('sku_sap_bom').select('*');
-    const { data: booksData } = await supabase.from('individual_books').select('*');
+    const { data: orderData } =
+  await supabase
+    .from('orders_table')
+    .select('*')
+    .range(0, 50000);
+    const { data: bomData } = await supabase
+  .from('sku_sap_bom')
+  .select('*')
+  .range(0, 50000);
+    const { data: booksData } = await supabase
+  .from('individual_books')
+  .select('*')
+  .range(0, 50000);
 
     const kitMap = {};
     const activeBranchesNorm = new Set();
