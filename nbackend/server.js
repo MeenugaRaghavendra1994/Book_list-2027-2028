@@ -1449,7 +1449,10 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (orderError) console.warn("❌ Order data fetch warning:", orderError.message);
 
     // Fetch BOM data for 91 series resolution
-    const { data: bomData, error: bomError } = L
+    const { data: bomData, error: bomError } = await supabase
+      .from('sku_sap_bom')
+      .select('*')
+      .range(0, 50000);
     if (bomError) console.warn("❌ BOM fetch warning:", bomError.message);
 
     // Create branch to zone map
