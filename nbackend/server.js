@@ -1639,15 +1639,22 @@ const validMaterialBranchMap = new Set();
     book.material_code
   );
 
-  const br = normalizeText(
+  if (!mat) return;
+
+  const branches = String(
     book.branch_name || book.branch || ""
-  );
+  )
+    .split(/[,\n\r|]+/)
+    .map(s => normalizeText(s))
+    .filter(Boolean);
 
-  if (!mat || !br) return;
+  branches.forEach(br => {
 
-  validMaterialBranchMap.add(
-    `${mat}__${br}`
-  );
+    validMaterialBranchMap.add(
+      `${mat}__${br}`
+    );
+
+  });
 });
 
   // LOOP ORDERS
