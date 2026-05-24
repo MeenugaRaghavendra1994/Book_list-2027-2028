@@ -1662,7 +1662,7 @@ const validMaterialBranchMap = new Set();
   `${normMCode}__${brNorm}`;
 
 if (
-  !validMaterialBranches.has(
+  !validMaterialBranchMap.has(
     materialBranchKey
   )
 ) {
@@ -1701,7 +1701,8 @@ if (
     console.log("ORDER SKU:", orderSku);
     console.log("ORDER QTY:", qty);
     console.log("BRANCH:", brNorm);
-    console.log("VALID BRANCH:", validBranches.has(brNorm));
+    console.log("VALID MATERIAL BRANCH:",validMaterialBranchMap.has(materialBranchKey)
+);
 
     let contribution = 0;
 
