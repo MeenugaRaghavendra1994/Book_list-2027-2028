@@ -1630,24 +1630,22 @@ Object.keys(summary).forEach(mCode => {
     summary[mCode].zone_data[z].paid_quantity = 0;
   });
 
-  // material + branch validation
-const validMaterialBranches = new Set();
+ // VALID material + branch combinations
+const validMaterialBranchMap = new Set();
 
 (allBooksData || []).forEach(book => {
 
-  const mat =
-    normalizeSku(book.material_code);
+  const mat = normalizeSku(
+    book.material_code
+  );
 
-  const br =
-    normalizeText(
-      book.branch_name ||
-      book.branch ||
-      ""
-    );
+  const br = normalizeText(
+    book.branch_name || book.branch || ""
+  );
 
   if (!mat || !br) return;
 
-  validMaterialBranches.add(
+  validMaterialBranchMap.add(
     `${mat}__${br}`
   );
 });
