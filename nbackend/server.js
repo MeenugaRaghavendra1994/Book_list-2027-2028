@@ -1401,6 +1401,17 @@ async function rebuildDashboardSummary() {
   });
 
   // 4. Map Orders: branch|sku -> total_qty
+  console.log("TOTAL ORDERS:", orders?.length);
+
+console.log(
+  "FIRST ORDER:",
+  orders?.[0]
+);
+
+console.log(
+  "ORDER MAP SAMPLE:",
+  Array.from(orderMap.entries()).slice(0,5)
+);
 const orderMap = new Map();
 
 (orders || []).forEach(o => {
@@ -1464,6 +1475,21 @@ console.log(
 
   // 6. Calculate Paid Quantities with BOM expansion for each record
   for (const [key, row] of summaryMap) {
+    console.log(
+  "CHECKING:",
+  row.material_code,
+  row.branch_name
+);
+
+console.log(
+  "DIRECT KEY:",
+  `${brNorm}|${mSku}`
+);
+
+console.log(
+  "DIRECT VALUE:",
+  orderMap.get(`${brNorm}|${mSku}`)
+);
     const brNorm = normalizeText(row.branch_name);
     const mSku = row.material_code;
 
