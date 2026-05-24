@@ -1735,9 +1735,19 @@ if (
           normalizeSku(bom.component_code);
 
         if (
-          parentSku === orderSku &&
-          componentSku === normMCode
-        ) {
+  parentSku === orderSku &&
+  componentSku === normMCode
+) {
+
+  // STRICT branch validation
+  const strictKey =
+    `${normMCode}__${brNorm}`;
+
+  if (
+    !validMaterialBranchMap.has(strictKey)
+  ) {
+    return;
+  }
 
           contribution +=
             qty *
