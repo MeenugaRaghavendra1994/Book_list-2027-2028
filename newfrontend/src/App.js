@@ -417,6 +417,24 @@ function App() {
     }
   }, [viewMode, dashboardFilters]);
 
+  const handleRefreshDashboard = async () => {
+    if (!window.confirm("This will recalculate the entire dashboard summary table from source data. This may take a minute. Continue?")) return;
+    setIsProcessing(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/dashboard/rebuild`);
+      if (res.data.success) {
+        alert(`Dashboard rebuilt successfully! Processed ${res.data.count} material-branch records.`);
+        // Force trigger the data reload by spreading current filters
+        setDashboardFilters({ ...dashboardFilters });
+      }
+    } catch (err) {
+      console.error("Rebuild failed:", err);
+      alert("Failed to rebuild dashboard: " + (err.response?.data?.error || err.message));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   useEffect(() => {
     if (viewMode === "order-table") {
       setIsOrderTableLoading(true);
@@ -2521,7 +2539,10 @@ function App() {
           <div className="page-wrapper py-4 px-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h2 className="page-title">📊 Item Wise Summary Dashboard</h2>
-              <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
+              <div className="d-flex gap-2">
+                <button className="btn btn-primary btn-sm" onClick={handleRefreshDashboard}>🔄 Refresh Summary Table</button>
+                <button className="btn btn-outline-secondary btn-sm" onClick={() => setViewMode('kits')}>Back to App</button>
+              </div>
             </div>
 
             {/* Dashboard Filters */}
