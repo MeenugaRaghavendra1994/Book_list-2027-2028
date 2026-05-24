@@ -1401,14 +1401,40 @@ async function rebuildDashboardSummary() {
   });
 
   // 4. Map Orders: branch|sku -> total_qty
-  const orderMap = new Map();
-  (orders || []).forEach(o => {
-    const brNorm = normalizeText(o.branch_name || o.branch);
-    const sku = normalizeSku(o.material_code || o.sku || o.item_sku);
-    const key = `${brNorm}|${sku}`;
-    orderMap.set(key, (orderMap.get(key) || 0) + (Number(o.quantity) || 0));
-  });
+const orderMap = new Map();
 
+(orders || []).forEach(o => {
+
+  const brNorm = normalizeText(
+    o.branch_name ||
+    o.branch ||
+    ""
+  );
+
+  const sku = normalizeSku(
+    o.item_sku || ""
+  );
+
+  if (!brNorm || !sku) {
+    return;
+  }
+
+  const qty =
+    Number(o.quantity) || 0;
+
+  const key =
+    `${brNorm}|${sku}`;
+
+  orderMap.set(
+    key,
+    (orderMap.get(key) || 0) + qty
+  );
+});
+
+console.log(
+  "TOTAL ORDER MAP SIZE:",
+  orderMap.size
+);
   // 5. Build Material-Branch base entries (from individual_books)
   const summaryMap = new Map(); // Key: material_code|branch_name|grade
 
