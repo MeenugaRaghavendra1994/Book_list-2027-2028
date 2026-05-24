@@ -1500,7 +1500,22 @@ console.log(
     (boms || []).forEach(bom => {
       if (normalizeSku(bom.component_code) === mSku) {
         const parentSku = normalizeSku(bom.composite_code);
-        const parentOrders = orderMap.get(`${brNorm}|${parentSku}`) || 0;
+        const parentBookExists =
+ (books || []).some(b =>
+    normalizeSku(b.material_code) === mSku &&
+    normalizeText(
+      b.branch_name
+    ) === brNorm
+ );
+
+const parentOrders =
+ parentBookExists
+   ? (
+      orderMap.get(
+        `${brNorm}|${parentSku}`
+      ) || 0
+     )
+   : 0;
         totalPaid += parentOrders * (Number(bom.component_quantity) || 1);
       }
     });
