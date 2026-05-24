@@ -1401,20 +1401,9 @@ async function rebuildDashboardSummary() {
   });
 
   // 4. Map Orders: branch|sku -> total_qty
-  console.log("TOTAL ORDERS:", orders?.length);
+  const orderMap = new Map();
 
-console.log(
-  "FIRST ORDER:",
-  orders?.[0]
-);
-
-console.log(
-  "ORDER MAP SAMPLE:",
-  Array.from(orderMap.entries()).slice(0,5)
-);
-const orderMap = new Map();
-
-(orders || []).forEach(o => {
+  (orders || []).forEach(o => {
 
   const brNorm = normalizeText(
     o.branch_name ||
@@ -1442,10 +1431,11 @@ const orderMap = new Map();
   );
 });
 
-console.log(
-  "TOTAL ORDER MAP SIZE:",
-  orderMap.size
-);
+  console.log("TOTAL ORDERS:", orders?.length);
+  console.log("TOTAL ORDER MAP SIZE:", orderMap.size);
+  console.log("FIRST ORDER:", orders?.[0]);
+  console.log("ORDER MAP SAMPLE:", Array.from(orderMap.entries()).slice(0, 5));
+
   // 5. Build Material-Branch base entries (from individual_books)
   const summaryMap = new Map(); // Key: material_code|branch_name|grade
 
@@ -1473,51 +1463,30 @@ console.log(
     entry.projection_quantity += pQty * (Number(b.quantity) || 0);
   });
 
+  // Optimization: Pre-calculate BOM component map to avoid nested O(N) scans
+  const bomComponentMap = new Map();
+  (boms || []).forEach(bom => {
+    const cSku = normalizeSku(bom.component_code);
+    if (!bomComponentMap.has(cSku)) bomComponentMap.set(cSku, []);
+    bomComponentMap.get(cSku).push({
+      parentSku: normalizeSku(bom.composite_code),
+      qty: Number(bom.component_quantity) || 1
+    });
+  });
+
   // 6. Calculate Paid Quantities with BOM expansion for each record
   for (const [key, row] of summaryMap) {
-    console.log(
-  "CHECKING:",
-  row.material_code,
-  row.branch_name
-);
-
-console.log(
-  "DIRECT KEY:",
-  `${brNorm}|${mSku}`
-);
-
-console.log(
-  "DIRECT VALUE:",
-  orderMap.get(`${brNorm}|${mSku}`)
-);
     const brNorm = normalizeText(row.branch_name);
     const mSku = row.material_code;
 
     // Direct SKU orders for this branch
     let totalPaid = orderMap.get(`${brNorm}|${mSku}`) || 0;
 
-    // BOM Expansion: Sum up orders for kits that contain this component as a part of their BOM
-    (boms || []).forEach(bom => {
-      if (normalizeSku(bom.component_code) === mSku) {
-        const parentSku = normalizeSku(bom.composite_code);
-        const parentBookExists =
- (books || []).some(b =>
-    normalizeSku(b.material_code) === mSku &&
-    normalizeText(
-      b.branch_name
-    ) === brNorm
- );
-
-const parentOrders =
- parentBookExists
-   ? (
-      orderMap.get(
-        `${brNorm}|${parentSku}`
-      ) || 0
-     )
-   : 0;
-        totalPaid += parentOrders * (Number(bom.component_quantity) || 1);
-      }
+    // BOM Expansion: Sum up orders for kits that contain this component
+    const parentKits = bomComponentMap.get(mSku) || [];
+    parentKits.forEach(kit => {
+      const parentOrders = orderMap.get(`${brNorm}|${kit.parentSku}`) || 0;
+      totalPaid += parentOrders * kit.qty;
     });
 
     row.paid_quantity = totalPaid;
@@ -2112,6 +2081,708 @@ app.post("/run-dispatch-load", async (req, res) => {
   let logs = [];
   const log = (message) => {
     console.log(message);
+    logs.push(message);
+  };
+
+  try {
+    const targetBranches = branchIds || [3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 24, 26, 27, 30, 41, 57, 66, 67, 69, 70, 72, 73, 76, 77, 81, 82, 94, 101, 123, 124, 194, 205, 209, 210, 213, 239, 240, 241, 242, 244, 245, 246, 248, 249, 250, 251, 252, 253, 254, 257, 258, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 280, 281, 282, 283, 285, 286, 287, 288, 289, 290, 291, 292, 293, 296, 297, 298, 299, 300, 301, 305, 338, 353, 354, 355, 356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 369, 370, 371, 423, 425, 426, 427, 428, 429, 430, 432, 433, 434, 435, 436, 437, 438, 442, 443, 444, 445, 446, 447, 449, 450, 451];
+    log(`🚀 Processing ${targetBranches.length} branches...`);
+
+    const accessToken = await getAccessToken();
+    const { data: branchMapping } = await supabase.from('branches').select('name, zone');
+    const branchToZoneMapInternal = {};
+    (branchMapping || []).forEach(b => { branchToZoneMapInternal[String(b.name || "").trim().toLowerCase()] = b.zone; });
+
+    const aggregatedMap = new Map();
+    const failedBranches = [];
+    const branchQueue = [...targetBranches];
+    const concurrencyLimit = 10;
+    let totalRawProcessed = 0;
+
+    const worker = async () => {
+      while (branchQueue.length > 0) {
+        const branchId = branchQueue.shift();
+        let success = false;
+        const MAX_RETRIES = 3;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          log(`⏳ Branch ${branchId}: Fetching attempt ${attempt}/${MAX_RETRIES}...`);
+          const result = await processBranch(branchId, accessToken, branchToZoneMapInternal);
+          if (result && result.aggregated) {
+            totalRawProcessed += result.count;
+            for (const [key, value] of result.aggregated) {
+              if (aggregatedMap.has(key)) aggregatedMap.get(key).quantity += value.quantity;
+              else aggregatedMap.set(key, value);
+            }
+            log(`✅ Branch ${branchId} done: ${result.count} raw rows.`);
+            await supabase.from('completed_branches').upsert({ branch_id: branchId, status: 'Completed', rows_fetched: result.count, error_message: null, processed_at: new Date().toISOString() }, { onConflict: 'branch_id' });
+            success = true;
+            break;
+          } else {
+            const errorInfo = String((result && result.error) ? result.error : "Network error");
+            log(`⚠️ Branch ${branchId} attempt ${attempt} failed: ${errorInfo}`);
+            if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 1000 * attempt));
+            else await supabase.from('completed_branches').upsert({ branch_id: branchId, status: 'Failed', rows_fetched: 0, error_message: errorInfo, processed_at: new Date().toISOString() }, { onConflict: 'branch_id' });
+          }
+        }
+        if (!success) failedBranches.push(branchId);
+      }
+    };
+
+    await Promise.all(Array.from({ length: concurrencyLimit }, worker));
+
+    const aggRows = Array.from(aggregatedMap.values());
+    if (aggRows.length > 0) {
+      log(`Batch inserting ${aggRows.length} records...`);
+      const batchSize = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app; = 1000;
+      for (let i = 0; i < aggRows.length; i += batchSize) {
+        const batch = aggRows.slice(i, i + batchSize);
+        const { error: insertError } = await supabase.from('orders_table').insert(batch);
+        if (insertError) throw insertError;
+      }
+    }
+    res.json({ success: true, message: `Completed ${targetBranches.length} branches.`, logs, failedBranches });
+  } catch (err) {
+    const errorMsg = String(err?.message || JSON.stringify(err));
+    res.status(500).json({ success: false, error: errorMsg, logs });
+  }
+});
+
+/* ============================
+   📊 GET ORDER TABLE
+============================ */
+app.get("/order-table", async (req, res) => {
+  try {
+    const branchNameFilter = String(req.query.branch_name || "").trim();
+    const gradeNameFilter = String(req.query.grade_name || "").trim();
+    const itemSkuFilter = String(req.query.item_sku || "").trim();
+    const itemNameFilter = String(req.query.item_name || "").trim();
+    const zoneFilter = String(req.query.zone || "").trim();
+
+    let query = supabase.from('orders_table').select('*');
+
+    if (branchNameFilter) query = query.ilike('branch_name', `%${branchNameFilter}%`);
+    if (gradeNameFilter) query = query.ilike('grade_name', `%${gradeNameFilter}%`);
+    if (itemSkuFilter) query = query.ilike('item_sku', `%${itemSkuFilter}%`);
+    if (itemNameFilter) query = query.ilike('item_name', `%${itemNameFilter}%`);
+    if (zoneFilter) query = query.eq('zone', zoneFilter);
+
+    query = query.order('branch_name', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error) throw error; // Propagate Supabase errors
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDER TABLE ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🚀 START SERVER
+============================ */
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () =>
+    console.log("✅ Backend running at http://localhost:5000")
+  );
+}
+
+module.exports = app;ge);
     logs.push(message);
   };
 
