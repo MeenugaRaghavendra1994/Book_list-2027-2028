@@ -1630,25 +1630,27 @@ Object.keys(summary).forEach(mCode => {
     summary[mCode].zone_data[z].paid_quantity = 0;
   });
 
-  // VALID BRANCHES FROM individual_books
-  const validBranches = new Set();
+  // material + branch validation
+const validMaterialBranches = new Set();
 
-  (allBooksData || []).forEach(book => {
+(allBooksData || []).forEach(book => {
 
-    if (
-      normalizeSku(book.material_code) !== normMCode
-    ) {
-      return;
-    }
+  const mat =
+    normalizeSku(book.material_code);
 
-    const br = normalizeText(
-      book.branch_name || book.branch || ""
+  const br =
+    normalizeText(
+      book.branch_name ||
+      book.branch ||
+      ""
     );
 
-    if (br) {
-      validBranches.add(br);
-    }
-  });
+  if (!mat || !br) return;
+
+  validMaterialBranches.add(
+    `${mat}__${br}`
+  );
+});
 
   // LOOP ORDERS
   (orderData || []).forEach(order => {
@@ -1658,9 +1660,16 @@ Object.keys(summary).forEach(mCode => {
     );
 
     // ONLY VALID individual_books BRANCHES
-    if (!validBranches.has(brNorm)) {
-      return;
-    }
+    const materialBranchKey =
+  `${normMCode}__${brNorm}`;
+
+if (
+  !validMaterialBranches.has(
+    materialBranchKey
+  )
+) {
+  return;
+}
 
     // FILTER BY DASHBOARD BRANCH
     if (
