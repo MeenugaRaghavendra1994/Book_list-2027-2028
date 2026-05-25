@@ -82,25 +82,72 @@ const BranchMultiSelect = ({ value = [], options = [], onChange, disabled = fals
       </div>
 
       {isOpen && !disabled && (
-        <div className="position-absolute w-100 bg-white border rounded shadow-lg mt-1" style={{ maxHeight: 260, overflowY: 'auto', zIndex: 1050, border: '1px solid #ced4da' }}>
-          {filteredOptions.length > 0 ? filteredOptions.map((option) => {
-            const normalized = String(option || "").trim();
-            const checked = normalizedValue.some(v => v.toLowerCase() === normalized.toLowerCase());
-            return (
-              <button
-                key={normalized}
-                type="button"
-                className="dropdown-item d-flex align-items-center justify-content-between py-2 px-3"
-                style={{ borderBottom: '1px solid #f8f9fa', fontSize: '0.9rem', fontWeight: '500' }}
-                onClick={() => toggleOption(normalized)}
-              >
-                <span>{normalized}</span>
-                <span>{checked ? <span className="text-success fw-bold">✓</span> : ''}</span>
-              </button>
-            );
-          }) : (
-            <div className="p-3 text-muted">No branches found.</div>
+        <div
+          className="position-absolute w-100 bg-white border rounded shadow-lg mt-1"
+          style={{
+            maxHeight: 260,
+            overflowY: 'auto',
+            zIndex: 1050,
+            border: '1px solid #ced4da'
+          }}
+        >
+          {/* Select All / Unselect All */}
+          <div className="p-2 border-bottom bg-light d-flex justify-content-between">
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={() => onChange(filteredOptions)}
+            >
+              Select All
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-danger"
+              onClick={() => onChange([])}
+            >
+              Clear All
+            </button>
+          </div>
+
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => {
+              const normalized = String(option || "").trim();
+
+              const checked = normalizedValue.some(
+                v => v.toLowerCase() === normalized.toLowerCase()
+              );
+
+              return (
+                <button
+                  key={normalized}
+                  type="button"
+                  className="dropdown-item d-flex align-items-center justify-content-between py-2 px-3"
+                  style={{
+                    borderBottom: '1px solid #f8f9fa',
+                    fontSize: '0.9rem',
+                    fontWeight: '500'
+                  }}
+                  onClick={() => toggleOption(normalized)}
+                >
+                  <span>{normalized}</span>
+
+                  <span>
+                    {checked ? (
+                      <span className="text-success fw-bold">✓</span>
+                    ) : (
+                      ''
+                    )}
+                  </span>
+                </button>
+              );
+            })
+          ) : (
+            <div className="p-3 text-muted">
+              No branches found.
+            </div>
           )}
+
           <div className="p-2 border-top bg-light d-flex justify-content-end">
             <button type="button" className="btn btn-sm btn-success" onClick={() => setIsOpen(false)}>
               ✓ Done
