@@ -1382,11 +1382,11 @@ async function rebuildDashboardSummary() {
     { data: boms },
     { data: branches }
   ] = await Promise.all([
-    supabase.from('individual_books').select('*'),
-    supabase.from('orders_table').select('*').range(0, 50000),
+    supabase.from('individual_books').select('*'), 
+    supabase.from('orders_table').select('*'),
     supabase.from('student_projections').select('*'),
-    supabase.from('sku_sap_bom').select('*').range(0, 50000),
-    supabase.from('branches').select('name, zone')
+    supabase.from('sku_sap_bom').select('*'),
+    supabase.from('branches').select('name, zone') // Fetch all branches for zone mapping
   ]);
 
   // 2. Map branch to zone for reliable lookups
@@ -1400,103 +1400,85 @@ async function rebuildDashboardSummary() {
     projMap.set(key, (projMap.get(key) || 0) + (Number(p.total_projection) || 0));
   });
 
-  // 4. Map Orders: branch|sku -> total_qty
-const orderMap = new Map();
+  // 4. Aggregate orders by branch|sku for quick lookup
+  const orderAggregatedMap = new Map(); // Key: branch_norm|sku_norm -> total_qty
+  (orders || []).forEach(o => {
+    const brNorm = normalizeText(o.branch_name || o.branch || "");
+    const sku = normalizeSku(o.material_code || o.sku || o.item_sku || "");
+    if (!brNorm || !sku) return;
+    const key = `${brNorm}|${sku}`;
+    orderAggregatedMap.set(key, (orderAggregatedMap.get(key) || 0) + (Number(o.quantity) || 0));
+  });
 
-(orders || []).forEach(o => {
-
-  const brNorm = normalizeText(
-    o.branch_name ||
-    o.branch ||
-    ""
-  );
-
-  const sku = normalizeSku(
-    o.material_code ||
-    o.sku ||
-    o.item_sku ||
-    ""
-  );
-
-  if (!brNorm || !sku) {
-    return;
-  }
-
-  const qty =
-    Number(o.quantity) || 0;
-
-  const key =
-    `${brNorm}|${sku}`;
-
-  orderMap.set(
-    key,
-    (orderMap.get(key) || 0) + qty
-  );
-});
-
-console.log("TOTAL ORDERS:", orders?.length);
-console.log("ORDER MAP SIZE:", orderMap.size);
-console.log(
-  "ORDER MAP SAMPLE:",
-  Array.from(orderMap.entries()).slice(0,5)
-);
-  // 5. Build Material-Branch base entries (from individual_books)
+  // 5. Build Material-Branch-Grade entries from ALL sources
   const summaryMap = new Map(); // Key: material_code|branch_name|grade
 
-  (books || []).forEach(b => {
-    const sku = normalizeSku(b.material_code);
-    const brRaw = b.branch_name || b.branch || "";
-    const brNorm = normalizeText(brRaw);
-    const grade = String(b.grade || "").trim();
-    const key = `${sku}|${brNorm}|${grade}`;
+  // Helper to add/initialize entry
+  const addEntry = (materialCode, materialName, branchName, gradeName, zoneName) => {
+    if (!materialCode) return null;
+    const brNorm = normalizeText(branchName);
+    const skuNorm = normalizeSku(materialCode);
+    const gradeNorm = String(gradeName || "").trim();
+    const key = `${skuNorm}|${brNorm}|${gradeNorm}`;
 
     if (!summaryMap.has(key)) {
       summaryMap.set(key, {
-        material_code: sku,
-        material_name: b.material_name,
-        branch_name: brRaw,
-        zone: b.zone || branchToZoneMap.get(brNorm) || "Unknown",
-        grade: grade,
+        material_code: skuNorm,
+        material_name: materialName || "Unknown",
+        branch_name: branchName || "",
+        zone: zoneName || branchToZoneMap.get(brNorm) || "Unknown",
+        grade: gradeNorm,
         projection_quantity: 0,
         paid_quantity: 0
       });
     }
-    
-    const entry = summaryMap.get(key);
-    const pQty = projMap.get(`${brNorm}|${grade.toLowerCase()}`) || 0;
+    return summaryMap.get(key);
+  };
+
+  // Initialize from individual_books (Source for Projections)
+  (books || []).forEach(b => {
+    const entry = addEntry(b.material_code, b.material_name, b.branch_name || b.branch, b.grade, b.zone);
+    if (!entry) return;
+    const brNorm = normalizeText(entry.branch_name);
+    const pQty = projMap.get(`${brNorm}|${String(entry.grade).toLowerCase()}`) || 0;
     entry.projection_quantity += pQty * (Number(b.quantity) || 0);
   });
 
-  // Optimization: Pre-calculate BOM component map to avoid nested O(N) scans
-  const bomComponentMap = new Map();
+  // Initialize from orders_table (Source for Paid Quantity)
+  (orders || []).forEach(o => {
+    addEntry(o.material_code || o.sku || o.item_sku, o.item_name || o.name, o.branch_name || o.branch, o.grade_name, o.zone);
+  });
+
+  // 6. Pre-calculate BOM component map
+  const bomComponentToParentMap = new Map();
   (boms || []).forEach(bom => {
-    const cSku = normalizeSku(bom.component_code);
-    if (!bomComponentMap.has(cSku)) bomComponentMap.set(cSku, []);
-    bomComponentMap.get(cSku).push({
+    const componentSku = normalizeSku(bom.component_code);
+    if (!bomComponentToParentMap.has(componentSku)) bomComponentToParentMap.set(componentSku, []);
+    bomComponentToParentMap.get(componentSku).push({
       parentSku: normalizeSku(bom.composite_code),
-      qty: Number(bom.component_quantity) || 1
+      qtyPerParent: Number(bom.component_quantity) || 1
     });
   });
 
-  // 6. Calculate Paid Quantities with BOM expansion for each record
+  // 7. Calculate Paid Quantities with BOM expansion
   for (const [key, row] of summaryMap) {
     const brNorm = normalizeText(row.branch_name);
     const mSku = row.material_code;
 
     // Direct SKU orders for this branch
-    let totalPaid = orderMap.get(`${brNorm}|${mSku}`) || 0;
+    let totalPaid = orderAggregatedMap.get(`${brNorm}|${mSku}`) || 0;
 
     // BOM Expansion: Sum up orders for kits that contain this component
-    const parentKits = bomComponentMap.get(mSku) || [];
-    parentKits.forEach(kit => {
-      const parentOrders = orderMap.get(`${brNorm}|${kit.parentSku}`) || 0;
-      totalPaid += parentOrders * kit.qty;
+    const parentKits = bomComponentToParentMap.get(mSku) || [];
+    parentKits.forEach(bomEntry => {
+      const parentOrders = orderAggregatedMap.get(`${brNorm}|${bomEntry.parentSku}`) || 0;
+      totalPaid += parentOrders * bomEntry.qtyPerParent;
     });
 
     row.paid_quantity = totalPaid;
   }
 
-  // 7. Clear and Refresh dashboard_item_summary Table
+  // 8. Clear and Refresh dashboard_item_summary Table
   const finalRows = Array.from(summaryMap.values()).map(r => ({
     ...r,
     total_requirement: Math.max(r.projection_quantity, r.paid_quantity),

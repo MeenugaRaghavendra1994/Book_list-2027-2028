@@ -2653,11 +2653,11 @@ function App() {
                       <th rowSpan="2" className="py-3 px-3 align-middle">Material Code</th>
                       <th rowSpan="2" className="py-3 px-3 align-middle">Material Name</th>
                       {dashboardData.zones.map(zone => (
-                        <th key={zone} colSpan="2" className="text-center py-2">{zone}</th>
+                        <th key={zone} colSpan="2" className="text-center py-2">{zone || "Unknown Zone"}</th>
                       ))}
                       <th rowSpan="2" className="py-3 px-3 align-middle">Total Projection</th>
                       <th rowSpan="2" className="py-3 px-3 align-middle">Total paid quantity</th>
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Total Requirement</th>
+                      <th rowSpan="2" className="py-3 px-3 align-middle">Total Required</th>
                       <th rowSpan="2" className="py-3 px-3 align-middle">Already Ordered Quantity</th>
                       <th rowSpan="2" className="py-3 px-3 align-middle">Final requirement</th>
                     </tr>
@@ -2665,15 +2665,15 @@ function App() {
                       {dashboardData.zones.map(zone => (
                         <React.Fragment key={`${zone}-sub`}>
                           <th className="text-center py-2">Projection</th>
-                          <th className="text-center py-2">paid quantity</th>
+                          <th className="text-center py-2">Paid Qty</th>
                         </React.Fragment>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
                     {isDashboardLoading ? (
-                      <tr>
-                        <td colSpan={4 + (dashboardData.zones.length * 2)} className="text-center py-5">
+                      <tr className="text-center">
+                        <td colSpan={5 + (dashboardData.zones.length * 2)} className="py-5">
                           <div className="spinner-border spinner-border-sm text-danger me-2" role="status"></div>
                           <span className="fw-bold text-danger">Fetching Summary Data...</span>
                         </td>
@@ -2681,31 +2681,27 @@ function App() {
                     ) : dashboardData.data.length > 0 ? dashboardData.data.map((item, idx) => (
                       <tr key={idx}>
                         <td className="px-3">{item.material_code || "N/A"}</td>
-                        <td className="px-3">{item.material_name || "N/A"}</td>
+                        <td className="px-3 text-start">{item.material_name || "N/A"}</td>
                         {dashboardData.zones.map(zone => (
                           <React.Fragment key={`${item.material_code}-${zone}`}>
                             <td className="px-3 text-center">
-                              <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowProjectionSource(item, zone)}>
-                                {item.zone_data[zone]?.projection || 0}
-                              </span>
+                              {item.zone_data?.[zone] ? (
+                                <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowProjectionSource(item, zone)}>
+                                  {item.zone_data[zone].projection || 0}
+                                </span>
+                              ) : 0}
                             </td>
                             <td className="px-3 text-center">
-                              <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowPaidQtySource(item, zone)}>
-                                {item.zone_data[zone]?.paid_quantity || 0}
-                              </span>
+                              {item.zone_data?.[zone] ? (
+                                <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowPaidQtySource(item, zone)}>
+                                  {item.zone_data[zone].paid_quantity || 0}
+                                </span>
+                              ) : 0}
                             </td>
                           </React.Fragment>
                         ))}
-                        <td className="px-3 text-center">
-                          <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalProjectionSource(item)}>
-                            {item.total_projection || 0}
-                          </span>
-                        </td>
-                        <td className="px-3 text-center">
-                          <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalPaidQtySource(item)}>
-                            {item.total_paid_quantity || 0}
-                          </span>
-                        </td>
+                        <td className="px-3 text-center"><span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalProjectionSource(item)}>{item.total_projection || 0}</span></td>
+                        <td className="px-3 text-center"><span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalPaidQtySource(item)}>{item.total_paid_quantity || 0}</span></td>
                         <td className="px-3 text-center fw-bold bg-light">{item.total_requirement || 0}</td>
                         <td className="px-3 text-center fw-bold bg-light">
                           <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowOrderedSource(item)}>
