@@ -1531,44 +1531,54 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     if (error) throw error;
 
     // 2. Fetch POs globally for calculation subtract logic
-    const { data: poData } = await supabase.from('purchase_orders').select('sku, quantity');
+    const { data: poData } = await supabase.from('purchase_orders').select('sku, quantity'); // Fetch all POs
     const poMap = new Map();
     (poData || []).forEach(po => {
       const sku = normalizeSku(po.sku);
       poMap.set(sku, (poMap.get(sku) || 0) + (Number(po.quantity) || 0));
     });
 
-    // 3. Stop aggregation by material code to show all 14K+ records (granular rows).
-    // This allows vertical scrolling for all items as requested instead of compressing to 29 rows.
-    const uniqueZonesSet = new Set((rows || []).map(r => r.zone));
-    const allZonesSorted = Array.from(uniqueZonesSet).filter(Boolean).sort();
-    
-    const resultData = (rows || []).map(r => {
-      const sku = normalizeSku(r.material_code);
-      const totalReq = Math.max(Number(r.projection_quantity) || 0, Number(r.paid_quantity) || 0);
-      const poQty = poMap.get(sku) || 0;
+    // 3. Aggregate granular branch rows into the material-grouped structure expected by the frontend
+    const aggregated = {};
+    const uniqueZones = new Set();
 
-      // Populate zone_data structure per row so the dashboard table columns (Zones) still work correctly.
-      const zone_data = {};
-      allZonesSorted.forEach(z => {
-        zone_data[z] = {
-          projection: z === r.zone ? (Number(r.projection_quantity) || 0) : 0,
-          paid_quantity: z === r.zone ? (Number(r.paid_quantity) || 0) : 0
+    (rows || []).forEach(r => {
+      const sku = r.material_code;
+      const zone = r.zone;
+      uniqueZones.add(zone);
+
+      if (!aggregated[sku]) {
+        aggregated[sku] = {
+          material_code: sku,
+          material_name: r.material_name,
+          zone_data: {},
+          total_projection: 0,
+          total_paid_quantity: 0
         };
       });
 
+      const item = aggregated[sku];
+      if (!item.zone_data[zone]) item.zone_data[zone] = { projection: 0, paid_quantity: 0 };
+      
+      item.zone_data[zone].projection += Number(r.projection_quantity) || 0;
+      item.zone_data[zone].paid_quantity += Number(r.paid_quantity) || 0;
+      item.total_projection += Number(r.projection_quantity) || 0;
+      item.total_paid_quantity += Number(r.paid_quantity) || 0;
+    });
+
+    // 4. Calculate final requirement fields and format for return
+    const allZonesSorted = Array.from(uniqueZones).sort();
+    const resultData = Object.values(aggregated).map(item => {
+      const totalReq = Math.max(item.total_projection, item.total_paid_quantity);
+      const poQty = poMap.get(item.material_code) || 0;
       return {
         ...r,
-        total_projection: Number(r.projection_quantity) || 0,
-        total_paid_quantity: Number(r.paid_quantity) || 0,
-        zone_data,
         total_requirement: totalReq,
         already_ordered_quantity: poQty,
         final_requirement: totalReq - poQty
       };
-    });
+    }).sort((a, b) => a.material_code.localeCompare(b.material_code));
 
-    // 4. Sort results by material code
     resultData.sort((a, b) => (a.material_code || "").localeCompare(b.material_code || ""));
 
     res.json({ zones: allZonesSorted, data: resultData });
