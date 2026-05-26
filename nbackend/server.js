@@ -1555,7 +1555,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           total_projection: 0,
           total_paid_quantity: 0
         };
-      });
+      }
 
       const item = aggregated[sku];
       if (!item.zone_data[zone]) item.zone_data[zone] = { projection: 0, paid_quantity: 0 };
@@ -1572,7 +1572,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const totalReq = Math.max(item.total_projection, item.total_paid_quantity);
       const poQty = poMap.get(item.material_code) || 0;
       return {
-        ...r,
+        ...item,
         total_requirement: totalReq,
         already_ordered_quantity: poQty,
         final_requirement: totalReq - poQty
