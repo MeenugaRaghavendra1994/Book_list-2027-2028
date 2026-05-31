@@ -267,12 +267,17 @@ app.post("/books/bulk", async (req, res) => {
     if (allRowsToInsert.length > 0) {
       console.log(`BULK INSERT: Attempting to insert ${allRowsToInsert.length} total rows in chunks.`);
       
+      // Diagnostic Log: Check the keys of the first row to ensure they match DB columns
+      console.log("DIAGNOSTIC: Keys being sent to Supabase:", Object.keys(allRowsToInsert[0]));
+      console.log("DIAGNOSTIC: Sample row projection_status:", allRowsToInsert[0].projection_status);
+      
       // Chunking to prevent timeouts and payload size limits
       const chunkSize = 500; 
       for (let i = 0; i < allRowsToInsert.length; i += chunkSize) {
         const chunk = allRowsToInsert.slice(i, i + chunkSize);
         const { error } = await supabase.from('individual_books').insert(chunk);
         if (error) {
+          console.error(`❌ SUPABASE CHUNK ERROR [${i}]:`, JSON.stringify(error, null, 2));
           throw new Error(`Supabase insert error at chunk ${Math.floor(i/chunkSize)}: ${error.message} (Details: ${error.details})`);
         }
       }
