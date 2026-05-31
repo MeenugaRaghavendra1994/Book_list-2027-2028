@@ -1815,8 +1815,6 @@ app.get("/dashboard/projection-source", async (req, res) => {
 
     const { data: booksData } = await supabase.from('individual_books')
       .select('*')
-      .ilike('material_code', normMaterialCode)
-      .eq('projection_status', 'Yes');
       .ilike('material_code', normMaterialCode);
     if (!booksData || booksData.length === 0) return res.json([]);
 
@@ -1886,8 +1884,6 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
 
     const { data: booksData } = await supabase.from('individual_books')
       .select('*')
-      .ilike('material_code', normMaterialCode)
-      .eq('projection_status', 'Yes');
       .ilike('material_code', normMaterialCode);
     if (!booksData || booksData.length === 0) return res.json([]);
 
