@@ -257,7 +257,7 @@ app.post("/books/bulk", async (req, res) => {
           cost_price,
           composite_code: String(d.composite_code || "").trim(),
           composite_name: String(d.composite_name || "").trim(),
-          projection_status: String(d.projection_status || "Yes").trim(),
+          projection_status: String(d.projection_status || "").trim(),
           kit_id: linkedKitId
         });
       });
