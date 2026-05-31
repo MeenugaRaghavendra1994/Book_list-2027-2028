@@ -291,6 +291,7 @@ function App() {
     cost_price: "",
     composite_code: "",
     composite_name: "",
+    projection_status: "Yes",
     quantity: 1,
     zone: "",
     grade: "",
@@ -1047,6 +1048,7 @@ function App() {
         cost_price: Number(row.cost_price || row['Cost Price'] || 0) || 0,
         composite_code: row.composite_code || row['Composite Code'] || "",
         composite_name: row.composite_name || row['Composite Name'] || "",
+        projection_status: row.projection_status || row['Projection Status'] || "Yes",
         zone: activeBook.zone,
         grade: activeBook.grade,
         branch: (row.branch || row['Branch'] || row['Branch Name'] || row['branch_name'] || "").trim()
@@ -1476,6 +1478,7 @@ function App() {
       cost_price: "",
       composite_code: "",
       composite_name: "",
+      projection_status: "Yes",
       quantity: 1,
       zone: activeBook?.zone || "",
       grade: activeBook?.grade || "",
@@ -1496,6 +1499,7 @@ function App() {
       total_amount: item.total_amount || "",
       mrp: item.mrp || "",
       cost_price: item.cost_price || "",
+      projection_status: item.projection_status || "Yes",
       quantity: item.quantity || 1,
       zone: item.zone || activeBook?.zone || "",
       grade: item.grade || activeBook?.grade || "",
@@ -1565,6 +1569,7 @@ function App() {
       cost_price: "",
       composite_code: "",
       composite_name: "",
+      projection_status: "Yes",
       quantity: 1,
       zone: activeBook?.zone || "",
       grade: activeBook?.grade || "",
@@ -2400,6 +2405,13 @@ function App() {
                         <input className="form-control" value={newBookItem.composite_name} onChange={e => setNewBookItem(prev => ({ ...prev, composite_name: e.target.value }))} />
                       </div>
                       <div className="col-12 col-md-4">
+                        <label className="form-label">Include in Projection?</label>
+                        <select className="form-select" value={newBookItem.projection_status} onChange={e => setNewBookItem(prev => ({ ...prev, projection_status: e.target.value }))}>
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      </div>
+                      <div className="col-12 col-md-4">
                         <label className="form-label">Zone</label>
                         <input className="form-control" value={newBookItem.zone} onChange={e => setNewBookItem(prev => ({ ...prev, zone: e.target.value }))} />
                       </div>
@@ -2453,6 +2465,7 @@ function App() {
                         <th>Cost Price</th>
                         <th>Composite Code</th>
                         <th>Composite Name</th>
+                        <th>Include in Projection?</th>
                         <th>Quantity</th>
                         <th>Zone</th>
                         <th>Grade</th>
@@ -2480,6 +2493,7 @@ function App() {
                           <td>₹{item.cost_price}</td>
                           <td>{item.composite_code}</td>
                           <td>{item.composite_name}</td>
+                          <td><span className={`badge ${item.projection_status === 'No' ? 'bg-danger' : 'bg-success'}`}>{item.projection_status || "Yes"}</span></td>
                           <td>{item.quantity}</td>
                           <td>{item.zone || activeBook.zone}</td>
                           <td>{item.grade || activeBook.grade}</td>

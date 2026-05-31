@@ -257,6 +257,7 @@ app.post("/books/bulk", async (req, res) => {
           cost_price,
           composite_code: String(d.composite_code || "").trim(),
           composite_name: String(d.composite_name || "").trim(),
+          projection_status: String(d.projection_status || "Yes").trim(),
           kit_id: linkedKitId
         });
       });
@@ -432,6 +433,7 @@ app.post("/books", async (req, res) => {
     let costPrice = Number(d.cost_price) || 0;
     const compositeCode = String(d.composite_code || "").trim();
     const compositeName = String(d.composite_name || "").trim();
+    const projectionStatus = String(d.projection_status || "Yes").trim();
 
     // Pricing Lookup from master pricing table
     const { data: pricingData } = await supabase
@@ -455,7 +457,8 @@ app.post("/books", async (req, res) => {
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
         author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
         mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, 
-        kit_id: kitRow ? kitRow.id : d.kit_id
+        kit_id: kitRow ? kitRow.id : d.kit_id,
+        projection_status: projectionStatus
       };
     });
 
@@ -843,6 +846,7 @@ app.put("/books/:id", async (req, res) => {
     let costPrice = Number(d.cost_price) || 0;
     const compositeCode = String(d.composite_code || "").trim();
     const compositeName = String(d.composite_name || "").trim();
+    const projectionStatus = String(d.projection_status || "Yes").trim();
 
     const { data: pricingData } = await supabase
       .from('pricing')
@@ -863,7 +867,8 @@ app.put("/books/:id", async (req, res) => {
         tax_rate: taxRate, mandatory_optional: mandatoryOptional, category, volume, year,
         author, publisher, quantity: qty, per_unit_rate: rate, total_amount: total,
         mrp, cost_price: costPrice, composite_code: compositeCode, composite_name: compositeName, 
-        kit_id: kitRow ? kitRow.id : targetBook.kit_id
+        kit_id: kitRow ? kitRow.id : targetBook.kit_id,
+        projection_status: projectionStatus
       };
     });
 
@@ -1450,6 +1455,7 @@ async function rebuildDashboardSummary() {
   (books || []).forEach(b => {
     const entry = addEntry(b.material_code, b.material_name, b.branch_name || b.branch, b.grade, b.zone);
     if (!entry) return;
+    if (b.projection_status === 'No') return;
     const brNorm = normalizeText(entry.branch_name);
     const pQty = projMap.get(`${brNorm}|${String(entry.grade).toLowerCase()}`) || 0;
     entry.projection_quantity += pQty * (Number(b.quantity) || 0);
@@ -1807,7 +1813,10 @@ app.get("/dashboard/projection-source", async (req, res) => {
     const normMaterialCode = String(material_code).trim().toLowerCase();
     const targetZoneLower = String(zone || "").trim().toLowerCase();
 
-    const { data: booksData } = await supabase.from('individual_books').select('*').ilike('material_code', normMaterialCode);
+    const { data: booksData } = await supabase.from('individual_books')
+      .select('*')
+      .ilike('material_code', normMaterialCode)
+      .eq('projection_status', 'Yes');
     if (!booksData || booksData.length === 0) return res.json([]);
 
     let projQuery = supabase.from('student_projections').select('*');
@@ -1873,7 +1882,10 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
     
     const normMaterialCode = String(material_code).trim().toLowerCase();
 
-    const { data: booksData } = await supabase.from('individual_books').select('*').ilike('material_code', normMaterialCode);
+    const { data: booksData } = await supabase.from('individual_books')
+      .select('*')
+      .ilike('material_code', normMaterialCode)
+      .eq('projection_status', 'Yes');
     if (!booksData || booksData.length === 0) return res.json([]);
 
     const { data: projData } = await supabase.from('student_projections').select('*');
