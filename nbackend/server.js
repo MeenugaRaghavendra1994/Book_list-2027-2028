@@ -851,7 +851,7 @@ app.put("/books/:id", async (req, res) => {
     let costPrice = Number(d.cost_price) || 0;
     const compositeCode = String(d.composite_code || "").trim();
     const compositeName = String(d.composite_name || "").trim();
-    const projectionStatus = String(d.projection_status || "Yes").trim();
+    const projectionStatus = String(d.projection_status || "").trim();
 
     const { data: pricingData } = await supabase
       .from('pricing')
