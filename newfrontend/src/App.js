@@ -1478,7 +1478,7 @@ function App() {
       cost_price: "",
       composite_code: "",
       composite_name: "",
-      projection_status: "Yes",
+      projection_status: "",
       quantity: 1,
       zone: activeBook?.zone || "",
       grade: activeBook?.grade || "",
