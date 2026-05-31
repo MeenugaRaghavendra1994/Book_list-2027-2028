@@ -1817,6 +1817,7 @@ app.get("/dashboard/projection-source", async (req, res) => {
       .select('*')
       .ilike('material_code', normMaterialCode)
       .eq('projection_status', 'Yes');
+      .ilike('material_code', normMaterialCode);
     if (!booksData || booksData.length === 0) return res.json([]);
 
     let projQuery = supabase.from('student_projections').select('*');
@@ -1832,6 +1833,7 @@ app.get("/dashboard/projection-source", async (req, res) => {
 
     const details = [];
     booksData.forEach(book => {
+      if (book.projection_status === 'No') return;
       const kitName = book.composite_name || "N/A";
       const qtyInKit = Number(book.quantity) || 0;
       const grade = String(book.grade).toLowerCase().trim();
@@ -1886,6 +1888,7 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
       .select('*')
       .ilike('material_code', normMaterialCode)
       .eq('projection_status', 'Yes');
+      .ilike('material_code', normMaterialCode);
     if (!booksData || booksData.length === 0) return res.json([]);
 
     const { data: projData } = await supabase.from('student_projections').select('*');
@@ -1899,6 +1902,7 @@ app.get("/dashboard/total-projection-source", async (req, res) => {
 
     const details = [];
     booksData.forEach(book => {
+      if (book.projection_status === 'No') return;
       const kitName = book.composite_name || "N/A";
       const qtyInKit = Number(book.quantity) || 0;
       const grade = String(book.grade).toLowerCase().trim();
