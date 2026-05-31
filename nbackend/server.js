@@ -1455,11 +1455,6 @@ async function rebuildDashboardSummary() {
     entry.projection_quantity += pQty * (Number(b.quantity) || 0);
   });
 
-  // Initialize from orders_table (Source for Paid Quantity)
-  (orders || []).forEach(o => {
-    addEntry(o.material_code || o.sku || o.item_sku, o.item_name || o.name, o.branch_name || o.branch, o.grade_name, o.zone);
-  });
-
   // 6. Pre-calculate BOM component map
   const bomComponentToParentMap = new Map();
   (boms || []).forEach(bom => {
