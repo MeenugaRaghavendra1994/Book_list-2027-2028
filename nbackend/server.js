@@ -368,7 +368,7 @@ app.get("/kits/:id", async (req, res) => {
     const bookMap = new Map();
 
     (books || []).forEach(b => {
-      const key = `${b.material_code}|${b.subject}|${b.category}`;
+      const key = `${b.material_code}|${b.subject}|${b.category}|${b.volume}|${b.projection_status}`;
       if (!bookMap.has(key)) {
         const item = { ...b, branch_name: [b.branch_name] };
         bookMap.set(key, item);
@@ -807,7 +807,7 @@ app.put("/books/:id", async (req, res) => {
 
   try {
     // 1. Identify the logical group for this book
-    const { data: targetBook } = await supabase.from('individual_books').select('material_code, kit_id, subject, category, volume').eq('id', id).single();
+    const { data: targetBook } = await supabase.from('individual_books').select('material_code, kit_id, subject, category, volume, projection_status').eq('id', id).single();
     if (!targetBook) return res.status(404).json({ success: false, error: "Book not found" });
 
     // 2. Identify the logical kit group (all branches for this kit)
@@ -896,6 +896,51 @@ app.put("/books/:id", async (req, res) => {
   } catch (err) {
     console.error("❌ UPDATE ERROR:", err.message, err.details, err.hint);
     res.status(500).send(err.message);
+  }
+});
+
+// Generic update for individual_books table (useful for Table Explorer)
+app.put("/individual_books/:id", async (req, res) => {
+  const { id } = req.params;
+  const data = req.body;
+  try {
+    // Convert numeric fields if present to avoid DB type errors
+    const numericFields = ['quantity', 'tax_rate', 'per_unit_rate', 'total_amount', 'mrp', 'cost_price'];
+    numericFields.forEach(field => {
+      if (data[field] !== undefined) data[field] = Number(data[field]) || 0;
+    });
+
+    const { data: updated, error } = await supabase.from('individual_books').update(data).eq('id', id).select().single();
+    if (error) throw error;
+    res.json({ success: true, record: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Generic delete for individual_books table (useful for Table Explorer)
+app.delete("/individual_books/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { error, count } = await supabase.from('individual_books').delete({ count: 'exact' }).eq('id', id);
+    if (error) throw error;
+    if (count === 0) return res.status(404).json({ success: false, error: "Book record not found." });
+    res.json({ success: true, affected: count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Generic update for grade_wise_kits table (useful for Table Explorer)
+app.put("/grade_wise_kits/:id", async (req, res) => {
+  const { id } = req.params;
+  const data = req.body;
+  try {
+    const { data: updated, error } = await supabase.from('grade_wise_kits').update(data).eq('id', id).select().single();
+    if (error) throw error;
+    res.json({ success: true, record: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
