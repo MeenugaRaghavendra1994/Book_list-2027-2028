@@ -615,11 +615,12 @@ app.put("/kits/:id", async (req, res) => {
         .in('kit_id', oldIds);
 
       if (existingBooks && existingBooks.length > 0) {
-        // Group by material_code to identify unique items in the kit
+        // Group by composite key to identify unique items in the kit
         const uniqueMaterials = new Map();
         existingBooks.forEach(b => {
-          if (!uniqueMaterials.has(b.material_code)) {
-            uniqueMaterials.set(b.material_code, b);
+          const key = `${b.material_code}|${b.subject}|${b.category}|${b.volume}`;
+          if (!uniqueMaterials.has(key)) {
+            uniqueMaterials.set(key, b);
           }
         });
 
@@ -627,7 +628,7 @@ app.put("/kits/:id", async (req, res) => {
         uniqueMaterials.forEach((template) => {
           // Create a book row for every branch in the updated kit
           data.forEach(newKitRow => {
-            const { id, ...cleanBookData } = template;
+            const { id: _ignored, ...cleanBookData } = template;
             newBookRows.push({
               ...cleanBookData,
               zone: newKitRow.zone,
@@ -798,7 +799,7 @@ app.put("/books/:id", async (req, res) => {
 
   try {
     // 1. Identify the logical group for this book
-    const { data: targetBook } = await supabase.from('individual_books').select('material_code, kit_id').eq('id', id).single();
+    const { data: targetBook } = await supabase.from('individual_books').select('material_code, kit_id, subject, category, volume').eq('id', id).single();
     if (!targetBook) return res.status(404).json({ success: false, error: "Book not found" });
 
     // 2. Identify the logical kit group (all branches for this kit)
@@ -813,7 +814,12 @@ app.put("/books/:id", async (req, res) => {
     const kitIds = (kitRows || []).map(r => r.id);
 
     // 3. Delete existing rows for this material across the kit group
-    await supabase.from('individual_books').delete().eq('material_code', targetBook.material_code).in('kit_id', kitIds);
+    await supabase.from('individual_books').delete()
+      .eq('material_code', targetBook.material_code)
+      .eq('subject', targetBook.subject)
+      .eq('category', targetBook.category)
+      .eq('volume', targetBook.volume)
+      .in('kit_id', kitIds);
 
     // 4. Prepare new rows based on updated branch selection
     const zone = String(d.zone || seedKit.zone).trim();
@@ -996,7 +1002,7 @@ app.delete("/books/:id", async (req, res) => {
     // 1. Identify the logical book and its kit group
     const { data: targetBook } = await supabase
       .from('individual_books')
-      .select('material_code, kit_id')
+      .select('material_code, kit_id, subject, category, volume')
       .eq('id', bookId)
       .single();
 
@@ -1008,7 +1014,12 @@ app.delete("/books/:id", async (req, res) => {
         const kitIds = (kitRows || []).map(r => r.id);
         
         // 2. Delete all rows for this material across all branch kits in the group
-        const deleteRes = await supabase.from('individual_books').delete({ count: 'exact' }).eq('material_code', targetBook.material_code).in('kit_id', kitIds);
+        const deleteRes = await supabase.from('individual_books').delete({ count: 'exact' })
+          .eq('material_code', targetBook.material_code)
+          .eq('subject', targetBook.subject)
+          .eq('category', targetBook.category)
+          .eq('volume', targetBook.volume)
+          .in('kit_id', kitIds);
         count = deleteRes.count || 0;
         if (deleteRes.error) throw deleteRes.error;
       }
