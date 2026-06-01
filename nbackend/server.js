@@ -1711,9 +1711,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const projectionIndexByBranchGrade = new Map();
     const projectionIndexByGrade = new Map();
-    const projectionColumns = [];
     const projectionColumnSet = new Set();
 
+    // Collect all unique projection dates while processing projections
     (projections || []).forEach(p => {
       const grade = String(p.grade || "").trim().toLowerCase();
       const branchName = String(p.branch || "").trim();
@@ -1737,7 +1737,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       // Track unique dates only (not zone|date)
       if (!projectionColumnSet.has(projectionDate)) {
         projectionColumnSet.add(projectionDate);
-        projectionColumns.push(projectionDate);
       }
     });
 
@@ -1745,7 +1744,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     projectionColumns.sort();
 
     const orderAggregatedMap = new Map();
-    (orders || []).forEach(o => {
+    (orders || []).forEach((o) => {
       const branchNorm = normalizeText(o.branch_name || o.branch || "");
       const sku = normalizeSku(o.material_code || o.sku || o.item_sku || "");
       if (!branchNorm || !sku) return;
@@ -1754,7 +1753,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     });
 
     const bomComponentToParentMap = new Map();
-    (boms || []).forEach(bom => {
+    (boms || []).forEach((bom) => {
       const componentSku = normalizeSku(bom.component_code);
       if (!componentSku) return;
       if (!bomComponentToParentMap.has(componentSku)) bomComponentToParentMap.set(componentSku, []);
@@ -1762,7 +1761,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     });
 
     const poMap = new Map();
-    (poData || []).forEach(po => {
+    (poData || []).forEach((po) => {
       const sku = normalizeSku(po.sku);
       if (!sku) return;
       poMap.set(sku, (poMap.get(sku) || 0) + (Number(po.quantity) || 0));
@@ -1770,7 +1769,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
     const itemMap = new Map();
 
-    (books || []).forEach(book => {
+    (books || []).forEach((book) => {
       const sku = normalizeSku(book.material_code);
       if (!sku) return;
 
@@ -1805,7 +1804,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       const item = itemMap.get(sku);
       if (!item.zone_data[zone]) item.zone_data[zone] = { projection: 0, paid_quantity: 0 };
-
+      
       if (projectionStatus !== 'No') {
         branchNames.forEach(branchName => {
           const key = `${normalizeText(branchName)}|${gradeLower}`;
@@ -1823,7 +1822,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
             const dateKey = proj.projection_date;
             item.projection_by_date[dateKey] = (item.projection_by_date[dateKey] || 0) + contribution;
             item.total_projection += contribution;
-          });
+        });
         });
       }
 
@@ -1856,9 +1855,18 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       };
     });
 
+    // Extract all unique projection dates from the processed items for the columns
+    const finalProjectionColumns = [
+      ...new Set(
+        items.flatMap(item =>
+          Object.keys(item.projection_by_date || {})
+        )
+      )
+    ].sort();
+
     items.sort((a, b) => (a.material_code || "").localeCompare(b.material_code || ""));
 
-    res.json({ projection_columns: projectionColumns, data: items });
+    res.json({ projection_columns: finalProjectionColumns, data: items });
   } catch (err) {
     console.error("❌ DASHBOARD FETCH ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });

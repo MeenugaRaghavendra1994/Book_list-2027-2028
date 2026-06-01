@@ -2645,7 +2645,7 @@ function App() {
                     <tr>
                       <th rowSpan="2" className="align-middle">Material Code</th>
                       <th rowSpan="2" className="align-middle text-start">Material Name</th>
-                      <th colSpan={dashboardData.projection_columns.length || 1} className="bg-primary text-white">
+                      <th colSpan={dashboardData.projection_columns.length > 0 ? dashboardData.projection_columns.length : 1} className="bg-primary text-white">
                         {dashboardFilters.branch || dashboardFilters.zone || "Projections"}
                       </th>
                       <th rowSpan="2" className="align-middle">Total Projection</th>
@@ -2657,7 +2657,7 @@ function App() {
                     {/* Tier 2 Header (Dates) */}
                     <tr>
                       {dashboardData.projection_columns.length > 0 ? (
-                        dashboardData.projection_columns.map(date => (
+                        dashboardData.projection_columns.map((date) => (
                           <th key={date} className="small py-1">{date}</th>
                         ))
                       ) : (
@@ -2678,7 +2678,7 @@ function App() {
                         <td className="px-3">{item.material_code || "N/A"}</td>
                         <td className="px-3 text-start">{item.material_name || "N/A"}</td>
                         {dashboardData.projection_columns.map(date => (
-                          <td key={`${item.material_code}-${date}`} className="px-3 text-center">
+                          <td key={`${item.material_code}-${date}`} className="px-3 text-center text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowProjectionSource(item, date)}>
                             {item.projection_by_date?.[date] || 0}
                           </td>
                         ))}
