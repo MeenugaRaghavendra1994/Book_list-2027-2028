@@ -1657,19 +1657,18 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const projectionIndexByGrade = new Map();
     const projectionColumns = [];
     const projectionColumnSet = new Set();
-    const defaultProjectionDate = new Date().toISOString().slice(0, 10); // Today's date as fallback
 
     (projections || []).forEach(p => {
       const grade = String(p.grade || "").trim().toLowerCase();
       const branchName = String(p.branch || "").trim();
       const zone = String(p.zone || branchToZoneMap.get(normalizeText(branchName)) || "").trim();
-      // Use actual projection_date if available, otherwise use today's date
+      // ONLY use actual projection_date from database - SKIP if NULL or missing
       const projectionDate = p.projection_date 
         ? String(p.projection_date).slice(0, 10) 
-        : defaultProjectionDate;
+        : null;
       const totalProjection = Number(p.total_projection) || 0;
 
-      if (!grade || !branchName || !zone) return; // Skip if essential fields missing, but allow missing date (use default)
+      if (!grade || !branchName || !zone || !projectionDate) return; // Skip if ANY required field is missing including date
       if (gradeFilter && grade !== gradeFilter.toLowerCase()) return;
       if (branchFilter && normalizeText(branchName) !== normalizeText(branchFilter)) return;
       if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
@@ -1688,24 +1687,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         projectionColumns.push({ zone, projection_date: projectionDate, key: columnKey });
       }
     });
-
-    // Ensure at least one column exists if projections exist but all had missing dates
-    if ((projections || []).length > 0 && projectionColumns.length === 0) {
-      console.log("⚠️ No projection dates found, creating default column for today");
-      // Get unique zones from projections that exist
-      const uniqueZones = new Set();
-      (projections || []).forEach(p => {
-        const zone = String(p.zone || "").trim();
-        if (zone) uniqueZones.add(zone);
-      });
-      uniqueZones.forEach(zone => {
-        const columnKey = `${zone}|${defaultProjectionDate}`;
-        if (!projectionColumnSet.has(columnKey)) {
-          projectionColumnSet.add(columnKey);
-          projectionColumns.push({ zone, projection_date: defaultProjectionDate, key: columnKey });
-        }
-      });
-    }
 
     projectionColumns.sort((a, b) => {
       const zoneCompare = a.zone.localeCompare(b.zone);
