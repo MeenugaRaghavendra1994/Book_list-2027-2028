@@ -1740,9 +1740,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       }
     });
 
-    // Sort dates in ascending order
-    projectionColumns.sort();
-
     const orderAggregatedMap = new Map();
     (orders || []).forEach((o) => {
       const branchNorm = normalizeText(o.branch_name || o.branch || "");
