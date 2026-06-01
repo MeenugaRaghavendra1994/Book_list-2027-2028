@@ -2639,21 +2639,30 @@ function App() {
             {/* Item Wise Summary Dashboard Table */}
             <div className="card card-soft p-4 shadow-sm border-0">
               <div className="table-responsive rounded-3 border">
-                <table className="table table-sm table-bordered table-hover align-middle mb-0">
+                <table className="table table-sm table-bordered table-hover align-middle mb-0 text-center">
                   <thead className="table-light text-nowrap">
+                    {/* Tier 1 Header */}
                     <tr>
-                      <th className="py-3 px-3 align-middle">Material Code</th>
-                      <th className="py-3 px-3 align-middle">Material Name</th>
-                      {dashboardData.projection_columns.map(date => (
-                        <th key={date} className="text-center py-2">
-                          {date}
-                        </th>
-                      ))}
-                      <th className="py-3 px-3 align-middle">Total Projection</th>
-                      <th className="py-3 px-3 align-middle">Total Paid Qty</th>
-                      <th className="py-3 px-3 align-middle">Total Required</th>
-                      <th className="py-3 px-3 align-middle">Already Ordered Qty</th>
-                      <th className="py-3 px-3 align-middle">Final Requirement</th>
+                      <th rowSpan="2" className="align-middle">Material Code</th>
+                      <th rowSpan="2" className="align-middle text-start">Material Name</th>
+                      <th colSpan={dashboardData.projection_columns.length || 1} className="bg-primary text-white">
+                        {dashboardFilters.branch || dashboardFilters.zone || "Projections"}
+                      </th>
+                      <th rowSpan="2" className="align-middle">Total Projection</th>
+                      <th rowSpan="2" className="align-middle">Total Paid Qty</th>
+                      <th rowSpan="2" className="align-middle bg-light">Total Required</th>
+                      <th rowSpan="2" className="align-middle">Already Ordered</th>
+                      <th rowSpan="2" className="align-middle text-danger">Final Requirement</th>
+                    </tr>
+                    {/* Tier 2 Header (Dates) */}
+                    <tr>
+                      {dashboardData.projection_columns.length > 0 ? (
+                        dashboardData.projection_columns.map(date => (
+                          <th key={date} className="small py-1">{date}</th>
+                        ))
+                      ) : (
+                        <th className="small py-1 text-muted">No Dates</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">

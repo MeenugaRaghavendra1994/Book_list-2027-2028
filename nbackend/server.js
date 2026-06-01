@@ -1718,27 +1718,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const grade = String(p.grade || "").trim().toLowerCase();
       const branchName = String(p.branch || "").trim();
       const zone = String(p.zone || branchToZoneMap.get(normalizeText(branchName)) || "").trim();
-      // ONLY use actual projection_date from database - SKIP if NULL or missing
-      const projectionDate = p.projection_date 
-        ? String(p.projection_date).slice(0, 10) 
-        : null;
+      const projectionDate = p.projection_date ? String(p.projection_date).slice(0, 10) : null;
       const totalProjection = Number(p.total_projection) || 0;
 
-      if (!projectionDate) return;
-
-      const matchesGradeFilter = !gradeFilter || grade === gradeFilter.toLowerCase();
-      const matchesBranchFilter = !branchFilter || normalizeText(branchName) === normalizeText(branchFilter);
-      const matchesZoneFilter = !zoneFilter || (zone && normalizeText(zone) === normalizeText(zoneFilter));
-
-      if (matchesGradeFilter && matchesBranchFilter && matchesZoneFilter) {
-        if (!projectionColumnSet.has(projectionDate)) {
-          projectionColumnSet.add(projectionDate);
-          projectionColumns.push(projectionDate);
-        }
-      }
-
-      if (!grade || !branchName) return; // These are required for item projection mapping
-      if (!matchesGradeFilter || !matchesBranchFilter || !matchesZoneFilter) return;
+      if (!grade || !branchName || !zone || !projectionDate) return; // Skip if ANY required field is missing including date
+      if (gradeFilter && grade !== gradeFilter.toLowerCase()) return;
+      if (branchFilter && normalizeText(branchName) !== normalizeText(branchFilter)) return;
+      if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
 
       const branchGradeKey = `${normalizeText(branchName)}|${grade}`;
       if (!projectionIndexByBranchGrade.has(branchGradeKey)) projectionIndexByBranchGrade.set(branchGradeKey, []);
@@ -1747,6 +1733,12 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const gradeKey = `${grade}`;
       if (!projectionIndexByGrade.has(gradeKey)) projectionIndexByGrade.set(gradeKey, []);
       projectionIndexByGrade.get(gradeKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
+
+      // Track unique dates only (not zone|date)
+      if (!projectionColumnSet.has(projectionDate)) {
+        projectionColumnSet.add(projectionDate);
+        projectionColumns.push(projectionDate);
+      }
     });
 
     // Sort dates in ascending order
@@ -1821,16 +1813,16 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
           if (projectionsForBook.length === 0) {
             projectionsForBook = projectionIndexByGrade.get(gradeLower) || [];
           }
+          
+          // Option A Logic: Summing projections for the same date. 
+          // If multiple records exist for the same date/branch, they are additive.
           projectionsForBook.forEach(proj => {
             const contribution = bookQty * (Number(proj.total_projection) || 0);
             if (contribution === 0) return;
 
-            // Use date as key (not zone|date)
             const dateKey = proj.projection_date;
             item.projection_by_date[dateKey] = (item.projection_by_date[dateKey] || 0) + contribution;
             item.total_projection += contribution;
-            item.zone_data[proj.zone] = item.zone_data[proj.zone] || { projection: 0, paid_quantity: 0 };
-            item.zone_data[proj.zone].projection += contribution;
           });
         });
       }
