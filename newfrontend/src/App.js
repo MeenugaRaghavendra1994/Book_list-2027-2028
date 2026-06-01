@@ -2644,10 +2644,9 @@ function App() {
                     <tr>
                       <th className="py-3 px-3 align-middle">Material Code</th>
                       <th className="py-3 px-3 align-middle">Material Name</th>
-                      {dashboardData.projection_columns.map(col => (
-                        <th key={col.key} className="text-center py-2">
-                          <div>{col.zone || 'Unknown Zone'}</div>
-                          <small>{col.projection_date}</small>
+                      {dashboardData.projection_columns.map(date => (
+                        <th key={date} className="text-center py-2">
+                          {date}
                         </th>
                       ))}
                       <th className="py-3 px-3 align-middle">Total Projection</th>
@@ -2669,9 +2668,9 @@ function App() {
                       <tr key={idx}>
                         <td className="px-3">{item.material_code || "N/A"}</td>
                         <td className="px-3 text-start">{item.material_name || "N/A"}</td>
-                        {dashboardData.projection_columns.map(col => (
-                          <td key={`${item.material_code}-${col.key}`} className="px-3 text-center">
-                            {item.projection_by_zone_date?.[col.key] || 0}
+                        {dashboardData.projection_columns.map(date => (
+                          <td key={`${item.material_code}-${date}`} className="px-3 text-center">
+                            {item.projection_by_date?.[date] || 0}
                           </td>
                         ))}
                         <td className="px-3 text-center"><span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalProjectionSource(item)}>{item.total_projection || 0}</span></td>
@@ -2693,14 +2692,14 @@ function App() {
               <div className="mt-3 d-flex justify-content-between align-items-center">
                 <small className="text-muted">Total Items: <strong>{dashboardData.data.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
-                  const projectionHeaders = dashboardData.projection_columns.map(col => `${col.zone} ${col.projection_date}`);
+                  const projectionHeaders = dashboardData.projection_columns.map(date => date);
 
                   const csvContent = [
                     ['Material Code', 'Material Name', ...projectionHeaders, 'Total Projection', 'Total Paid Quantity', 'Total Requirement', 'Already Ordered Quantity', 'Final Requirement'],
                     ...dashboardData.data.map(item => [
                       item.material_code,
                       item.material_name,
-                      ...dashboardData.projection_columns.map(col => item.projection_by_zone_date?.[col.key] || 0),
+                      ...dashboardData.projection_columns.map(date => item.projection_by_date?.[date] || 0),
                       item.total_projection,
                       item.total_paid_quantity,
                       item.total_requirement,

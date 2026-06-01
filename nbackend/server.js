@@ -1737,18 +1737,15 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       if (!projectionIndexByGrade.has(gradeKey)) projectionIndexByGrade.set(gradeKey, []);
       projectionIndexByGrade.get(gradeKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
 
-      const columnKey = `${zone}|${projectionDate}`;
-      if (!projectionColumnSet.has(columnKey)) {
-        projectionColumnSet.add(columnKey);
-        projectionColumns.push({ zone, projection_date: projectionDate, key: columnKey });
+      // Track unique dates only (not zone|date)
+      if (!projectionColumnSet.has(projectionDate)) {
+        projectionColumnSet.add(projectionDate);
+        projectionColumns.push(projectionDate);
       }
     });
 
-    projectionColumns.sort((a, b) => {
-      const zoneCompare = a.zone.localeCompare(b.zone);
-      if (zoneCompare !== 0) return zoneCompare;
-      return a.projection_date.localeCompare(b.projection_date);
-    });
+    // Sort dates in ascending order
+    projectionColumns.sort();
 
     const orderAggregatedMap = new Map();
     (orders || []).forEach(o => {
@@ -1799,7 +1796,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         itemMap.set(sku, {
           material_code: sku,
           material_name: materialName,
-          projection_by_zone_date: {},
+          projection_by_date: {},
           total_projection: 0,
           total_paid_quantity: 0,
           zone_data: {},
@@ -1823,8 +1820,9 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
             const contribution = bookQty * (Number(proj.total_projection) || 0);
             if (contribution === 0) return;
 
-            const columnKey = `${proj.zone}|${proj.projection_date}`;
-            item.projection_by_zone_date[columnKey] = (item.projection_by_zone_date[columnKey] || 0) + contribution;
+            // Use date as key (not zone|date)
+            const dateKey = proj.projection_date;
+            item.projection_by_date[dateKey] = (item.projection_by_date[dateKey] || 0) + contribution;
             item.total_projection += contribution;
             item.zone_data[proj.zone] = item.zone_data[proj.zone] || { projection: 0, paid_quantity: 0 };
             item.zone_data[proj.zone].projection += contribution;
