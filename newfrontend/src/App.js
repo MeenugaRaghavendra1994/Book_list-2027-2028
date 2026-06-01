@@ -457,7 +457,10 @@ function App() {
         }
       })
         .then(res => setDashboardData(res.data || { projection_columns: [], data: [] }))
-        .catch(() => setDashboardData({ zones: [], data: [] }))
+        .catch(err => {
+          console.error("Dashboard fetch error:", err.message);
+          setDashboardData({ projection_columns: [], data: [] });
+        })
         .finally(() => {
           setIsDashboardLoading(false);
           setIsProcessing(false);
