@@ -2639,19 +2639,29 @@ function App() {
                 <table className="table table-sm table-bordered table-hover align-middle mb-0">
                   <thead className="table-light text-nowrap">
                     <tr>
-                      <th className="py-3 px-3 align-middle">Material Code</th>
-                      <th className="py-3 px-3 align-middle">Material Name</th>
+                      <th className="py-2 px-3 align-middle" rowSpan="2">Material Code</th>
+                      <th className="py-2 px-3 align-middle" rowSpan="2">Material Name</th>
+                      {dashboardData.projection_columns.length > 0 && dashboardData.projection_columns.map((col, idx) => {
+                        const isFirstOfZone = idx === 0 || dashboardData.projection_columns[idx - 1].zone !== col.zone;
+                        const colSpan = dashboardData.projection_columns.filter(c => c.zone === col.zone).length;
+                        return isFirstOfZone ? (
+                          <th key={`zone-${col.key}`} className="text-center py-2 bg-info" colSpan={colSpan}>
+                            <strong>{col.zone || 'Unknown Zone'}</strong>
+                          </th>
+                        ) : null;
+                      })}
+                      <th className="py-2 px-3 align-middle" rowSpan="2">Total Projection</th>
+                      <th className="py-2 px-3 align-middle" rowSpan="2">Total Paid Qty</th>
+                      <th className="py-2 px-3 align-middle" rowSpan="2">Total Required</th>
+                      <th className="py-2 px-3 align-middle" rowSpan="2">Already Ordered Qty</th>
+                      <th className="py-2 px-3 align-middle" rowSpan="2">Final Requirement</th>
+                    </tr>
+                    <tr>
                       {dashboardData.projection_columns.map(col => (
-                        <th key={col.key} className="text-center py-2">
-                          <div>{col.zone || 'Unknown Zone'}</div>
+                        <th key={`date-${col.key}`} className="text-center py-2 text-muted" style={{fontSize: '0.85rem'}}>
                           <small>{col.projection_date}</small>
                         </th>
                       ))}
-                      <th className="py-3 px-3 align-middle">Total Projection</th>
-                      <th className="py-3 px-3 align-middle">Total paid quantity</th>
-                      <th className="py-3 px-3 align-middle">Total Required</th>
-                      <th className="py-3 px-3 align-middle">Already Ordered Quantity</th>
-                      <th className="py-3 px-3 align-middle">Final requirement</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
