@@ -1604,8 +1604,13 @@ async function rebuildDashboardSummary() {
 
   // 8. Clear and Refresh dashboard_item_summary Table
   const finalRows = Array.from(summaryMap.values()).map(r => ({
-    ...r,
-    projection_by_zone_date: JSON.stringify(r.projection_by_zone_date || {}), // Store as JSON
+    material_code: r.material_code,
+    material_name: r.material_name,
+    branch_name: r.branch_name,
+    zone: r.zone,
+    grade: r.grade,
+    projection_quantity: r.total_projection,
+    paid_quantity: r.paid_quantity,
     total_requirement: Math.max(r.total_projection, r.paid_quantity),
     already_ordered_quantity: 0,
     final_requirement: Math.max(r.total_projection, r.paid_quantity)
