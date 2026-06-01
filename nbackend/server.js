@@ -1578,28 +1578,29 @@ async function rebuildDashboardSummary() {
 // POST /dashboard/populate-projection-dates - Helper to set projection_date for records missing it
 app.post("/dashboard/populate-projection-dates", async (req, res) => {
   try {
+    // Fetch ALL student_projections records
     const { data: projections, error: fetchError } = await supabase
       .from('student_projections')
-      .select('id, projection_date')
-      .or('projection_date.is.null,projection_date.eq.');
+      .select('id, projection_date');
     
     if (fetchError) throw fetchError;
     
     let updateCount = 0;
     const today = new Date().toISOString().slice(0, 10);
     
-    for (const proj of projections || []) {
-      if (!proj.projection_date || proj.projection_date.trim() === '') {
-        const { error: updateError } = await supabase
-          .from('student_projections')
-          .update({ projection_date: today })
-          .eq('id', proj.id);
-        
-        if (!updateError) updateCount++;
-      }
+    // Filter for records with NULL or empty projection_date
+    const recordsToUpdate = (projections || []).filter(p => !p.projection_date || String(p.projection_date).trim() === '');
+    
+    for (const proj of recordsToUpdate) {
+      const { error: updateError } = await supabase
+        .from('student_projections')
+        .update({ projection_date: today })
+        .eq('id', proj.id);
+      
+      if (!updateError) updateCount++;
     }
     
-    res.json({ success: true, message: `Updated ${updateCount} records with default projection_date: ${today}` });
+    res.json({ success: true, message: `Updated ${updateCount} records with default projection_date: ${today}`, total_records: projections.length });
   } catch (err) {
     console.error("❌ POPULATE PROJECTION DATES ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
@@ -1660,11 +1661,11 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const grade = String(p.grade || "").trim().toLowerCase();
       const branchName = String(p.branch || "").trim();
       const zone = String(p.zone || branchToZoneMap.get(normalizeText(branchName)) || "").trim();
-      // Default to today's date if projection_date is NULL/empty
-      const projectionDate = p.projection_date ? String(p.projection_date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+      // Only use actual projection_date from table - skip NULL values
+      const projectionDate = p.projection_date ? String(p.projection_date).slice(0, 10) : null;
       const totalProjection = Number(p.total_projection) || 0;
 
-      if (!grade || !branchName || !zone) return; // projection_date always has a default now
+      if (!grade || !branchName || !zone || !projectionDate) return; // Skip if any required field is missing
       if (gradeFilter && grade !== gradeFilter.toLowerCase()) return;
       if (branchFilter && normalizeText(branchName) !== normalizeText(branchFilter)) return;
       if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
