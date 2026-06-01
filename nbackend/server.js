@@ -746,6 +746,7 @@ app.post("/student_projections", async (req, res) => {
     const grade = String(req.body.grade || "").trim();
     const branch = String(req.body.branch || "").trim();
     const zone = String(req.body.zone || "").trim();
+    const projectionDate = String(req.body.projection_date || new Date().toISOString().slice(0, 10)).trim();
     const newAdmissions = Number(req.body.new_admissions) || 0;
     const existingAdmissions = Number(req.body.existing_admissions) || 0;
     const totalProjection = Number(req.body.total_projection) || 0;
@@ -754,9 +755,13 @@ app.post("/student_projections", async (req, res) => {
       return res.status(400).json({ success: false, error: "Grade, branch, and zone are required." });
     }
 
+    if (projectionDate && isNaN(new Date(projectionDate).getTime())) {
+      return res.status(400).json({ success: false, error: "projection_date must be a valid date." });
+    }
+
     const { data, error } = await supabase
       .from('student_projections')
-      .insert([{ grade, branch, zone, new_admissions: newAdmissions, existing_admissions: existingAdmissions, total_projection: totalProjection }])
+      .insert([{ grade, branch, zone, projection_date: projectionDate, new_admissions: newAdmissions, existing_admissions: existingAdmissions, total_projection: totalProjection }])
       .select()
       .single();
 
@@ -1009,7 +1014,7 @@ app.put("/branches/:id", async (req, res) => {
 app.put("/student_projections/:id", async (req, res) => {
   const { id } = req.params;
   const {
-    grade, branch, zone,
+    grade, branch, zone, projection_date,
     new_admissions, existing_admissions, total_projection
   } = req.body;
 
@@ -1018,10 +1023,15 @@ app.put("/student_projections/:id", async (req, res) => {
       grade: String(grade || "").trim(),
       branch: String(branch || "").trim(),
       zone: String(zone || "").trim(),
+      projection_date: String(projection_date || "").trim(),
       new_admissions: Number(new_admissions) || 0,
       existing_admissions: Number(existing_admissions) || 0,
       total_projection: Number(total_projection) || 0
     };
+
+    if (payload.projection_date && isNaN(new Date(payload.projection_date).getTime())) {
+      return res.status(400).json({ success: false, error: "projection_date must be a valid date." });
+    }
 
     const { data, error } = await supabase.from('student_projections').update(payload).eq('id', id).select().single();
     if (error) throw error;
@@ -1295,9 +1305,11 @@ app.get("/data/:table", async (req, res) => {
     const gradeFilter = req.query.grade;
     const branchFilter = req.query.branch;
     const zoneFilter = req.query.zone;
+    const projectionDateFilter = req.query.projection_date;
     if (gradeFilter) query = query.ilike('grade', `%${gradeFilter}%`);
     if (branchFilter) query = query.ilike('branch', `%${branchFilter}%`);
     if (zoneFilter) query = query.ilike('zone', `%${zoneFilter}%`);
+    if (projectionDateFilter) query = query.eq('projection_date', projectionDateFilter);
   } else if (table === 'book_list_users') {
     // For book_list_users, ensure only admin can view/filter
     // In a real app, this would be handled by authentication middleware
@@ -1582,68 +1594,177 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const gradeFilter = String(req.query.grade || "").trim();
     const materialNameFilter = String(req.query.material_name || "").trim();
 
-    // 1. Fetch pre-calculated rows from the summary table with filters applied
-    let query = supabase.from('dashboard_item_summary').select('*');
-    if (zoneFilter) query = query.eq('zone', zoneFilter);
-    if (branchFilter) query = query.eq('branch_name', branchFilter);
-    if (gradeFilter) query = query.eq('grade', gradeFilter);
-    if (materialNameFilter) query = query.ilike('material_name', `%${materialNameFilter}%`);
+    const [
+      { data: books, error: booksError },
+      { data: orders, error: ordersError },
+      { data: projections, error: projectionsError },
+      { data: boms, error: bomsError },
+      { data: branches, error: branchesError },
+      { data: poData, error: poError }
+    ] = await Promise.all([
+      supabase.from('individual_books').select('*'),
+      supabase.from('orders_table').select('*'),
+      supabase.from('student_projections').select('*'),
+      supabase.from('sku_sap_bom').select('*'),
+      supabase.from('branches').select('name, zone'),
+      supabase.from('purchase_orders').select('sku, quantity')
+    ]);
 
-    const { data: rows, error } = await query;
-    if (error) throw error;
+    if (booksError || ordersError || projectionsError || bomsError || branchesError || poError) {
+      const errorMessage = [booksError, ordersError, projectionsError, bomsError, branchesError, poError]
+        .filter(Boolean)
+        .map(err => err.message)
+        .join(' | ');
+      throw new Error(errorMessage || 'Failed to fetch dashboard source data.');
+    }
 
-    // 2. Fetch POs globally for calculation subtract logic
-    const { data: poData } = await supabase.from('purchase_orders').select('sku, quantity'); // Fetch all POs
+    const branchToZoneMap = new Map();
+    (branches || []).forEach(b => branchToZoneMap.set(normalizeText(b.name), b.zone || ""));
+
+    const projectionIndex = new Map();
+    const projectionColumns = [];
+    const projectionColumnSet = new Set();
+
+    (projections || []).forEach(p => {
+      const grade = String(p.grade || "").trim().toLowerCase();
+      const branchName = String(p.branch || "").trim();
+      const zone = String(p.zone || branchToZoneMap.get(normalizeText(branchName)) || "").trim();
+      const projectionDate = p.projection_date ? String(p.projection_date).slice(0, 10) : "";
+      const totalProjection = Number(p.total_projection) || 0;
+
+      if (!grade || !branchName || !zone || !projectionDate) return;
+      if (gradeFilter && grade !== gradeFilter.toLowerCase()) return;
+      if (branchFilter && normalizeText(branchName) !== normalizeText(branchFilter)) return;
+      if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
+
+      const indexKey = `${normalizeText(branchName)}|${grade}|${normalizeText(zone)}`;
+      if (!projectionIndex.has(indexKey)) projectionIndex.set(indexKey, []);
+      projectionIndex.get(indexKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
+
+      const columnKey = `${zone}|${projectionDate}`;
+      if (!projectionColumnSet.has(columnKey)) {
+        projectionColumnSet.add(columnKey);
+        projectionColumns.push({ zone, projection_date: projectionDate, key: columnKey });
+      }
+    });
+
+    projectionColumns.sort((a, b) => {
+      const zoneCompare = a.zone.localeCompare(b.zone);
+      if (zoneCompare !== 0) return zoneCompare;
+      return a.projection_date.localeCompare(b.projection_date);
+    });
+
+    const orderAggregatedMap = new Map();
+    (orders || []).forEach(o => {
+      const branchNorm = normalizeText(o.branch_name || o.branch || "");
+      const sku = normalizeSku(o.material_code || o.sku || o.item_sku || "");
+      if (!branchNorm || !sku) return;
+      const key = `${branchNorm}|${sku}`;
+      orderAggregatedMap.set(key, (orderAggregatedMap.get(key) || 0) + (Number(o.quantity) || 0));
+    });
+
+    const bomComponentToParentMap = new Map();
+    (boms || []).forEach(bom => {
+      const componentSku = normalizeSku(bom.component_code);
+      if (!componentSku) return;
+      if (!bomComponentToParentMap.has(componentSku)) bomComponentToParentMap.set(componentSku, []);
+      bomComponentToParentMap.get(componentSku).push({ parentSku: normalizeSku(bom.composite_code), qtyPerParent: Number(bom.component_quantity) || 1 });
+    });
+
     const poMap = new Map();
     (poData || []).forEach(po => {
       const sku = normalizeSku(po.sku);
+      if (!sku) return;
       poMap.set(sku, (poMap.get(sku) || 0) + (Number(po.quantity) || 0));
     });
 
-    // 3. Aggregate granular branch rows into the material-grouped structure expected by the frontend
-    const aggregated = {};
-    const uniqueZones = new Set();
+    const itemMap = new Map();
 
-    (rows || []).forEach(r => {
-      const sku = r.material_code;
-      const zone = r.zone;
-      uniqueZones.add(zone);
+    (books || []).forEach(book => {
+      const sku = normalizeSku(book.material_code);
+      if (!sku) return;
 
-      if (!aggregated[sku]) {
-        aggregated[sku] = {
+      const materialName = String(book.material_name || book.item_name || "").trim() || "Unknown";
+      const grade = String(book.grade || "").trim();
+      const gradeLower = grade.toLowerCase();
+      const branchNames = Array.isArray(book.branch_name)
+        ? book.branch_name.map(b => String(b || "").trim()).filter(Boolean)
+        : String(book.branch_name || book.branch || "").split(/[\,\n\r|]+/).map(b => String(b || "").trim()).filter(Boolean);
+      const zone = String(book.zone || "").trim() || branchToZoneMap.get(normalizeText(branchNames[0] || "")) || "";
+      const bookQty = Number(book.quantity) || 0;
+      const projectionStatus = String(book.projection_status || "Yes").trim();
+
+      if (gradeFilter && grade !== gradeFilter) return;
+      if (branchFilter && !branchNames.some(branch => normalizeText(branch) === normalizeText(branchFilter))) return;
+      if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
+      if (materialNameFilter && !materialName.toLowerCase().includes(materialNameFilter.toLowerCase())) return;
+
+      if (!itemMap.has(sku)) {
+        itemMap.set(sku, {
           material_code: sku,
-          material_name: r.material_name,
-          zone_data: {},
+          material_name: materialName,
+          projection_by_zone_date: {},
           total_projection: 0,
-          total_paid_quantity: 0
-        };
+          total_paid_quantity: 0,
+          zone_data: {},
+          already_ordered_quantity: 0,
+          total_requirement: 0,
+          final_requirement: 0
+        });
       }
 
-      const item = aggregated[sku];
+      const item = itemMap.get(sku);
       if (!item.zone_data[zone]) item.zone_data[zone] = { projection: 0, paid_quantity: 0 };
-      
-      item.zone_data[zone].projection += Number(r.projection_quantity) || 0;
-      item.zone_data[zone].paid_quantity += Number(r.paid_quantity) || 0;
-      item.total_projection += Number(r.projection_quantity) || 0;
-      item.total_paid_quantity += Number(r.paid_quantity) || 0;
+
+      if (projectionStatus !== 'No') {
+        branchNames.forEach(branchName => {
+          const key = `${normalizeText(branchName)}|${gradeLower}|${normalizeText(zone)}`;
+          const projectionsForBook = projectionIndex.get(key) || [];
+          projectionsForBook.forEach(proj => {
+            const contribution = bookQty * (Number(proj.total_projection) || 0);
+            if (contribution === 0) return;
+
+            const columnKey = `${proj.zone}|${proj.projection_date}`;
+            item.projection_by_zone_date[columnKey] = (item.projection_by_zone_date[columnKey] || 0) + contribution;
+            item.total_projection += contribution;
+            item.zone_data[proj.zone] = item.zone_data[proj.zone] || { projection: 0, paid_quantity: 0 };
+            item.zone_data[proj.zone].projection += contribution;
+          });
+        });
+      }
+
+      let totalPaid = 0;
+      branchNames.forEach(branchName => {
+        const branchNorm = normalizeText(branchName);
+        const directOrder = orderAggregatedMap.get(`${branchNorm}|${sku}`) || 0;
+        totalPaid += directOrder;
+
+        const parentKits = bomComponentToParentMap.get(sku) || [];
+        parentKits.forEach(bomEntry => {
+          const parentOrders = orderAggregatedMap.get(`${branchNorm}|${bomEntry.parentSku}`) || 0;
+          totalPaid += parentOrders * bomEntry.qtyPerParent;
+        });
+      });
+
+      item.total_paid_quantity += totalPaid;
+      item.zone_data[zone] = item.zone_data[zone] || { projection: 0, paid_quantity: 0 };
+      item.zone_data[zone].paid_quantity += totalPaid;
     });
 
-    // 4. Calculate final requirement fields and format for return
-    const allZonesSorted = Array.from(uniqueZones).sort();
-    const resultData = Object.values(aggregated).map(item => {
+    const items = Array.from(itemMap.values()).map(item => {
       const totalReq = Math.max(item.total_projection, item.total_paid_quantity);
-      const poQty = poMap.get(item.material_code) || 0;
+      const alreadyOrdered = poMap.get(item.material_code) || 0;
       return {
         ...item,
+        already_ordered_quantity: alreadyOrdered,
         total_requirement: totalReq,
-        already_ordered_quantity: poQty,
-        final_requirement: totalReq - poQty
+        final_requirement: totalReq - alreadyOrdered
       };
-    }).sort((a, b) => a.material_code.localeCompare(b.material_code));
+    });
 
-    resultData.sort((a, b) => (a.material_code || "").localeCompare(b.material_code || ""));
+    items.sort((a, b) => (a.material_code || "").localeCompare(b.material_code || ""));
 
-    res.json({ zones: allZonesSorted, data: resultData });
+    res.json({ projection_columns: projectionColumns, data: items });
   } catch (err) {
     console.error("❌ DASHBOARD FETCH ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });

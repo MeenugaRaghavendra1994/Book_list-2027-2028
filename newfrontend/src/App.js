@@ -309,7 +309,7 @@ function App() {
   const [showAddBranchModal, setShowAddBranchModal] = useState(false);
   const [newBranchForm, setNewBranchForm] = useState({ name: "", zone: "" });
   const [showAddProjectionModal, setShowAddProjectionModal] = useState(false);
-  const [newProjectionForm, setNewProjectionForm] = useState({ grade: "", branch: "", zone: "", new_admissions: "", existing_admissions: "", total_projection: "" });
+  const [newProjectionForm, setNewProjectionForm] = useState({ grade: "", branch: "", zone: "", projection_date: "", new_admissions: "", existing_admissions: "", total_projection: "" });
   const [poFilters, setPoFilters] = useState({ zone: "", sku: "", name: "" });
   const [poData, setPoData] = useState([]);
   const [isPoLoading, setIsPoLoading] = useState(false);
@@ -348,7 +348,7 @@ function App() {
   const [tableData, setTableData] = useState([]);
   const [orderTableFilters, setOrderTableFilters] = useState({ branch_name: "", grade_name: "", item_sku: "", item_name: "" });
   const [orderTableData, setOrderTableData] = useState([]);
-  const [dashboardData, setDashboardData] = useState({ zones: [], data: [] });
+  const [dashboardData, setDashboardData] = useState({ projection_columns: [], data: [] });
   const [showDispatchLoadModal, setShowDispatchLoadModal] = useState(false);
   const [dispatchLoadLogs, setDispatchLoadLogs] = useState([]);
   const [isOrderTableLoading, setIsOrderTableLoading] = useState(false);
@@ -456,7 +456,7 @@ function App() {
           material_name: dashboardFilters.material_name
         }
       })
-        .then(res => setDashboardData(res.data || { zones: [], data: [] }))
+        .then(res => setDashboardData(res.data || { projection_columns: [], data: [] }))
         .catch(() => setDashboardData({ zones: [], data: [] }))
         .finally(() => {
           setIsDashboardLoading(false);
@@ -1195,12 +1195,18 @@ function App() {
       return;
     }
 
+    if (newProjectionForm.projection_date && isNaN(new Date(newProjectionForm.projection_date).getTime())) {
+      alert("Projection date must be valid.");
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/student_projections`, {
         grade: newProjectionForm.grade.trim(),
         branch: newProjectionForm.branch.trim(),
         zone: newProjectionForm.zone.trim(),
+        projection_date: newProjectionForm.projection_date.trim() || new Date().toISOString().slice(0, 10),
         new_admissions: Number(newProjectionForm.new_admissions) || 0,
         existing_admissions: Number(newProjectionForm.existing_admissions) || 0,
         total_projection: Number(newProjectionForm.total_projection) || 0
@@ -1209,7 +1215,7 @@ function App() {
       if (response.data.success) {
         alert("New projection created successfully.");
         setShowAddProjectionModal(false);
-        setNewProjectionForm({ grade: "", branch: "", zone: "", new_admissions: "", existing_admissions: "", total_projection: "" });
+        setNewProjectionForm({ grade: "", branch: "", zone: "", projection_date: "", new_admissions: "", existing_admissions: "", total_projection: "" });
         axios.get(`${API_BASE_URL}/data/student_projections`, { params: tableFilters })
           .then(res => setTableData(res.data || []))
           .catch(() => setTableData([]));
@@ -1292,37 +1298,6 @@ function App() {
       setFilteredBooks(prev => prev.map(book => book.id === activeBook.id ? { ...book, books: (book.books || []).filter(b => b !== item) } : book));
       setActiveBook(prev => ({ ...prev, books: (prev.books || []).filter(b => b !== item) }));
     }
-  };
-
-  const handleShowProjectionSource = async (item, zone) => {
-    setSourceModalTitle(`Projection Source: ${item.material_code} (${zone})`);
-    setSourceModalCols(['Kit Name', 'Grade', 'Branch', 'Students', 'Qty/Kit', 'Contribution']);
-    setIsSourceLoading(true);
-    setShowSourceModal(true);
-    try {
-      const res = await axios.get(`${API_BASE_URL}/dashboard/projection-source`, { 
-        params: { material_code: item.material_code, zone } 
-      });
-      setSourceModalData(res.data || []);
-    } catch (err) { setSourceModalData([]); }
-    setIsSourceLoading(false);
-  };
-
-  const handleShowPaidQtySource = async (item, zone) => {
-    setSourceModalTitle(`Paid Quantity Source: ${item.material_code} (${zone})`);
-    setSourceModalCols(['Branch Name', 'Grade Name', 'Ordered SKU', 'Item Name', 'Ordered Qty', 'Source', 'Contribution']);
-    setIsSourceLoading(true);
-    setShowSourceModal(true);
-    try {
-      const res = await axios.get(`${API_BASE_URL}/dashboard/paid-quantity-source`, { 
-        params: { material_code: item.material_code, zone } 
-      });
-      setSourceModalData(res.data || []);
-    } catch (err) { 
-      console.error("Paid Qty Source Error:", err);
-      setSourceModalData([]); 
-    }
-    setIsSourceLoading(false);
   };
 
   const handleShowTotalProjectionSource = async (item) => {
@@ -2664,30 +2639,25 @@ function App() {
                 <table className="table table-sm table-bordered table-hover align-middle mb-0">
                   <thead className="table-light text-nowrap">
                     <tr>
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Material Code</th>
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Material Name</th>
-                      {dashboardData.zones.map(zone => (
-                        <th key={zone} colSpan="2" className="text-center py-2">{zone || "Unknown Zone"}</th>
+                      <th className="py-3 px-3 align-middle">Material Code</th>
+                      <th className="py-3 px-3 align-middle">Material Name</th>
+                      {dashboardData.projection_columns.map(col => (
+                        <th key={col.key} className="text-center py-2">
+                          <div>{col.zone || 'Unknown Zone'}</div>
+                          <small>{col.projection_date}</small>
+                        </th>
                       ))}
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Total Projection</th>
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Total paid quantity</th>
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Total Required</th>
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Already Ordered Quantity</th>
-                      <th rowSpan="2" className="py-3 px-3 align-middle">Final requirement</th>
-                    </tr>
-                    <tr>
-                      {dashboardData.zones.map(zone => (
-                        <React.Fragment key={`${zone}-sub`}>
-                          <th className="text-center py-2">Projection</th>
-                          <th className="text-center py-2">Paid Qty</th>
-                        </React.Fragment>
-                      ))}
+                      <th className="py-3 px-3 align-middle">Total Projection</th>
+                      <th className="py-3 px-3 align-middle">Total paid quantity</th>
+                      <th className="py-3 px-3 align-middle">Total Required</th>
+                      <th className="py-3 px-3 align-middle">Already Ordered Quantity</th>
+                      <th className="py-3 px-3 align-middle">Final requirement</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
                     {isDashboardLoading ? (
                       <tr className="text-center">
-                        <td colSpan={5 + (dashboardData.zones.length * 2)} className="py-5">
+                        <td colSpan={7 + dashboardData.projection_columns.length} className="py-5">
                           <div className="spinner-border spinner-border-sm text-danger me-2" role="status"></div>
                           <span className="fw-bold text-danger">Fetching Summary Data...</span>
                         </td>
@@ -2696,23 +2666,10 @@ function App() {
                       <tr key={idx}>
                         <td className="px-3">{item.material_code || "N/A"}</td>
                         <td className="px-3 text-start">{item.material_name || "N/A"}</td>
-                        {dashboardData.zones.map(zone => (
-                          <React.Fragment key={`${item.material_code}-${zone}`}>
-                            <td className="px-3 text-center">
-                              {item.zone_data?.[zone] ? (
-                                <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowProjectionSource(item, zone)}>
-                                  {item.zone_data[zone].projection || 0}
-                                </span>
-                              ) : 0}
-                            </td>
-                            <td className="px-3 text-center">
-                              {item.zone_data?.[zone] ? (
-                                <span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowPaidQtySource(item, zone)}>
-                                  {item.zone_data[zone].paid_quantity || 0}
-                                </span>
-                              ) : 0}
-                            </td>
-                          </React.Fragment>
+                        {dashboardData.projection_columns.map(col => (
+                          <td key={`${item.material_code}-${col.key}`} className="px-3 text-center">
+                            {item.projection_by_zone_date?.[col.key] || 0}
+                          </td>
                         ))}
                         <td className="px-3 text-center"><span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalProjectionSource(item)}>{item.total_projection || 0}</span></td>
                         <td className="px-3 text-center"><span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalPaidQtySource(item)}>{item.total_paid_quantity || 0}</span></td>
@@ -2725,7 +2682,7 @@ function App() {
                         <td className="px-3 text-center fw-bold bg-light text-danger">{item.final_requirement || 0}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan={4 + (dashboardData.zones.length * 2)} className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
+                      <tr><td colSpan={7 + dashboardData.projection_columns.length} className="text-center py-5 text-muted">No data found. Adjust filters or check your database.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -2733,21 +2690,14 @@ function App() {
               <div className="mt-3 d-flex justify-content-between align-items-center">
                 <small className="text-muted">Total Items: <strong>{dashboardData.data.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
-                  const zoneHeaders = [];
-                  dashboardData.zones.forEach(z => {
-                    zoneHeaders.push(`${z} Projection`);
-                    zoneHeaders.push(`${z} Paid Qty`);
-                  });
+                  const projectionHeaders = dashboardData.projection_columns.map(col => `${col.zone} ${col.projection_date}`);
 
                   const csvContent = [
-                    ['Material Code', 'Material Name', ...zoneHeaders, 'Total Projection', 'Total Paid Quantity', 'Total Requirement', 'Already Ordered Quantity', 'Final Requirement'],
+                    ['Material Code', 'Material Name', ...projectionHeaders, 'Total Projection', 'Total Paid Quantity', 'Total Requirement', 'Already Ordered Quantity', 'Final Requirement'],
                     ...dashboardData.data.map(item => [
-                      item.material_code, 
+                      item.material_code,
                       item.material_name,
-                      ...dashboardData.zones.flatMap(z => [
-                        item.zone_data[z]?.projection || 0,
-                        item.zone_data[z]?.paid_quantity || 0
-                      ]),
+                      ...dashboardData.projection_columns.map(col => item.projection_by_zone_date?.[col.key] || 0),
                       item.total_projection,
                       item.total_paid_quantity,
                       item.total_requirement,
@@ -2931,25 +2881,35 @@ function App() {
                     )}
                     {selectedTable === 'student_projections' && (
                       <>
-                        <div className="col-md-4">
+                        <div className="col-md-3">
                           <label className="form-label">Grade</label>
                           <SearchableSelect 
                             options={grades} value={tableFilters.grade} placeholder="All Grades"
                             onChange={(val) => setTableFilters(prev => ({ ...prev, grade: val }))}
                           />
                         </div>
-                        <div className="col-md-4">
+                        <div className="col-md-3">
                           <label className="form-label">Branch</label>
                           <SearchableSelect 
                             options={tableExplorerBranchOptions} value={tableFilters.branch} placeholder="All Branches"
                             onChange={(val) => setTableFilters(prev => ({ ...prev, branch: val }))}
                           />
                         </div>
-                        <div className="col-md-4">
+                        <div className="col-md-3">
                           <label className="form-label">Zone</label>
                           <SearchableSelect 
                             options={zones} value={tableFilters.zone} placeholder="All Zones"
                             onChange={(val) => setTableFilters(prev => ({ ...prev, zone: val }))}
+                          />
+                        </div>
+                        <div className="col-md-3">
+                          <label className="form-label">Projection Date</label>
+                          <input
+                            type="date"
+                            className="form-control"
+                            value={tableFilters.projection_date || ''}
+                            onChange={(e) => setTableFilters(prev => ({ ...prev, projection_date: e.target.value }))}
+                            placeholder="Filter by projection date"
                           />
                         </div>
                       </>
@@ -3152,6 +3112,10 @@ function App() {
                             <option value="">Select Zone</option>
                             {zones.map(zone => <option key={zone} value={zone}>{zone || 'All Zones'}</option>)}
                           </select>
+                        </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label">Projection Date</label>
+                          <input type="date" className="form-control" value={newProjectionForm.projection_date} onChange={(e) => setNewProjectionForm(prev => ({ ...prev, projection_date: e.target.value }))} />
                         </div>
                         <div className="col-12 col-md-4">
                           <label className="form-label">New Admissions</label>
