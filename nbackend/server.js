@@ -1670,7 +1670,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       if (branchFilter && normalizeText(branchName) !== normalizeText(branchFilter)) return;
       if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
 
-      const indexKey = `${normalizeText(branchName)}|${grade}|${normalizeText(zone)}`;
+      const indexKey = `${normalizeText(branchName)}|${grade}`;
       if (!projectionIndex.has(indexKey)) projectionIndex.set(indexKey, []);
       projectionIndex.get(indexKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
 
@@ -1751,7 +1751,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
 
       if (projectionStatus !== 'No') {
         branchNames.forEach(branchName => {
-          const key = `${normalizeText(branchName)}|${gradeLower}|${normalizeText(zone)}`;
+          const key = `${normalizeText(branchName)}|${gradeLower}`;
           const projectionsForBook = projectionIndex.get(key) || [];
           projectionsForBook.forEach(proj => {
             const contribution = bookQty * (Number(proj.total_projection) || 0);
