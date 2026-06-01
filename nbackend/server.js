@@ -1471,11 +1471,43 @@ async function rebuildDashboardSummary() {
   const branchToZoneMap = new Map();
   (branches || []).forEach(b => branchToZoneMap.set(normalizeText(b.name), b.zone));
 
-  // 3. Map projections: branch|grade -> total_projection
-  const projMap = new Map();
+  // 3. Build projection index with date-wise breakdown
+  // Key: branch|grade, Value: array of {zone, projection_date, total_projection}
+  const projectionIndexByBranchGrade = new Map();
+  const projectionIndexByGrade = new Map();
+  
   (projections || []).forEach(p => {
-    const key = `${normalizeText(p.branch)}|${String(p.grade).trim().toLowerCase()}`;
-    projMap.set(key, (projMap.get(key) || 0) + (Number(p.total_projection) || 0));
+    const grade = String(p.grade || "").trim().toLowerCase();
+    const branchName = String(p.branch || "").trim();
+    const zone = String(p.zone || branchToZoneMap.get(normalizeText(branchName)) || "").trim();
+    const projectionDate = p.projection_date ? String(p.projection_date).slice(0, 10) : null;
+    const totalProjection = Number(p.total_projection) || 0;
+
+    if (!grade || !branchName || !zone || !projectionDate) return; // Skip if missing required fields
+
+    const branchGradeKey = `${normalizeText(branchName)}|${grade}`;
+    if (!projectionIndexByBranchGrade.has(branchGradeKey)) {
+      projectionIndexByBranchGrade.set(branchGradeKey, []);
+    }
+    projectionIndexByBranchGrade.get(branchGradeKey).push({ 
+      zone, 
+      grade, 
+      branch: branchName,
+      projection_date: projectionDate, 
+      total_projection: totalProjection 
+    });
+
+    const gradeKey = `${grade}`;
+    if (!projectionIndexByGrade.has(gradeKey)) {
+      projectionIndexByGrade.set(gradeKey, []);
+    }
+    projectionIndexByGrade.get(gradeKey).push({ 
+      zone, 
+      grade, 
+      branch: branchName,
+      projection_date: projectionDate, 
+      total_projection: totalProjection 
+    });
   });
 
   // 4. Aggregate orders by branch|sku for quick lookup
@@ -1488,7 +1520,7 @@ async function rebuildDashboardSummary() {
     orderAggregatedMap.set(key, (orderAggregatedMap.get(key) || 0) + (Number(o.quantity) || 0));
   });
 
-  // 5. Build Material-Branch-Grade entries from ALL sources
+  // 5. Build Material-Branch-Grade entries with date-wise projection breakdown
   const summaryMap = new Map(); // Key: material_code|branch_name|grade
 
   // Helper to add/initialize entry
@@ -1506,7 +1538,8 @@ async function rebuildDashboardSummary() {
         branch_name: branchName || "",
         zone: zoneName || branchToZoneMap.get(brNorm) || "Unknown",
         grade: gradeNorm,
-        projection_quantity: 0,
+        projection_by_zone_date: {}, // {zone|date -> quantity}
+        total_projection: 0,
         paid_quantity: 0
       });
     }
@@ -1518,9 +1551,26 @@ async function rebuildDashboardSummary() {
     const entry = addEntry(b.material_code, b.material_name, b.branch_name || b.branch, b.grade, b.zone);
     if (!entry) return;
     if (b.projection_status === 'No') return;
+    
     const brNorm = normalizeText(entry.branch_name);
-    const pQty = projMap.get(`${brNorm}|${String(entry.grade).toLowerCase()}`) || 0;
-    entry.projection_quantity += pQty * (Number(b.quantity) || 0);
+    const gradeLower = String(entry.grade || "").trim().toLowerCase();
+    const bookQty = Number(b.quantity) || 0;
+    
+    // Get projections for this branch+grade, fallback to grade only
+    let projectionsForBook = projectionIndexByBranchGrade.get(`${brNorm}|${gradeLower}`) || [];
+    if (projectionsForBook.length === 0) {
+      projectionsForBook = projectionIndexByGrade.get(gradeLower) || [];
+    }
+    
+    // Add date-wise projection breakdown
+    projectionsForBook.forEach(proj => {
+      const contribution = bookQty * (Number(proj.total_projection) || 0);
+      if (contribution === 0) return;
+      
+      const columnKey = `${proj.zone}|${proj.projection_date}`;
+      entry.projection_by_zone_date[columnKey] = (entry.projection_by_zone_date[columnKey] || 0) + contribution;
+      entry.total_projection += contribution;
+    });
   });
 
   // 6. Pre-calculate BOM component map
@@ -1555,9 +1605,10 @@ async function rebuildDashboardSummary() {
   // 8. Clear and Refresh dashboard_item_summary Table
   const finalRows = Array.from(summaryMap.values()).map(r => ({
     ...r,
-    total_requirement: Math.max(r.projection_quantity, r.paid_quantity),
-    already_ordered_quantity: 0, // POs are global and best handled at aggregation time in GET
-    final_requirement: Math.max(r.projection_quantity, r.paid_quantity)
+    projection_by_zone_date: JSON.stringify(r.projection_by_zone_date || {}), // Store as JSON
+    total_requirement: Math.max(r.total_projection, r.paid_quantity),
+    already_ordered_quantity: 0,
+    final_requirement: Math.max(r.total_projection, r.paid_quantity)
   }));
 
   const { error: deleteError } = await supabase.from('dashboard_item_summary').delete().neq('id', 0);
