@@ -1765,6 +1765,7 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     });
 
     const itemMap = new Map();
+    const activeZonesSet = new Set();
 
     (books || []).forEach((book) => {
       const sku = normalizeSku(book.material_code);
@@ -1810,15 +1811,17 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
             projectionsForBook = projectionIndexByGrade.get(gradeLower) || [];
           }
           
-          // Option A Logic: Summing projections for the same date. 
-          // If multiple records exist for the same date/branch, they are additive.
           projectionsForBook.forEach(proj => {
             const contribution = bookQty * (Number(proj.total_projection) || 0);
             if (contribution === 0) return;
 
-            const dateKey = proj.projection_date;
-            item.projection_by_date[dateKey] = (item.projection_by_date[dateKey] || 0) + contribution;
+            const zKey = proj.zone;
+            const dKey = proj.projection_date;
+            const zdKey = `${zKey}|${dKey}`;
+            
+            item.projection_by_date[zdKey] = (item.projection_by_date[zdKey] || 0) + contribution;
             item.total_projection += contribution;
+            activeZonesSet.add(zKey);
         });
         });
       }
@@ -1852,21 +1855,86 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       };
     });
 
-    // Extract all unique projection dates from the processed items for the columns
-    const finalProjectionColumns = [
+    const finalProjectionDates = [
       ...new Set(
         items.flatMap(item =>
-          Object.keys(item.projection_by_date || {})
+          Object.keys(item.projection_by_date || {}).map(k => k.split('|')[1])
         )
       )
     ].sort();
 
     items.sort((a, b) => (a.material_code || "").localeCompare(b.material_code || ""));
 
-    res.json({ projection_columns: finalProjectionColumns, data: items });
+    res.json({ 
+      active_zones: [...activeZonesSet].sort(),
+      projection_columns: finalProjectionDates, 
+      data: items 
+    });
   } catch (err) {
     console.error("❌ DASHBOARD FETCH ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   🔍 DASHBOARD SOURCE DRILL-DOWN (FIXED)
+============================ */
+app.get("/dashboard/projection-source", async (req, res) => {
+  try {
+    const { material_code, projection_date, zone, branch, grade } = req.query;
+    if (!material_code) return res.status(400).json({ error: "Material code required" });
+    
+    const normMaterialCode = normalizeSku(material_code);
+
+    const { data: booksData, error: bErr } = await supabase.from('individual_books')
+      .select('*')
+      .eq('material_code', normMaterialCode);
+    
+    if (bErr) throw bErr;
+    if (!booksData || booksData.length === 0) return res.json([]);
+
+    let projQuery = supabase.from('student_projections').select('*');
+    if (projection_date) projQuery = projQuery.eq('projection_date', projection_date);
+    if (zone) projQuery = projQuery.eq('zone', zone);
+    if (branch) projQuery = projQuery.ilike('branch', branch);
+    if (grade) projQuery = projQuery.ilike('grade', grade);
+    
+    const { data: projData, error: pErr } = await projQuery;
+    if (pErr) throw pErr;
+
+    const details = [];
+    booksData.forEach(book => {
+      if (book.projection_status === 'No') return;
+      const bookQty = Number(book.quantity) || 0;
+      const bGrade = String(book.grade || "").trim().toLowerCase();
+      const bBranches = (Array.isArray(book.branch_name) ? book.branch_name : String(book.branch_name || book.branch || "").split(/[,\n\r|]+/))
+        .map(s => normalizeText(s)).filter(Boolean);
+
+      projData.forEach(p => {
+        const pGrade = String(p.grade || "").trim().toLowerCase();
+        const pBranchNorm = normalizeText(p.branch);
+        
+        if (pGrade === bGrade && bBranches.includes(pBranchNorm)) {
+          const studentCount = Number(p.total_projection) || 0;
+          const contribution = studentCount * bookQty;
+          if (contribution > 0) {
+            details.push({
+              kit_name: book.composite_name || "N/A",
+              grade: book.grade,
+              branch: p.branch,
+              zone: p.zone,
+              students: studentCount,
+              qty_kit: bookQty,
+              contribution: contribution,
+              projection_date: p.projection_date
+            });
+          }
+        }
+      });
+    });
+    res.json(details);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 /* ============================

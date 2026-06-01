@@ -348,7 +348,7 @@ function App() {
   const [tableData, setTableData] = useState([]);
   const [orderTableFilters, setOrderTableFilters] = useState({ branch_name: "", grade_name: "", item_sku: "", item_name: "" });
   const [orderTableData, setOrderTableData] = useState([]);
-  const [dashboardData, setDashboardData] = useState({ projection_columns: [], data: [] });
+  const [dashboardData, setDashboardData] = useState({ projection_columns: [], data: [], active_zones: [] });
   const [showDispatchLoadModal, setShowDispatchLoadModal] = useState(false);
   const [dispatchLoadLogs, setDispatchLoadLogs] = useState([]);
   const [isOrderTableLoading, setIsOrderTableLoading] = useState(false);
@@ -1351,16 +1351,22 @@ function App() {
     setIsSourceLoading(false);
   };
 
-  const handleShowProjectionSource = async (item, date) => {
+  const handleShowProjectionSource = async (item, date, zone) => {
     setSourceModalTitle(`Projection Source for ${item.material_code} on ${date}`);
     setSourceModalCols(['Kit Name', 'Grade', 'Branch', 'Zone', 'Students', 'Qty/Kit', 'Contribution']);
     setIsSourceLoading(true);
     setShowSourceModal(true);
     try {
-      // You would typically fetch specific data for this item and date here
-      // For now, we'll just log and show a placeholder
-      console.log("Fetching projection source for:", item, "on date:", date);
-      setSourceModalData([]); // Placeholder for actual data
+      const res = await axios.get(`${API_BASE_URL}/dashboard/projection-source`, {
+        params: {
+          material_code: item.material_code,
+          projection_date: date,
+          zone: zone,
+          branch: dashboardFilters.branch,
+          grade: dashboardFilters.grade
+        }
+      });
+      setSourceModalData(res.data || []);
     } catch (err) {
       console.error("Projection Source Error:", err);
       setSourceModalData([]);
@@ -2662,9 +2668,17 @@ function App() {
                     <tr>
                       <th rowSpan="2" className="align-middle">Material Code</th>
                       <th rowSpan="2" className="align-middle text-start">Material Name</th>
-                      <th colSpan={dashboardData.projection_columns.length > 0 ? dashboardData.projection_columns.length : 1} className="bg-primary text-white">
-                        {dashboardFilters.branch || dashboardFilters.zone || "Projections"}
-                      </th>
+                      {dashboardData.active_zones?.length > 0 ? (
+                        dashboardData.active_zones.map(zone => (
+                          <th key={zone} colSpan={dashboardData.projection_columns.length || 1} className="bg-primary text-white text-center">
+                            {zone}
+                          </th>
+                        ))
+                      ) : (
+                        <th colSpan={dashboardData.projection_columns.length || 1} className="bg-primary text-white text-center">
+                          {dashboardFilters.branch || dashboardFilters.zone || "Projections"}
+                        </th>
+                      )}
                       <th rowSpan="2" className="align-middle">Total Projection</th>
                       <th rowSpan="2" className="align-middle">Total Paid Qty</th>
                       <th rowSpan="2" className="align-middle bg-light">Total Required</th>
@@ -2673,12 +2687,14 @@ function App() {
                     </tr>
                     {/* Tier 2 Header (Dates) */}
                     <tr>
-                      {dashboardData.projection_columns.length > 0 ? (
-                        dashboardData.projection_columns.map((date) => (
-                          <th key={date} className="small py-1">{date}</th>
-                        ))
+                      {dashboardData.active_zones?.length > 0 ? (
+                        dashboardData.active_zones.map(zone => 
+                          dashboardData.projection_columns.length > 0 ? (
+                            dashboardData.projection_columns.map(date => <th key={`${zone}-${date}`} className="small py-1">{date}</th>)
+                          ) : <th key={zone} className="small py-1 text-muted">No Dates</th>
+                        )
                       ) : (
-                        <th className="small py-1 text-muted">No Dates</th>
+                        dashboardData.projection_columns.map(date => <th key={date} className="small py-1">{date}</th>)
                       )}
                     </tr>
                   </thead>
@@ -2694,11 +2710,16 @@ function App() {
                       <tr key={idx}>
                         <td className="px-3">{item.material_code || "N/A"}</td>
                         <td className="px-3 text-start">{item.material_name || "N/A"}</td>
-                        {dashboardData.projection_columns.map(date => (
-                          <td key={`${item.material_code}-${date}`} className="px-3 text-center text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowProjectionSource(item, date)}>
-                            {item.projection_by_date?.[date] || 0}
-                          </td>
-                        ))}
+                        {dashboardData.active_zones?.map(zone => 
+                          dashboardData.projection_columns.map(date => {
+                            const zdKey = `${zone}|${date}`;
+                            return (
+                              <td key={`${item.material_code}-${zdKey}`} className="px-3 text-center text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowProjectionSource(item, date, zone)}>
+                                {item.projection_by_date?.[zdKey] || 0}
+                              </td>
+                            );
+                          })
+                        )}
                         <td className="px-3 text-center"><span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalProjectionSource(item)}>{item.total_projection || 0}</span></td>
                         <td className="px-3 text-center"><span className="text-primary text-decoration-underline cursor-pointer" onClick={() => handleShowTotalPaidQtySource(item)}>{item.total_paid_quantity || 0}</span></td>
                         <td className="px-3 text-center fw-bold bg-light">{item.total_requirement || 0}</td>
@@ -2718,20 +2739,33 @@ function App() {
               <div className="mt-3 d-flex justify-content-between align-items-center">
                 <small className="text-muted">Total Items: <strong>{dashboardData.data.length}</strong></small>
                 <button className="btn btn-success btn-sm" onClick={() => {
-                  const projectionHeaders = dashboardData.projection_columns.map(date => date);
+                  const zoneDateHeaders = [];
+                  dashboardData.active_zones.forEach(zone => {
+                    dashboardData.projection_columns.forEach(date => {
+                      zoneDateHeaders.push(`${zone} (${date})`);
+                    });
+                  });
 
                   const csvContent = [
-                    ['Material Code', 'Material Name', ...projectionHeaders, 'Total Projection', 'Total Paid Quantity', 'Total Requirement', 'Already Ordered Quantity', 'Final Requirement'],
-                    ...dashboardData.data.map(item => [
-                      item.material_code,
-                      item.material_name,
-                      ...dashboardData.projection_columns.map(date => item.projection_by_date?.[date] || 0),
-                      item.total_projection,
-                      item.total_paid_quantity,
-                      item.total_requirement,
-                      item.already_ordered_quantity,
-                      item.final_requirement
-                    ])
+                    ['Material Code', 'Material Name', ...zoneDateHeaders, 'Total Projection', 'Total Paid Quantity', 'Total Requirement', 'Already Ordered Quantity', 'Final Requirement'],
+                    ...dashboardData.data.map(item => {
+                      const zdValues = [];
+                      dashboardData.active_zones.forEach(zone => {
+                        dashboardData.projection_columns.forEach(date => {
+                          zdValues.push(item.projection_by_date?.[`${zone}|${date}`] || 0);
+                        });
+                      });
+                      return [
+                        item.material_code,
+                        item.material_name,
+                        ...zdValues,
+                        item.total_projection,
+                        item.total_paid_quantity,
+                        item.total_requirement,
+                        item.already_ordered_quantity,
+                        item.final_requirement
+                      ];
+                    })
                   ].map(row => row.map(cell => `"${cell || ""}"`).join(',')).join('\n');
                   const blob = new Blob([csvContent], { type: 'text/csv' });
                   const url = window.URL.createObjectURL(blob);
