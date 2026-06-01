@@ -1351,6 +1351,23 @@ function App() {
     setIsSourceLoading(false);
   };
 
+  const handleShowProjectionSource = async (item, date) => {
+    setSourceModalTitle(`Projection Source for ${item.material_code} on ${date}`);
+    setSourceModalCols(['Kit Name', 'Grade', 'Branch', 'Zone', 'Students', 'Qty/Kit', 'Contribution']);
+    setIsSourceLoading(true);
+    setShowSourceModal(true);
+    try {
+      // You would typically fetch specific data for this item and date here
+      // For now, we'll just log and show a placeholder
+      console.log("Fetching projection source for:", item, "on date:", date);
+      setSourceModalData([]); // Placeholder for actual data
+    } catch (err) {
+      console.error("Projection Source Error:", err);
+      setSourceModalData([]);
+    }
+    setIsSourceLoading(false);
+  };
+
   const handleBulkPOFileChange = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
