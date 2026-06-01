@@ -1724,10 +1724,21 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
         : null;
       const totalProjection = Number(p.total_projection) || 0;
 
-      if (!grade || !branchName || !zone || !projectionDate) return; // Skip if ANY required field is missing including date
-      if (gradeFilter && grade !== gradeFilter.toLowerCase()) return;
-      if (branchFilter && normalizeText(branchName) !== normalizeText(branchFilter)) return;
-      if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
+      if (!projectionDate) return;
+
+      const matchesGradeFilter = !gradeFilter || grade === gradeFilter.toLowerCase();
+      const matchesBranchFilter = !branchFilter || normalizeText(branchName) === normalizeText(branchFilter);
+      const matchesZoneFilter = !zoneFilter || (zone && normalizeText(zone) === normalizeText(zoneFilter));
+
+      if (matchesGradeFilter && matchesBranchFilter && matchesZoneFilter) {
+        if (!projectionColumnSet.has(projectionDate)) {
+          projectionColumnSet.add(projectionDate);
+          projectionColumns.push(projectionDate);
+        }
+      }
+
+      if (!grade || !branchName) return; // These are required for item projection mapping
+      if (!matchesGradeFilter || !matchesBranchFilter || !matchesZoneFilter) return;
 
       const branchGradeKey = `${normalizeText(branchName)}|${grade}`;
       if (!projectionIndexByBranchGrade.has(branchGradeKey)) projectionIndexByBranchGrade.set(branchGradeKey, []);
@@ -1736,12 +1747,6 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       const gradeKey = `${grade}`;
       if (!projectionIndexByGrade.has(gradeKey)) projectionIndexByGrade.set(gradeKey, []);
       projectionIndexByGrade.get(gradeKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
-
-      // Track unique dates only (not zone|date)
-      if (!projectionColumnSet.has(projectionDate)) {
-        projectionColumnSet.add(projectionDate);
-        projectionColumns.push(projectionDate);
-      }
     });
 
     // Sort dates in ascending order
