@@ -1538,7 +1538,7 @@ async function rebuildDashboardSummary() {
         branch_name: branchName || "",
         zone: zoneName || branchToZoneMap.get(brNorm) || "Unknown",
         grade: gradeNorm,
-        projection_by_zone_date: {}, // {zone|date -> quantity}
+        projection_by_date: {}, // {date -> quantity}
         total_projection: 0,
         paid_quantity: 0
       });
@@ -1567,8 +1567,8 @@ async function rebuildDashboardSummary() {
       const contribution = bookQty * (Number(proj.total_projection) || 0);
       if (contribution === 0) return;
       
-      const columnKey = `${proj.zone}|${proj.projection_date}`;
-      entry.projection_by_zone_date[columnKey] = (entry.projection_by_zone_date[columnKey] || 0) + contribution;
+      const dateKey = proj.projection_date;
+      entry.projection_by_date[dateKey] = (entry.projection_by_date[dateKey] || 0) + contribution;
       entry.total_projection += contribution;
     });
   });
