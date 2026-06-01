@@ -316,7 +316,7 @@ function App() {
   const [showAddPOModal, setShowAddPOModal] = useState(false);
   const [newPOForm, setNewPOForm] = useState({ zone: "", sku: "", name: "", quantity: "" });
   const [showAddPricingModal, setShowAddPricingModal] = useState(false);
-  const [newPricingForm, setNewPricingForm] = useState({ material_code: "", mrp: "", cost_price: "" });
+  const [newPricingForm, setNewPricingForm] = useState({ material_code: "", name: "", mrp: "", cost_price: "" });
   const [bulkPricingFileName, setBulkPricingFileName] = useState("");
   const [bulkPricingRows, setBulkPricingRows] = useState([]);
   const [bulkPricingError, setBulkPricingError] = useState("");
@@ -1504,6 +1504,7 @@ function App() {
     try {
       const response = await axios.post(`${API_BASE_URL}/pricing`, {
         material_code: newPricingForm.material_code.trim(),
+        name: newPricingForm.name.trim() || newPricingForm.material_code.trim(),
         mrp: Number(newPricingForm.mrp) || 0,
         cost_price: Number(newPricingForm.cost_price) || 0
       });
@@ -3348,6 +3349,16 @@ function App() {
                               value={newPricingForm.material_code}
                               onChange={(e) => setNewPricingForm(prev => ({ ...prev, material_code: e.target.value }))}
                               placeholder="Enter material code"
+                          />
+                        </div>
+                        <div className="col-12">
+                          <label className="form-label">Name</label>
+                          <input
+                              type="text"
+                              className="form-control"
+                              value={newPricingForm.name}
+                              onChange={(e) => setNewPricingForm(prev => ({ ...prev, name: e.target.value }))}
+                              placeholder="Enter pricing name"
                           />
                         </div>
                         <div className="col-12">

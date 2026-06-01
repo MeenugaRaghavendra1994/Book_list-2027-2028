@@ -1225,16 +1225,20 @@ app.post("/pricing", async (req, res) => {
   const d = req.body;
   try {
     const material_code = String(d.material_code || "").trim();
+    const name = String(d.name || d.material_code || "").trim();
     const mrp = Number(d.mrp) || 0;
     const cost_price = Number(d.cost_price) || 0;
 
     if (!material_code) {
       return res.status(400).json({ success: false, error: "Material code is required." });
     }
+    if (!name) {
+      return res.status(400).json({ success: false, error: "Name is required." });
+    }
 
     const { data, error } = await supabase
       .from('pricing')
-      .insert([{ material_code, mrp, cost_price }])
+      .insert([{ material_code, name, mrp, cost_price }])
       .select()
       .single();
 
