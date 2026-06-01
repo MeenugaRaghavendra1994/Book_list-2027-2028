@@ -1653,7 +1653,8 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
     const branchToZoneMap = new Map();
     (branches || []).forEach(b => branchToZoneMap.set(normalizeText(b.name), b.zone || ""));
 
-    const projectionIndex = new Map();
+    const projectionIndexByBranchGrade = new Map();
+    const projectionIndexByGrade = new Map();
     const projectionColumns = [];
     const projectionColumnSet = new Set();
 
@@ -1670,9 +1671,13 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       if (branchFilter && normalizeText(branchName) !== normalizeText(branchFilter)) return;
       if (zoneFilter && normalizeText(zone) !== normalizeText(zoneFilter)) return;
 
-      const indexKey = `${normalizeText(branchName)}|${grade}`;
-      if (!projectionIndex.has(indexKey)) projectionIndex.set(indexKey, []);
-      projectionIndex.get(indexKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
+      const branchGradeKey = `${normalizeText(branchName)}|${grade}`;
+      if (!projectionIndexByBranchGrade.has(branchGradeKey)) projectionIndexByBranchGrade.set(branchGradeKey, []);
+      projectionIndexByBranchGrade.get(branchGradeKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
+
+      const gradeKey = `${grade}`;
+      if (!projectionIndexByGrade.has(gradeKey)) projectionIndexByGrade.set(gradeKey, []);
+      projectionIndexByGrade.get(gradeKey).push({ zone, branch: branchName, grade, projection_date: projectionDate, total_projection: totalProjection });
 
       const columnKey = `${zone}|${projectionDate}`;
       if (!projectionColumnSet.has(columnKey)) {
@@ -1752,7 +1757,10 @@ app.get("/dashboard/item-wise-summary", async (req, res) => {
       if (projectionStatus !== 'No') {
         branchNames.forEach(branchName => {
           const key = `${normalizeText(branchName)}|${gradeLower}`;
-          const projectionsForBook = projectionIndex.get(key) || [];
+          let projectionsForBook = projectionIndexByBranchGrade.get(key) || [];
+          if (projectionsForBook.length === 0) {
+            projectionsForBook = projectionIndexByGrade.get(gradeLower) || [];
+          }
           projectionsForBook.forEach(proj => {
             const contribution = bookQty * (Number(proj.total_projection) || 0);
             if (contribution === 0) return;
