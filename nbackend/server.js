@@ -1218,6 +1218,70 @@ app.put("/users/:id", async (req, res) => {
   }
 });
 
+/* ============================
+   ➕ ADD PRICING
+============================ */
+app.post("/pricing", async (req, res) => {
+  const d = req.body;
+  try {
+    const material_code = String(d.material_code || "").trim();
+    const mrp = Number(d.mrp) || 0;
+    const cost_price = Number(d.cost_price) || 0;
+
+    if (!material_code) {
+      return res.status(400).json({ success: false, error: "Material code is required." });
+    }
+
+    const { data, error } = await supabase
+      .from('pricing')
+      .insert([{ material_code, mrp, cost_price }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, record: data });
+  } catch (err) {
+    console.error("❌ PRICING INSERT ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================
+   ➕ BULK ADD/UPDATE PRICING
+============================ */
+app.post("/pricing/bulk", async (req, res) => {
+  const pricingData = req.body; // Expects an array of { material_code, mrp, cost_price }
+
+  if (!Array.isArray(pricingData) || pricingData.length === 0) {
+    return res.status(400).json({ success: false, error: "An array of pricing data is required." });
+  }
+
+  try {
+    const rowsToUpsert = pricingData.map(d => ({
+      material_code: String(d.material_code || "").trim(),
+      mrp: Number(d.mrp) || 0,
+      cost_price: Number(d.cost_price) || 0,
+    })).filter(row => row.material_code); // Filter out rows without material_code
+
+    if (rowsToUpsert.length === 0) {
+      return res.status(400).json({ success: false, error: "No valid pricing records to process." });
+    }
+
+    const { data, error } = await supabase
+      .from('pricing')
+      .upsert(rowsToUpsert, { onConflict: 'material_code' }) // Assuming 'material_code' is a unique constraint
+      .select();
+
+    if (error) throw error;
+
+    res.json({ success: true, records_processed: data.length, records: data });
+  } catch (err) {
+    console.error("❌ BULK PRICING UPSERT ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // DELETE /pricing/:id - Delete a pricing record
 app.delete("/pricing/:id", async (req, res) => {
   const { id } = req.params;

@@ -315,6 +315,11 @@ function App() {
   const [isPoLoading, setIsPoLoading] = useState(false);
   const [showAddPOModal, setShowAddPOModal] = useState(false);
   const [newPOForm, setNewPOForm] = useState({ zone: "", sku: "", name: "", quantity: "" });
+  const [showAddPricingModal, setShowAddPricingModal] = useState(false);
+  const [newPricingForm, setNewPricingForm] = useState({ material_code: "", mrp: "", cost_price: "" });
+  const [bulkPricingFileName, setBulkPricingFileName] = useState("");
+  const [bulkPricingRows, setBulkPricingRows] = useState([]);
+  const [bulkPricingError, setBulkPricingError] = useState("");
   const [bulkPOFileName, setBulkPOFileName] = useState("");
   const [bulkPORows, setBulkPORows] = useState([]);
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -1374,6 +1379,75 @@ function App() {
     setIsSourceLoading(false);
   };
 
+  const handleBulkPricingFileChange = async (event) => {
+    setBulkPricingError("");
+    const file = event.target.files[0];
+    if (!file) return;
+    setBulkPricingFileName(file.name);
+
+    try {
+      const content = await file.text();
+      const rows = parseCsv(content); // Re-use existing parseCsv
+      if (!rows.length) {
+        setBulkPricingError("CSV file is empty or invalid.");
+        setBulkPricingRows([]);
+        return;
+      }
+      // Validate headers for pricing
+      const requiredHeaders = ['material_code', 'mrp', 'cost_price'];
+      const firstRowHeaders = Object.keys(rows[0]).map(h => h.toLowerCase().replace(/ /g, '_'));
+      const hasAllHeaders = requiredHeaders.every(header => firstRowHeaders.includes(header));
+      if (!hasAllHeaders) {
+        setBulkPricingError(`CSV must contain headers: ${requiredHeaders.join(', ')}`);
+        setBulkPricingRows([]);
+        return;
+      }
+      setBulkPricingRows(rows);
+    } catch (error) {
+      setBulkPricingError("Unable to read CSV file.");
+      setBulkPricingRows([]);
+    }
+  };
+
+  const handleBulkPricingUpload = async () => {
+    if (!bulkPricingRows.length) {
+      setBulkPricingError("No pricing data to upload.");
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const payload = bulkPricingRows.map(row => ({
+        material_code: row.material_code || row['Material Code'],
+        mrp: Number(row.mrp || row.MRP || 0),
+        cost_price: Number(row.cost_price || row['Cost Price'] || 0)
+      })).filter(item => item.material_code); // Ensure material_code exists
+
+      if (payload.length === 0) {
+        alert("No valid pricing records found in the CSV to upload.");
+        return;
+      }
+
+      const response = await axios.post(`${API_BASE_URL}/pricing/bulk`, payload);
+
+      if (response.data.success) {
+        alert(`Successfully processed ${response.data.records_processed} pricing records.`);
+        axios.get(`${API_BASE_URL}/data/pricing`, { params: tableFilters })
+          .then(res => setTableData(res.data || []))
+          .catch(() => setTableData([]));
+      } else {
+        alert("Bulk pricing upload failed: " + (response.data.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error("Bulk pricing upload failed:", error);
+      alert("Bulk pricing upload failed: " + (error.response?.data?.error || error.message));
+    } finally {
+      setBulkPricingRows([]);
+      setBulkPricingFileName("");
+      setBulkPricingError("");
+      setIsProcessing(false);
+    }
+  };
+
   const handleBulkPOFileChange = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -1419,6 +1493,37 @@ function App() {
       axios.get(`${API_BASE_URL}/data/purchase_orders`, { params: poFilters }).then(res => setPoData(res.data || []));
     } catch (err) { alert("Failed to save PO"); }
     setIsProcessing(false);
+  };
+
+  const handleSaveNewPricing = async () => {
+    if (!newPricingForm.material_code.trim()) {
+      alert("Material Code is required.");
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/pricing`, {
+        material_code: newPricingForm.material_code.trim(),
+        mrp: Number(newPricingForm.mrp) || 0,
+        cost_price: Number(newPricingForm.cost_price) || 0
+      });
+
+      if (response.data.success) {
+        alert("New pricing record created successfully.");
+        setShowAddPricingModal(false);
+        setNewPricingForm({ material_code: "", mrp: "", cost_price: "" });
+        axios.get(`${API_BASE_URL}/data/pricing`, { params: tableFilters })
+          .then(res => setTableData(res.data || []))
+          .catch(() => setTableData([]));
+      } else {
+        alert("Failed to create pricing record: " + (response.data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Create pricing failed:", err.response?.data || err.message);
+      alert("Could not create pricing record: " + (err.response?.data?.error || err.message || "Unknown error"));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleSave = async () => {
@@ -2984,10 +3089,26 @@ function App() {
                 <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                   <div>
                     <h4 className="mb-0">Table: <span className="text-danger fw-bold">{selectedTable}</span></h4>
+                    {bulkPricingError && (
+                      <div className="alert alert-danger mt-2 mb-0">
+                        {bulkPricingError}
+                      </div>
+                    )}
                   </div>
                   <div className="d-flex gap-2 flex-wrap align-items-center">
                     <div className="badge bg-secondary">{tableData.length} records shown</div>
                     {selectedTable === 'pricing' && userHasRight("Edit/Delete") && (
+                      <>
+                        <button className="btn btn-danger btn-sm" onClick={() => setShowAddPricingModal(true)}>
+                          + Add New Pricing
+                        </button>
+                        <button className="btn btn-outline-secondary btn-sm" onClick={() => document.getElementById('bulk-pricing-input').click()}>
+                          Bulk Upload Pricing
+                        </button>
+                        <input id="bulk-pricing-input" type="file" className="d-none" accept=".csv" onChange={handleBulkPricingFileChange} />
+                      </>
+                    )}
+                    {selectedTable === 'branches' && userHasRight("Edit/Delete") && (
                       <button className="btn btn-danger btn-sm" onClick={handleAddBranch}>
                         + Add New Branch
                       </button>
@@ -2999,7 +3120,14 @@ function App() {
                     )}
                   </div>
                 </div>
-                
+
+                {bulkPricingFileName && (
+                  <div className="alert alert-warning d-flex justify-content-between align-items-center mb-3">
+                    <span>Ready to upload: <strong>{bulkPricingFileName}</strong> ({bulkPricingRows.length} rows)</span>
+                    <button className="btn btn-success btn-sm" onClick={handleBulkPricingUpload}>Confirm Upload</button>
+                  </div>
+                )}
+
                 <div className="table-responsive rounded-3 border">
                   <table className="table table-sm table-hover align-middle mb-0">
                     <thead className="table-light">
@@ -3196,6 +3324,57 @@ function App() {
                     <div className="modal-footer bg-light">
                       <button type="button" className="btn btn-danger" onClick={handleSaveNewProjection}>Save Projection</button>
                       <button type="button" className="btn btn-secondary" onClick={() => setShowAddProjectionModal(false)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showAddPricingModal && (
+              <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+                <div className="modal-dialog modal-md">
+                  <div className="modal-content shadow-lg border-0">
+                    <div className="modal-header bg-danger text-white">
+                      <h5 className="modal-title">Add New Pricing Record</h5>
+                      <button type="button" className="btn-close btn-close-white" onClick={() => setShowAddPricingModal(false)} aria-label="Close"></button>
+                    </div>
+                    <div className="modal-body p-4 bg-light">
+                      <div className="row g-3">
+                        <div className="col-12">
+                          <label className="form-label">Material Code</label>
+                          <input
+                              type="text"
+                              className="form-control"
+                              value={newPricingForm.material_code}
+                              onChange={(e) => setNewPricingForm(prev => ({ ...prev, material_code: e.target.value }))}
+                              placeholder="Enter material code"
+                          />
+                        </div>
+                        <div className="col-12">
+                          <label className="form-label">MRP</label>
+                          <input
+                              type="number"
+                              className="form-control"
+                              value={newPricingForm.mrp}
+                              onChange={(e) => setNewPricingForm(prev => ({ ...prev, mrp: e.target.value }))}
+                              placeholder="Enter MRP"
+                          />
+                        </div>
+                        <div className="col-12">
+                          <label className="form-label">Cost Price</label>
+                          <input
+                              type="number"
+                              className="form-control"
+                              value={newPricingForm.cost_price}
+                              onChange={(e) => setNewPricingForm(prev => ({ ...prev, cost_price: e.target.value }))}
+                              placeholder="Enter cost price"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="modal-footer bg-light">
+                      <button type="button" className="btn btn-danger" onClick={handleSaveNewPricing}>Save Pricing</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowAddPricingModal(false)}>Cancel</button>
                     </div>
                   </div>
                 </div>
